@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, PercentIcon, SplitIcon, Undo2Icon } from "lucide-react";
+import { CheckIcon, Loader2Icon, PercentIcon, RefreshCwIcon, SplitIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, unwrap, type AuthorOffer, type AuthorSaid, type AuthorWork, type ContentTypeInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
-import { percent } from "@/i18n/format";
+import { ago, formatDate, percent } from "@/i18n/format";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { cn } from "@/lib/utils";
+import { useTask } from "@/task/useTask";
 import { AuthorHead, authorsKey, WorkLink } from "./pieces";
 
 /** How many pairs a page shows, and how many more each "more" adds. */
@@ -91,6 +92,13 @@ export function Offers({
     refetchInterval: every || false,
   });
   const data = list.data;
+  // The search of the authors' duplicates, a work of the queue as the works' is: by the user's pressing, its state read
+  // again while it is to come, the pairs read once it has ended
+  const search = useTask({ what: "searchAuthorDuplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: authorsKey(type.id) }));
+  const searchAnew = async () => {
+    ensureOk(await api.POST("/api/types/{type}/authors/search", { params: { path: { type: type.id } } }));
+    search.asked();
+  };
   const calm = useCalmUpdates(data?.offers, rowOf, sameRow);
   const offers = calm.shown ?? [];
   const answer = async (o: AuthorOffer, verdict: Verdict) => {
@@ -101,10 +109,30 @@ export function Offers({
   };
   return (
     <div className="flex flex-col gap-3">
-      {data && <span className="text-sm text-muted-foreground tabular-nums">{t("Offers.total", { count: data.total })}</span>}
+      <div className="flex flex-wrap items-center gap-2">
+        {data && <span className="text-sm text-muted-foreground tabular-nums">{t("Offers.total", { count: data.total })}</span>}
+        {author === undefined && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {search.busy ? (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Loader2Icon className="size-4 animate-spin" /> {t("Offers.pending")}
+              </span>
+            ) : (
+              data?.searchedAt && (
+                <span className="text-xs text-muted-foreground" title={formatDate(data.searchedAt)}>
+                  {t("Offers.searchedAt", { ago: ago(data.searchedAt), works: data.works ?? 0 })}
+                </span>
+              )
+            )}
+            <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={search.busy} title={t("Offers.searchHint")} onClick={searchAnew}>
+              {t("Offers.search")}
+            </AsyncButton>
+          </div>
+        )}
+      </div>
       {list.isLoading && <p className="text-sm text-muted-foreground">{t("Offers.loading")}</p>}
       {list.isError && <p className="text-sm text-destructive">{t("Offers.failed", { error: list.error.message })}</p>}
-      {data && offers.length === 0 && <p className="text-sm text-muted-foreground">{t(noneWord[said])}</p>}
+      {data && offers.length === 0 && <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "Offers.neverSearched" : noneWord[said])}</p>}
       {offers.length > 0 && (
         <ul className={cn("flex flex-col gap-3", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
           {offers.map((o) => (

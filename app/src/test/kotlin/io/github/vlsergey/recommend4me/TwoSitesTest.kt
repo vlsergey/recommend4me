@@ -509,9 +509,21 @@ class TwoSitesTest : TwoSitesTestBase() {
         val betaItems = stores.source("beta")!!.items
         val dictionary = stores.type("books")!!.authors
         assertEquals(null, of(ann, annaB), "no work of theirs is known to match")
-        // Their works one work: offered, the pair shown, the rest of the works apart
+        // Their works one work: offered once the authors' duplicates are looked for — by the user's pressing, as the
+        // works' are —, the pair shown, the rest of the works apart
         corrections.linkItem("alpha", "w1", ItemRef("beta", "w2"))
+        assertEquals(null, of(ann, annaB), "offered by a search alone")
+        assertEquals(202, authors.searchAuthorDuplicates("books").statusCode.value())
+        background.run()
         val offer = of(ann, annaB)!!
+        // The sites of their works asked for of either author, refused of neither — in the database
+        fun on(onSite: List<String>?, offSite: List<String>?) =
+            authors.getAuthorOffers("books", AuthorSaid.OFFERED, ann, onSite, offSite, 0, 50).body!!.offers.any {
+                setOf(it.first.id, it.second.id) == setOf(ann, annaB)
+            }
+        assertTrue(on(listOf("alpha", "beta"), null), "both sites of either")
+        assertTrue(!on(null, listOf("beta")), "a site of neither")
+        assertTrue(!on(listOf("gamma"), null), "a site of either")
         assertEquals(1, offer.matching)
         assertEquals(listOf("w1" to "w2"), offer.pairs.map { it.first.item to it.second.item })
         assertEquals(listOf("w3"), offer.first.rest.map { it.item })

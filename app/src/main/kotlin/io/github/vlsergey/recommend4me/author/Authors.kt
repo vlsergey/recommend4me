@@ -94,10 +94,10 @@ class Authors(
     /** The author [id] with every work of theirs; null of no such type or author. */
     fun one(typeId: String, id: Long): AuthorSide? {
         val type = stores.type(typeId)?.takeIf { it.authors.exists(id) } ?: return null
-        val library = AuthorLibrary.of(type)
+        val library = AuthorLibrary.ofAuthors(type, listOf(id))
         val own = library.worksOf[id].orEmpty()
         val shown = ShownWorks(type, library, own)
-        val entries = sides.entryInfos(type, type.authors.entries.all().filterKeys { it == id })
+        val entries = sides.entryInfos(type, type.authors.entries.of(listOf(id)))
         return sides.side(id, sides.sites(type, listOf(id)), entries, library, own.map { shown.of(it, id) })
     }
 
@@ -127,9 +127,24 @@ class Authors(
                 AuthorAnswer.Verdict.PARTIAL -> authors.distinct.tell(a, b, true, now)
                 AuthorAnswer.Verdict.NONE -> authors.distinct.takeBack(a, b)
             }
+            struck(a, b, verdict)
         }
         return true
     }
+
+    /**
+     * The pair of the authors [a] and [b] of the [verdict] struck out of the open offers of every type at once — or put
+     * back —, till the next search of the authors' duplicates; of one writer, the author merged away gone.
+     */
+    private fun struck(a: Long, b: Long, verdict: AuthorAnswer.Verdict) =
+        stores.types.forEach { t ->
+            when (verdict) {
+                AuthorAnswer.Verdict.SAME -> t.authorCandidates.gone(maxOf(a, b))
+                AuthorAnswer.Verdict.DIFFERENT -> t.authorCandidates.said(a, b, false)
+                AuthorAnswer.Verdict.PARTIAL -> t.authorCandidates.said(a, b, true)
+                AuthorAnswer.Verdict.NONE -> t.authorCandidates.said(a, b, null)
+            }
+        }
 
     /**
      * The entries every catalogue of tags finds by [text] — an id or a page's address is the entry itself — each with

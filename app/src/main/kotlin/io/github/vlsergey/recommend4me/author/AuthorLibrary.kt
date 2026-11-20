@@ -22,7 +22,32 @@ internal class AuthorLibrary(val writersOf: Map<ItemKey, Map<String, Long>>) {
     }
 
     companion object {
-        /** The library of the type, every source's works read in one pass. */
+        /**
+         * The library of the works of the authors [ids] alone: their accounts on the sites, the works of those, and
+         * every author of those works — by the keys, a request's (owner, 2026-11-20: no request reads every work's
+         * authors).
+         */
+        fun ofAuthors(type: TypeStore, ids: Collection<Long>): AuthorLibrary {
+            val writersOf = HashMap<ItemKey, Map<String, Long>>()
+            type.authors
+                .sitesOf(ids)
+                .values
+                .flatten()
+                .groupBy { it.source }
+                .forEach { (source, accounts) ->
+                    val s = type.source(source) ?: return@forEach
+                    val facet = authorFacetOf(s) ?: return@forEach
+                    val items = s.items.itemsWith(facet, accounts.map { it.author }).values.flatten().distinct()
+                    val keys = s.items.facetsOf(items).mapValues { it.value[facet].orEmpty() }
+                    val bound = s.authors.bindingsOf(s.id, keys.values.flatten().distinct())
+                    keys.forEach { (id, own) ->
+                        writersOf[ItemKey(source, id)] = own.mapNotNull { k -> bound[k]?.let { k to it } }.toMap()
+                    }
+                }
+            return AuthorLibrary(writersOf)
+        }
+
+        /** The library of the type, every source's works read in one pass: a search's, never a request's. */
         fun of(type: TypeStore): AuthorLibrary {
             val writersOf = HashMap<ItemKey, Map<String, Long>>()
             type.sources.forEach { s ->

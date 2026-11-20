@@ -98,7 +98,7 @@ class AuthorSides(
                 val s = type.source(source) ?: return@forEach
                 val facet = authorFacetOf(s) ?: return@forEach
                 val names = s.names(facet, own.map { it.author })
-                val uses = s.items.valueUses(facet)
+                val uses = s.items.valueUsesOf(facet, own.map { it.author })
                 own.forEach {
                     val name = names[it.author] ?: it.author
                     shown[it] =

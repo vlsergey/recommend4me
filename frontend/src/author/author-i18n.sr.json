@@ -88,5 +88,10 @@
   "AuthorsScreen.siteHint": "{{site}}: da li bar jedan od dva autora ima profil sa delima na ovom sajtu",
   "AuthorsScreen.has.any": "svejedno",
   "AuthorsScreen.has.yes": "da",
-  "AuthorsScreen.has.no": "ne"
+  "AuthorsScreen.has.no": "ne",
+  "Offers.pending": "Traži se…",
+  "Offers.searchedAt": "traženi {{ago}}, dela: {{works, number}}",
+  "Offers.search": "Traži ponovo",
+  "Offers.searchHint": "Ponovo tražiti parove autora: po vašim odgovorima na parovima dela i po šansama parova poslednjeg traženja duplikata dela. U pozadini, u redu izračunavanja; odgovori se čuvaju",
+  "Offers.neverSearched": "Parovi autora još nisu traženi. Pritisnite „Traži ponovo”."
 }

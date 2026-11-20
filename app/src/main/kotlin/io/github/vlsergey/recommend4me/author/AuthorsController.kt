@@ -9,11 +9,18 @@ import io.github.vlsergey.recommend4me.api.model.AuthorPage
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
 import io.github.vlsergey.recommend4me.api.model.FoundAuthorEntry
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class AuthorsController(private val authors: Authors, private val offers: AuthorOffers) : AuthorsApi {
+class AuthorsController(
+    private val authors: Authors,
+    private val offers: AuthorOffers,
+    private val duplicates: AuthorSearch,
+    private val stores: Stores,
+) : AuthorsApi {
 
     override fun listAuthors(
         type: String,
@@ -40,6 +47,12 @@ class AuthorsController(private val authors: Authors, private val offers: Author
         offers
             .offers(type, said, OfferFilter(author, onSite.orEmpty().toSet(), offSite.orEmpty().toSet()), offset, limit)
             ?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+
+    override fun searchAuthorDuplicates(type: String): ResponseEntity<Unit> {
+        val store = stores.type(type) ?: return ResponseEntity.notFound().build()
+        duplicates.plan(store, "asked", TaskPriority.ASKED)
+        return ResponseEntity.accepted().build()
+    }
 
     override fun answerAuthors(authorAnswer: AuthorAnswer): ResponseEntity<Unit> {
         val first = SiteAuthorRef(authorAnswer.first.source, authorAnswer.first.author)

@@ -129,6 +129,7 @@
   "What.readScorerInput": "The input of the methods read",
   "What.removeSiteItemTexts": "Removed works taken out of the search",
   "What.renameFandoms": "Universes renamed by their fandoms' names",
+  "What.searchAuthorDuplicates": "Authors' duplicates looked for",
   "What.searchDuplicates": "Duplicates across the sites looked for",
   "What.searchFieldModelAnew": "A field's model searched anew",
   "What.textWindows": "Windows of texts",

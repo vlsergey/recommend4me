@@ -95,5 +95,10 @@
   "AuthorsScreen.siteHint": "{{site}}: есть ли хотя бы у одного из двух авторов профиль с работами на этом сайте",
   "AuthorsScreen.has.any": "не важно",
   "AuthorsScreen.has.yes": "да",
-  "AuthorsScreen.has.no": "нет"
+  "AuthorsScreen.has.no": "нет",
+  "Offers.pending": "Ищутся…",
+  "Offers.searchedAt": "искались {{ago}}, работ: {{works, number}}",
+  "Offers.search": "Найти заново",
+  "Offers.searchHint": "Найти пары авторов заново: по вашим ответам на парах работ и по шансам пар последнего поиска дублей работ. В фоне, в очереди вычислений; ответы сохраняются",
+  "Offers.neverSearched": "Пары авторов ещё не искались. Нажмите «Найти заново»."
 }

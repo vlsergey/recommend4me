@@ -20,6 +20,29 @@ class CandidateReads internal constructor(private val db: DSLContext) {
      */
     fun forEach(action: (DuplicateCandidate) -> Unit) = stream(DSL.noCondition(), action)
 
+    /**
+     * Of every pair not answered, its two works and its chance of one work as kept with it ([PairScore]), streamed:
+     * nothing else of it read — what the search of the authors' duplicates weighs their works by.
+     */
+    fun forEachChance(action: (ItemKey, ItemKey, Double) -> Unit) {
+        val c = DUPLICATE_CANDIDATE
+        val names = HashMap<String, String>()
+        db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.SAME_CHANCE)
+            .from(c)
+            .where(c.ANSWER.isNull)
+            .fetchSize(FETCH)
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach { r ->
+                    action(
+                        ItemKey(names.getOrPut(r.value1()!!) { r.value1()!! }, r.value2()!!),
+                        ItemKey(names.getOrPut(r.value3()!!) { r.value3()!! }, r.value4()!!),
+                        r.value5() ?: 0.0,
+                    )
+                }
+            }
+    }
+
     /** The candidates of the [pairs], the smaller key first, by the table's key. */
     fun ofPairs(pairs: Collection<Pair<ItemKey, ItemKey>>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE

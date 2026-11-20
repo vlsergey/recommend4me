@@ -85,6 +85,17 @@ characters, the tags' bindings, a facet's every value, every work of several ite
 card reads by keys (`bindingsOf(source, keys)`, `dictionaryOf(values)`, `CharactersRead.ofValues`); a value the model
 does not know is told by what the work's own universes read already (`FacetVocabularies.sideOf`).
 
+## No repository gives a whole table
+
+No repository returns every row of a table as objects — no `all()`, `findAll()` or the like (owner, 2026-11-20:
+"findAll() must be forbidden in any repository of real objects"; the offers of authors read 2.6 million pairs of
+works for every request, 4 GB each, and six requests took the whole memory). **A page is chosen in the database** — its
+filter, its order and its limit in SQL, the total counted by the same filter — and only its rows are read whole
+(`DuplicateChoice`, `AuthorCandidateRepository.page`); **rows are read by their keys**; **a computation over every row
+streams them** (`CandidateReads.forEach`, `forEachChance`) and keeps only what it needs. What a page is ordered or
+filtered by and is not a column is computed by a background work and kept as one (the chances of the pairs of works,
+the tallies of the pairs of authors). The methods reading a whole table that are left are being converted one by one.
+
 ## A work is a normalized work; a site's item is what a site says of it
 
 Every item of every site is bound to a normalized work (`work/WorkRepository.kt`), at first one of its

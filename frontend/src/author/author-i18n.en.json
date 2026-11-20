@@ -81,5 +81,10 @@
   "AuthorsScreen.siteHint": "{{site}}: whether either of the two authors has a profile with works on this site",
   "AuthorsScreen.has.any": "any",
   "AuthorsScreen.has.yes": "yes",
-  "AuthorsScreen.has.no": "no"
+  "AuthorsScreen.has.no": "no",
+  "Offers.pending": "Looking…",
+  "Offers.searchedAt": "looked for {{ago}}, works: {{works, number}}",
+  "Offers.search": "Search again",
+  "Offers.searchHint": "Look for the pairs of authors anew: by your answers on the pairs of works and the chances of the pairs of the last search of the works' duplicates. In the background, in the queue of the computations; the answers are kept",
+  "Offers.neverSearched": "The pairs of authors were never looked for yet. Press \"Search again\"."
 }

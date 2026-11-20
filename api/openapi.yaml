@@ -719,11 +719,13 @@ paths:
       operationId: getAuthorOffers
       summary: Pairs of normalized authors that may be one, on the evidence of their works - never of their names
       description: |
-        Of every two authors, the pairs of their works: one work (linked, by any way) or a part of the other -
-        the works match - and the pairs the search of the duplicates found, with the chance they are one
-        work. A translation proves no author, a pair said to be different counts for nothing, two writers
-        of one work are not offered. Two authors bound to one entry of a catalogue first, then the most
-        matching works, then the most expected, no threshold.
+        As the last search of the authors' duplicates found them (searchAuthorDuplicates), a page chosen in the
+        database: of every two authors, the pairs of their works - one work (linked, by any way) or a part of
+        the other: the works match - and the pairs the search of the works' duplicates found, with the chance
+        they are one work. A translation proves no author, a pair said to be different counts for nothing,
+        two writers of one work are not offered. Two authors bound to one entry of a catalogue first, then the
+        most matching works, then the most expected, no threshold. A pair answered leaves the offers at once,
+        till the next search; the pairs of works of a page read anew.
       parameters:
         - $ref: '#/components/parameters/Type'
         - name: said
@@ -767,6 +769,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthorOfferPage'
+        '404':
+          description: No such type
+
+  /api/types/{type}/authors/search:
+    post:
+      tags: [authors]
+      operationId: searchAuthorDuplicates
+      summary: The pairs of authors looked for anew, of the pairs of their works as the user said and the last search of the works found them - in the background
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '202':
+          description: Planned
         '404':
           description: No such type
 
@@ -4968,6 +4983,7 @@ components:
           - readScorerInput
           - removeSiteItemTexts
           - renameFandoms
+          - searchAuthorDuplicates
           - searchDuplicates
           - searchFieldModelAnew
           - weighParts
@@ -6019,7 +6035,7 @@ components:
 
     AuthorOfferPage:
       type: object
-      required: [total, offers]
+      required: [total, offers, pending]
       properties:
         total:
           type: integer
@@ -6027,6 +6043,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuthorOffer'
+        pending:
+          type: boolean
+          description: A search of the authors' duplicates is planned or running - the pairs are to come
+        searchedAt:
+          type: string
+          format: date-time
+          description: When the authors' duplicates were last looked for; none of a type never searched
+        works:
+          type: integer
+          description: The works of the last search
 
     AuthorPage:
       type: object

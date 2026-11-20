@@ -18,6 +18,18 @@ class AuthorEntryRepository(private val db: DSLContext) {
             .groupBy({ it.value1()!! }, { TagEntryRef(it.value2()!!, it.value3()!!) })
     }
 
+    /** The authors [ids] bound to entries of the catalogues: their id to the entries, the one bound first first. */
+    fun of(ids: Collection<Long>): Map<Long, List<TagEntryRef>> {
+        val e = NORMALIZED_AUTHOR_ENTRY
+        return ids.distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(e.AUTHOR, e.CATALOGUE, e.ENTRY, e.BOUND_AT).from(e).where(e.AUTHOR.`in`(chunk)).fetch()
+            }
+            .sortedWith(compareBy({ it.value4() }, { it.value2() }, { it.value3() }))
+            .groupBy({ it.value1()!! }, { TagEntryRef(it.value2()!!, it.value3()!!) })
+    }
+
     /** The author [id] bound to the entry [ref] besides the ones they are — or, [bound] false, no more to it. */
     fun bind(id: Long, ref: TagEntryRef, bound: Boolean, now: Instant) {
         val e = NORMALIZED_AUTHOR_ENTRY
@@ -30,5 +42,10 @@ class AuthorEntryRepository(private val db: DSLContext) {
                 .onDuplicateKeyIgnore()
                 .execute()
         else db.deleteFrom(e).where(e.AUTHOR.eq(id), e.CATALOGUE.eq(ref.catalogue), e.ENTRY.eq(ref.entry)).execute()
+    }
+
+    private companion object {
+        /** The authors read by one query at most: a list of keys in a query, not a meaning. */
+        const val BATCH = 1000
     }
 }

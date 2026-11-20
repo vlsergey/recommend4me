@@ -101,6 +101,7 @@ flowchart LR
     w_readScorerInput{{"readScorerInput"}}
     w_removeSiteItemTexts{{"removeSiteItemTexts"}}
     w_renameFandoms{{"renameFandoms"}}
+    w_searchAuthorDuplicates{{"searchAuthorDuplicates"}}
     w_searchDuplicates{{"searchDuplicates"}}
     w_searchFieldModelAnew{{"searchFieldModelAnew"}}
     w_weighParts{{"weighParts"}}
@@ -139,6 +140,7 @@ flowchart LR
     o_start --> w_fitTagTextModel
     o_start --> w_indexWorkTexts
     o_start --> w_makeSiteItemSetVectors
+    o_start --> w_searchAuthorDuplicates
     o_start --> w_searchDuplicates
     o_start --> w_writeListIndex
     o_universes_languages --> e_WorkChangeEvent
@@ -289,6 +291,7 @@ flowchart LR
 | `removeItem` | SiteItemRemoveEvent | — |
 | `resetUniverseClass` | WorkChangeEvent | — |
 | `resetUniverseEntry` | WorkChangeEvent | — |
+| `searchAuthorDuplicates` | — | searchAuthorDuplicates |
 | `searchDuplicates` | — | searchDuplicates |
 | `searchFacetModel` | — | searchFieldModelAnew |
 | `startFacetComparison` | — | compareFieldMethods |
