@@ -116,6 +116,7 @@
   "What.fitTagTextModel": "Model of tags by the text",
   "What.indexWorkTexts": "The works' documents of the search",
   "What.keepOutWorks": "Works kept out by excluding tags",
+  "What.keyNamedValues": "The values given by their names keyed as the site keys them",
   "What.letGoUnusedFandoms": "The sites' fandoms of no work let go of",
   "What.makeSiteItemSetVectors": "Vectors of sets",
   "What.makeWorkManners": "The manner of the texts by word frequencies",

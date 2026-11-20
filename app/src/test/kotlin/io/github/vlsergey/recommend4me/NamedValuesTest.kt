@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test
 
 /**
  * A value a site gave by its name alone — a dump, under the prefix the source says of such keys — is given the key a
- * page of the site gives a value of that name, on every work of the name: in its place, once on a work that has the key
- * already; never the key of a name two keys of the facet have.
+ * page of the site gives a value of that name, on every work of the name, in the background: in its place, once on a
+ * work that has the key already; never the key of a name two keys of the facet have.
  */
 class NamedValuesTest : TwoSitesTestBase() {
 
@@ -27,8 +27,10 @@ class NamedValuesTest : TwoSitesTestBase() {
         items.setFacet("nv2", author, listOf(FacetValue("name:Nova", "Nova")))
         items.setFacet("nv3", author, listOf(FacetValue("name:Vera", "Vera"), FacetValue("name:Nova", "Nova")))
 
-        // The site's page of the first work gives Nova her key
+        // The site's page of the first work gives Nova her key; the other works keyed so in the background
         items.setFacet("nv1", author, listOf(FacetValue("nv-nova", "Nova")))
+        assertEquals(listOf("name:Nova"), authorsOf("nv2"))
+        background.run()
 
         assertEquals(listOf("nv-nova"), authorsOf("nv1"))
         assertEquals(listOf("nv-nova"), authorsOf("nv2"))
@@ -40,6 +42,7 @@ class NamedValuesTest : TwoSitesTestBase() {
         alpha("nw1|Lorem|hay|Lorem ipsum dolor||")
         val items = stores.source("alpha")!!.items
         items.setFacet("nw1", author, listOf(FacetValue("name:Wren", "Wren"), FacetValue("nw-wren", "Wren")))
+        background.run()
 
         assertEquals(listOf("nw-wren"), authorsOf("nw1"))
     }
@@ -57,6 +60,7 @@ class NamedValuesTest : TwoSitesTestBase() {
 
         // A page of the first account's work read again: its co-author added
         items.setFacet("nx2", author, listOf(FacetValue("nx-twin-1", "Twin"), FacetValue("nx-ally", "Ally")))
+        background.run()
 
         assertEquals(listOf("name:Twin"), authorsOf("nx1"))
     }

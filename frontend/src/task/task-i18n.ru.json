@@ -116,6 +116,7 @@
   "What.fitTagTextModel": "Модель тегов по тексту",
   "What.indexWorkTexts": "Документы поиска работ",
   "What.keepOutWorks": "Скрытие работ по исключающим тегам",
+  "What.keyNamedValues": "Ключи сайта значениям, записанным по именам",
   "What.letGoUnusedFandoms": "Уборка фандомов сайтов, у которых не осталось работ",
   "What.makeSiteItemSetVectors": "Векторы наборов",
   "What.makeWorkManners": "Манера текстов по частотам слов",

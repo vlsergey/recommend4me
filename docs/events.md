@@ -88,6 +88,7 @@ flowchart LR
     w_fitTagTextModel{{"fitTagTextModel"}}
     w_indexWorkTexts{{"indexWorkTexts"}}
     w_keepOutWorks{{"keepOutWorks"}}
+    w_keyNamedValues{{"keyNamedValues"}}
     w_letGoUnusedFandoms{{"letGoUnusedFandoms"}}
     w_makeSiteItemSetVectors{{"makeSiteItemSetVectors"}}
     w_makeWorkManners{{"makeWorkManners"}}
@@ -167,6 +168,7 @@ flowchart LR
     e_SiteItemWriteEvent --> e_WorkGroupChangeEvent
     e_SiteItemWriteEvent --> w_countFandomWorks
     e_SiteItemWriteEvent --> w_encodeSiteItemCasts
+    e_SiteItemWriteEvent --> w_keyNamedValues
     e_SiteItemWriteEvent --> w_letGoUnusedFandoms
     e_SiteItemWriteEvent --> w_makeSiteItemSetVectors
     e_SiteItemWriteEvent --> w_makeWorkManners

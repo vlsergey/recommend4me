@@ -4951,6 +4951,7 @@ components:
           - fitTagTextModel
           - indexWorkTexts
           - keepOutWorks
+          - keyNamedValues
           - letGoUnusedFandoms
           - makeSiteItemSetVectors
           - makeWorkManners
