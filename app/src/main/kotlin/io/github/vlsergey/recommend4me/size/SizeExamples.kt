@@ -42,9 +42,10 @@ internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExa
                 countTexts(s)
                 ownOf(s).forEach { (id, k) -> known[ItemKey(s.id, id)] = k }
             }
-            WorkClusters.of(type.links.groups()).linkedWorks().forEach { members ->
-                acrossOf(type, members, known).forEach { (key, k) -> across[key] = k }
-            }
+            // The numbers of every item of a work of several, of every site in one batch: not a query a work
+            val linked = WorkClusters.of(type.links.groups()).linkedWorks()
+            val stated = statedOf(type, linked.flatten().filter { it !in known })
+            linked.forEach { members -> acrossOf(members, stated).forEach { (key, k) -> across[key] = k } }
             fun examples(of: Map<ItemKey, Known>) =
                 of.keys.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
                     val s = type.source(source) ?: return@flatMap emptyList()
@@ -75,29 +76,36 @@ internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExa
             return out
         }
 
-        /**
-         * Of a work of several items — its [members] —, of an item of none of [known] that states one of the two, the
-         * two: the most words and the most characters its items state.
-         */
-        private fun acrossOf(type: TypeStore, members: List<ItemKey>, known: Map<ItemKey, Known>): Map<ItemKey, Known> {
-            val stated = HashMap<ItemKey, Pair<Double, Double>>()
-            members
-                .filter { it !in known }
-                .groupBy({ it.source }, { it.id })
-                .forEach { (source, ids) ->
-                    val s = type.source(source) ?: return@forEach
-                    val words = s.wordsKey()
-                    val chars = s.charsKey()
-                    s.items.numbersOf(ids).forEach { (id, own) ->
-                        val w = words?.let { own[it] } ?: 0.0
-                        val c = chars?.let { own[it] } ?: 0.0
-                        if (w > 0 || c > 0) stated[ItemKey(source, id)] = w to c
-                    }
+        /** The words and the characters every item of [keys] states, of one of them at least, by its site's numbers. */
+        private fun statedOf(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Pair<Double, Double>> {
+            val out = HashMap<ItemKey, Pair<Double, Double>>()
+            keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+                val s = type.source(source) ?: return@forEach
+                val words = s.wordsKey()
+                val chars = s.charsKey()
+                if (words == null && chars == null) return@forEach
+                s.items.numbersOf(ids).forEach { (id, own) ->
+                    val w = words?.let { own[it] } ?: 0.0
+                    val c = chars?.let { own[it] } ?: 0.0
+                    if (w > 0 || c > 0) out[ItemKey(source, id)] = w to c
                 }
-            val words = stated.values.maxOfOrNull { it.first } ?: 0.0
-            val chars = stated.values.maxOfOrNull { it.second } ?: 0.0
+            }
+            return out
+        }
+
+        /**
+         * Of a work of several items — its [members] —, of an item that states one of the two ([stated]: of the items
+         * that tell none by themselves), the two: the most words and the most characters its items state.
+         */
+        private fun acrossOf(
+            members: List<ItemKey>,
+            stated: Map<ItemKey, Pair<Double, Double>>,
+        ): Map<ItemKey, Known> {
+            val own = members.mapNotNull { k -> stated[k]?.let { k to it } }
+            val words = own.maxOfOrNull { it.second.first } ?: 0.0
+            val chars = own.maxOfOrNull { it.second.second } ?: 0.0
             if (words <= 0 || chars <= 0) return emptyMap()
-            return stated.keys.associateWith { Known(words, chars) }
+            return own.associate { it.first to Known(words, chars) }
         }
 
         /**
@@ -135,7 +143,7 @@ internal fun givesExamples(type: TypeStore, keys: Collection<ItemKey>): Boolean 
     val clusters = WorkClusters.of(type.links.groups())
     return keys.groupBy({ it.source }, { it.id }).any { (source, ids) ->
         val s = type.source(source) ?: return@any false
-        countTexts(s)
+        countTexts(s, ids)
         val words = s.wordsKey()
         val chars = s.charsKey()
         s.parts.counts.counted(ids).isNotEmpty() ||
@@ -150,11 +158,13 @@ internal fun givesExamples(type: TypeStore, keys: Collection<ItemKey>): Boolean 
 /** The parts of the source read and counted at once. */
 private const val COUNTED_AT_ONCE = 100
 
-/** Every part whose text is not counted yet counted: one count of a part, kept, however often the model is fitted. */
-private fun countTexts(s: SourceStore) {
-    while (true) {
-        val parts = s.parts.counts.uncounted(COUNTED_AT_ONCE)
-        if (parts.isEmpty()) return
+/**
+ * Every part whose text is not counted yet counted — of the items [ids] alone, or of every item when null —: one count
+ * of a part, kept, however often the model is fitted.
+ */
+private fun countTexts(s: SourceStore, ids: Collection<String>? = null) {
+    s.parts.counts.uncounted(ids).chunked(COUNTED_AT_ONCE).forEach { chunk ->
+        val parts = s.parts.counts.toCount(chunk)
         s.writing.withLock {
             parts.forEach {
                 s.parts.counts.setCounted(it.itemId, it.partId, it.content.length, WordCount.of(it.content))

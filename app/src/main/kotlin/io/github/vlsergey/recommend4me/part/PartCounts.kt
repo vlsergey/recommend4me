@@ -9,19 +9,32 @@ class PartToCount(val itemId: String, val partId: String, val content: String)
 
 /**
  * THE CHARACTERS AND THE WORDS OF THE PARTS' TEXTS OF ONE SOURCE, counted once a text is kept and kept with the part:
- * what a work's size is known by when its site tells none ([io.github.vlsergey.recommend4me.size.KnownSizes]). The
+ * what a work's size is known by when its site tells none ([io.github.vlsergey.recommend4me.size.SizeExamples]). The
  * texts read of the [store].
  */
 class PartCounts(private val db: DSLContext, private val store: PartStore) {
 
-    /** The parts whose text is not counted yet, at most [limit]; one whose text the store lost left out. */
-    fun uncounted(limit: Int): List<PartToCount> =
-        db.select(PART.ITEM_ID, PART.PART_ID)
-            .from(PART)
-            .where(PART.CONTENT_HASH.isNotNull, PART.CHARS.isNull)
-            .limit(limit)
-            .fetch { it.value1()!! to it.value2()!! }
-            .mapNotNull { (item, part) -> store.text(item, part)?.let { PartToCount(item, part, it) } }
+    /**
+     * The parts whose text is kept and not counted yet, by their item and part — of the items [ids] alone, by their
+     * keys, or of every item, in one pass of the table: a pass a hundred parts walked the table again and again
+     * (2026-11-20).
+     */
+    fun uncounted(ids: Collection<String>?): List<Pair<String, String>> =
+        (ids?.distinct()?.chunked(BATCH) ?: listOf(null)).flatMap { chunk ->
+            db.select(PART.ITEM_ID, PART.PART_ID)
+                .from(PART)
+                .where(
+                    PART.CONTENT_HASH.isNotNull,
+                    PART.CHARS.isNull,
+                    chunk?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition(),
+                )
+                .fetch { it.value1()!! to it.value2()!! }
+        }
+
+    /** The texts of the [parts] to count, by their item and part; one whose text the store lost left out. */
+    fun toCount(parts: List<Pair<String, String>>): List<PartToCount> = parts.mapNotNull { (item, part) ->
+        store.text(item, part)?.let { PartToCount(item, part, it) }
+    }
 
     fun setCounted(itemId: String, partId: String, chars: Int, words: Int) {
         db.update(PART)
