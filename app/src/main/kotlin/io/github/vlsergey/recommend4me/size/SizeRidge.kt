@@ -43,6 +43,21 @@ internal class SizeRidge(private val rows: SizeRows, private val gram: SizeGram)
         return sqrt(sum / rows.count)
     }
 
+    /** The [weights] of the examples but those of the first fold, held out: what a choice is made without. */
+    fun withoutHeld(weights: DoubleArray): DoubleArray =
+        DoubleArray(rows.count) { if (foldOf(it) == 0) 0.0 else weights[it] }
+
+    /** The error of the solution [x] on the examples of the first fold, held out: the root of their mean square. */
+    fun heldError(x: DoubleArray): Double {
+        var sum = 0.0
+        var count = 0
+        for (i in 0 until rows.count) if (foldOf(i) == 0) {
+            sum += (rows.y[i] - rows.dot(i, x)).let { it * it }
+            count++
+        }
+        return if (count == 0) 0.0 else sqrt(sum / count)
+    }
+
     /** The fold an example is in: its place spread by a hash, the same at every fitting. */
     private fun foldOf(i: Int): Int = Math.floorMod(i * SPREAD, FOLDS)
 

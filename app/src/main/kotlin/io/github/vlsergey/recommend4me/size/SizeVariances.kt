@@ -63,52 +63,30 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
         var counting = from?.counting ?: 0.0
         var tau = from?.tau?.copyOf() ?: DoubleArray(kindCount) { spread }
         var x = from?.x
-        var lambda = penalties(tau)
+        val choice = SizePenalties(rows, kinds, kindCount, ridge)
         for (round in 1..MOST_ROUNDS) {
-            val weights = Fitted(DoubleArray(0), lambda, noise, counting, tau, trust, rows.chars).weights()
-            lambda = penalties(tau)
-            x = ridge.solve(weights, lambda, x)
-            val diagonal = rows.diagonal(weights)
-            val nextTau = steps(x, diagonal, lambda, tau)
-            val (nextNoise, nextCounting) = lengths(x, weights, diagonal, lambda, noise, counting, trust)
+            val weights = Fitted(DoubleArray(0), DoubleArray(0), noise, counting, tau, trust, rows.chars).weights()
+            val chosen = choice.chosen(weights, tau, x)
+            x = ridge.solve(weights, penalties(chosen), x)
+            val (nextNoise, nextCounting) =
+                lengths(x, weights, rows.diagonal(weights), penalties(chosen), noise, counting, trust)
             val moved =
                 maxOf(
                     changed(noise, nextNoise),
                     changed(counting, nextCounting),
-                    tau.indices.maxOfOrNull {
-                        changed(tau[it], nextTau[it])
-                    } ?: 0.0,
+                    tau.indices.maxOfOrNull { changed(tau[it], chosen[it]) } ?: 0.0,
                 )
             noise = nextNoise
             counting = nextCounting
-            tau = nextTau
+            tau = chosen
             if (moved < CHANGE) break
         }
-        lambda = penalties(tau)
-        return Fitted(x!!, lambda, noise, counting, tau, trust, rows.chars)
+        return Fitted(x!!, penalties(tau), noise, counting, tau, trust, rows.chars)
     }
 
     /** Of every feature, its kind's penalty: the inverse of the kind's variance; the mean held by none. */
     private fun penalties(tau: DoubleArray) =
         DoubleArray(rows.features) { f -> if (kinds[f] < 0) 0.0 else 1 / tau[kinds[f]] }
-
-    /**
-     * Every kind's variance of its steps [x]: the sum of their squares over their effective number, a step's share the
-     * data tell of it ([diagonal] over [diagonal] and its penalty [lambda]); a kind of none, as it was ([tau]).
-     */
-    private fun steps(x: DoubleArray, diagonal: DoubleArray, lambda: DoubleArray, tau: DoubleArray): DoubleArray {
-        val squares = DoubleArray(kindCount)
-        val effective = DoubleArray(kindCount)
-        for (f in 1 until rows.features) {
-            val k = kinds[f]
-            if (k < 0) continue
-            squares[k] += x[f] * x[f]
-            effective[k] += diagonal[f] / (diagonal[f] + lambda[f])
-        }
-        return DoubleArray(kindCount) { k ->
-            if (effective[k] > 0 && squares[k] > 0) squares[k] / effective[k] else tau[k]
-        }
-    }
 
     /**
      * The two parts of the examples' deviation: every residual's square, its leverage taken back, by the inverse of its
