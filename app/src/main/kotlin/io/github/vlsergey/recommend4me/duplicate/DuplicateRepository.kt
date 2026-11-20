@@ -26,9 +26,9 @@ class DuplicateRepository(private val db: DSLContext) {
      * The candidates of a search in place of those before, and when it was made. The last search's candidates are let
      * go by a truncation, which the database does at once and commits by itself: deleting half a million rows in the
      * transaction of the new ones took 12 s, and its commit 10 s more (H2 2.4, measured 2026-11-08); a truncation takes
-     * 20 ms. The search's row goes first and comes back with the new candidates, in one transaction. A search broken in
-     * between leaves no row, and the start looks again. A reading in that second sees no search, as of a type never
-     * searched.
+     * 20 ms. The search's row goes first and comes back once the new candidates are written and indexed. A search
+     * broken in between leaves no row, and the start looks again. A reading in between sees no search, as of a type
+     * never searched.
      */
     fun replace(
         candidates: Collection<DuplicateCandidate>,
@@ -41,25 +41,26 @@ class DuplicateRepository(private val db: DSLContext) {
         val laps = Laps()
         db.deleteFrom(DUPLICATE_SEARCH).execute()
         db.truncate(DUPLICATE_CANDIDATE).execute()
+        // The indexes made after the rows, each of a pass over them, not kept in step with every row written: with
+        // the index of every sort, the rows of 1.2 million pairs took 206 s and their one transaction's commit 402 s
+        // (2026-11-20); the rows written a batch a statement, each committed by itself — none sees the table before the
+        // search's row comes back
+        INDEXES.keys.forEach { db.execute("DROP INDEX IF EXISTS $it") }
         laps.lap("emptied")
+        keep(db, candidates, scores, laps)
+        INDEXES.forEach { (name, columns) -> db.execute("CREATE INDEX $name ON duplicate_candidate ($columns)") }
+        laps.lap("indexed")
         db.transaction { c ->
             this.rarity.replace(c.dsl(), rarity)
             laps.lap("rarities of ${rarity.size} values")
-            fill(c.dsl(), candidates, scores, search, laps)
+            fill(c.dsl(), search)
         }
         laps.lap("committed")
         log.info("the {} candidates of a search written: {}", candidates.size, laps)
     }
 
-    /** The [candidates] with their [scores] and the [search] written by [tx], into tables emptied. */
-    private fun fill(
-        tx: DSLContext,
-        candidates: Collection<DuplicateCandidate>,
-        scores: (DuplicateCandidate) -> PairScore,
-        search: DuplicateSearch,
-        laps: Laps,
-    ) {
-        keep(tx, candidates, scores, laps)
+    /** The [search] written by [tx], its candidates written. */
+    private fun fill(tx: DSLContext, search: DuplicateSearch) {
         tx.insertInto(DUPLICATE_SEARCH)
             .set(DUPLICATE_SEARCH.ID, 1)
             .set(DUPLICATE_SEARCH.MADE_AT, search.madeAt)
@@ -236,6 +237,24 @@ class DuplicateRepository(private val db: DSLContext) {
 
     companion object {
         private const val BATCH = 1000
+
+        /**
+         * The indexes of the candidates by their second works and by the key of every sort beside the word on the pair
+         * ([DuplicateChoice]), by their columns: as the migrations make them (V51, V53, V54), made anew after the rows.
+         */
+        private val INDEXES =
+            mapOf(
+                "duplicate_candidate_other" to "other_source, other_item_id",
+                "duplicate_candidate_by_chance" to "answer, same_chance DESC",
+                "duplicate_candidate_by_series" to "answer, series_chance DESC",
+                "duplicate_candidate_by_size" to "answer, by_size DESC",
+                "duplicate_candidate_by_series_size" to "answer, by_series_size DESC",
+                "duplicate_candidate_by_doubt" to "answer, by_doubt DESC",
+                "duplicate_candidate_by_series_doubt" to "answer, by_series_doubt DESC",
+                "duplicate_candidate_by_formula" to "answer, by_formula DESC",
+                "duplicate_candidate_by_interest" to "answer, by_interest DESC",
+                "duplicate_candidate_by_grade" to "answer, by_grade DESC",
+            )
 
         private const val FETCH = 5000
 

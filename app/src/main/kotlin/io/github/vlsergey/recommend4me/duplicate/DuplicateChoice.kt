@@ -3,11 +3,15 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.laps.Laps
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
 import org.jooq.SortField
 import org.jooq.impl.DSL
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(DuplicateChoice::class.java)
 
 /** A pair of a page as chosen: its two works, the smaller key first, and the word kept with it ([PairScore]). */
 class ChosenPair(val pair: Pair<ItemKey, ItemKey>, val answer: DuplicateAnswer?, val derived: Boolean)
@@ -24,8 +28,10 @@ class DuplicateChoice internal constructor(private val db: DSLContext) {
 
     /** The pairs the [choice] holds from [offset], [limit] of them, in the order of its sort; and how many in all. */
     fun page(choice: PairChoice, offset: Int, limit: Int): Pair<Int, List<ChosenPair>> {
+        val laps = Laps()
         val where = condition(choice)
-        val total = db.selectCount().from(c).where(where).fetchOne(0, Int::class.java) ?: 0
+        val total = total(choice, where)
+        laps.lap("counted")
         val key = keyOf(choice.sort).desc()
         // Of the open pairs alone, the word first — none, of every one — as their index has it: walked, not sorted
         val order: List<SortField<*>> = if (choice.answers.isEmpty()) listOf(c.ANSWER.asc(), key) else listOf(key)
@@ -43,7 +49,23 @@ class DuplicateChoice internal constructor(private val db: DSLContext) {
                         r.value6()!!,
                     )
                 }
+        laps.lap("chosen")
+        log.info("a page of the pairs of duplicates by {} chosen: {}", choice.sort, laps)
         return total to rows
+    }
+
+    /**
+     * How many pairs the [choice] holds: of the open ones, every pair but the answered — the table's count H2 keeps,
+     * the answered few counted by the index of the word —, not a walk of a million rows of the index, each read by its
+     * key (2026-11-20: 10 s and more of a page); of the authors or the titles alike, by the [where] of the page.
+     */
+    private fun total(choice: PairChoice, where: Condition): Int {
+        fun count(condition: Condition?) =
+            db.selectCount().from(c).where(condition ?: DSL.noCondition()).fetchOne(0, Int::class.java) ?: 0
+        if (choice.sameAuthors || choice.sameTitle) return count(where)
+        val words = choice.answers.map { it.name }
+        val open = if (choice.open) count(null) - count(c.ANSWER.isNotNull) else 0
+        return open + if (words.isEmpty()) 0 else count(c.ANSWER.`in`(words))
     }
 
     /** The pairs the [choice] holds: by the word on them, their authors and titles alike when asked. */

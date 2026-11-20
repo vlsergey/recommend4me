@@ -177,20 +177,36 @@ internal class SizeExamples(
 }
 
 /**
- * Whether any of the items [keys] gives the model something to learn of: one with a kept text, one its site states both
- * of, or one stating one of the two, of a work of several items.
+ * Of the items [keys], how many give the model something to learn of, by why: one with a kept text ([text]), one its
+ * site states both of ([both]), one stating one of the two, of a work of several items ([linked]) — the works of the
+ * items alone read ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.groupsOf]).
  */
-internal fun givesExamples(type: TypeStore, keys: Collection<ItemKey>): Boolean {
-    val clusters = WorkClusters.of(type.links.groups())
-    return keys.groupBy({ it.source }, { it.id }).any { (source, ids) ->
-        val s = type.source(source) ?: return@any false
-        val words = s.wordsKey()
-        val chars = s.charsKey()
-        s.parts.counts.counted(ids).isNotEmpty() ||
-            s.items.numbersOf(ids).any { (id, own) ->
-                val w = words?.let { own[it] } ?: 0.0
-                val c = chars?.let { own[it] } ?: 0.0
-                (w > 0 && c > 0) || ((w > 0 || c > 0) && clusters.linked(ItemKey(source, id)))
+internal class GivenExamples(val text: Int, val both: Int, val linked: Int) {
+    val any: Boolean
+        get() = text + both + linked > 0
+
+    override fun toString() = "a kept text $text, both numbers stated $both, one of a work of several items $linked"
+
+    companion object {
+        fun of(type: TypeStore, keys: Collection<ItemKey>): GivenExamples {
+            val linked = type.links.groupsOf(keys).flatten().toSet()
+            var text = 0
+            var both = 0
+            var ofLinked = 0
+            keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+                val s = type.source(source) ?: return@forEach
+                val words = s.wordsKey()
+                val chars = s.charsKey()
+                val counted = s.parts.counts.counted(ids).keys
+                text += counted.size
+                s.items.numbersOf(ids).forEach { (id, own) ->
+                    if (id in counted) return@forEach
+                    val w = words?.let { own[it] } ?: 0.0
+                    val c = chars?.let { own[it] } ?: 0.0
+                    if (w > 0 && c > 0) both++ else if ((w > 0 || c > 0) && ItemKey(source, id) in linked) ofLinked++
+                }
             }
+            return GivenExamples(text, both, ofLinked)
+        }
     }
 }

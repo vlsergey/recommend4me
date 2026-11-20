@@ -20,7 +20,7 @@ private val log = LoggerFactory.getLogger(WordsPerCharFitting::class.java)
 
 /**
  * WHEN THE MODEL OF HOW MANY WORDS A SITE ITEM HAS TO A CHARACTER IS FITTED AGAIN ([WordsPerCharLearning]): in the
- * queue of the computations, only when the items a change names give it something to learn of ([givesExamples]), or the
+ * queue of the computations, only when the items a change names give it something to learn of ([GivenExamples]), or the
  * tags are bound anew: a change of any other item asks nothing of it (owner, 2026-11-20: "no new information appeared —
  * there must be no model fit").
  */
@@ -39,11 +39,18 @@ class WordsPerCharFitting(
         val work = Task(FITTING, type = type.id)
         val taken = tasks.keys.wanted(work)
         if (taken.isEmpty()) return
-        val asked = EVERY in taken || givesExamples(type, taken.filter { it != EVERY }.map(ItemKey::parse))
+        val given = GivenExamples.of(type, taken.filter { it != EVERY }.map(ItemKey::parse))
+        val asked = EVERY in taken || given.any
+        log.info(
+            "{}: of the {} items named{}, the examples of the words to a character — {}: {}",
+            type.id,
+            taken.size - (if (EVERY in taken) 1 else 0),
+            if (EVERY in taken) " and every one asked" else "",
+            given,
+            if (asked) "fitted again" else "nothing new",
+        )
         if (asked) learning.fit(type)
         tasks.keys.done(work, taken)
-        if (!asked)
-            log.info("{}: none of the {} items named gives the words to a character anything new", type.id, taken.size)
     }
 
     // --- In the background ---
