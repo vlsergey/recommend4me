@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Condition
@@ -44,9 +45,8 @@ class CandidateReads internal constructor(private val db: DSLContext) {
     }
 
     /**
-     * The candidates of the [pairs], the smaller key first: those of their first works by the table's key — a site's
-     * works at once, its ids in one list —, the pairs asked picked of them (2026-11-20: a disjunction of the pairs'
-     * keys made H2 read the whole table for every list of them, 37 s of a page of 30 authors).
+     * The candidates of the [pairs], the smaller key first: those of their first works by the table's key, the pairs
+     * asked picked of them.
      */
     fun ofPairs(pairs: Collection<Pair<ItemKey, ItemKey>>): List<DuplicateCandidate> {
         val asked = pairs.toHashSet()
@@ -55,45 +55,49 @@ class CandidateReads internal constructor(private val db: DSLContext) {
 
     /**
      * The candidates of which either work is among the [items]: of one work's items, say. Those of them as the first
-     * work by the table's key, as the second by the index of the second: a site's works at once, never a disjunction.
+     * work by the table's key, as the second by the index of the second works — a site's works in one list of its two
+     * columns ([SourceItems]).
      */
     fun ofItems(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        val asSecond = bySource(items) { source, ids -> read(c.OTHER_SOURCE.eq(source).and(c.OTHER_ITEM_ID.`in`(ids))) }
+        val asSecond =
+            items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
+                ids.chunked(BATCH).flatMap { read(SourceItems.of(c.OTHER_SOURCE, c.OTHER_ITEM_ID, source, it)) }
+            }
         return (firstOf(items) + asSecond).distinctBy { it.pair }
     }
 
-    /** The candidates the [items] are the first works of, by the table's key: a site's works at once. */
+    /**
+     * The candidates the [items] are the first works of, by the table's key, a work a query: H2 finds a list of the
+     * first two of the key's four columns by walking every row of the site, one of a million for every list
+     * (2026-11-20: 6.8 s of the pairs of a page of 30 authors).
+     */
     private fun firstOf(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        return bySource(items) { source, ids -> read(c.SOURCE.eq(source).and(c.ITEM_ID.`in`(ids))) }
+        return items.distinct().flatMap { k -> read(c.SOURCE.eq(k.source).and(c.ITEM_ID.eq(k.id))) }
     }
-
-    /** Of the [items], every site's ids — a [BATCH] at most a list — read by [read]. */
-    private fun <T> bySource(items: Collection<ItemKey>, read: (String, List<String>) -> List<T>): List<T> =
-        items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-            ids.chunked(BATCH).flatMap { read(source, it) }
-        }
 
     /** The user's word on every pair of [pairs] as kept with it ([PairScore]): of a pair of none, none. */
     fun wordsOf(pairs: Collection<Pair<ItemKey, ItemKey>>): Said {
         val c = DUPLICATE_CANDIDATE
-        val asked = pairs.toHashSet()
         val words = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         val derived = HashSet<Pair<ItemKey, ItemKey>>()
-        bySource(pairs.map { it.first }) { source, ids ->
-                db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED)
-                    .from(c)
-                    .where(c.SOURCE.eq(source), c.ITEM_ID.`in`(ids), c.ANSWER.isNotNull)
-                    .fetch()
-            }
-            .forEach { r ->
-                val pair = ItemKey(r.value1()!!, r.value2()!!) to ItemKey(r.value3()!!, r.value4()!!)
-                if (pair in asked) {
-                    words[pair] = DuplicateAnswer.valueOf(r.value5()!!)
-                    if (r.value6()!!) derived += pair
+        pairs.distinct().forEach { pair ->
+            db.select(c.ANSWER, c.ANSWER_DERIVED)
+                .from(c)
+                .where(
+                    c.SOURCE.eq(pair.first.source),
+                    c.ITEM_ID.eq(pair.first.id),
+                    c.OTHER_SOURCE.eq(pair.second.source),
+                    c.OTHER_ITEM_ID.eq(pair.second.id),
+                    c.ANSWER.isNotNull,
+                )
+                .fetchOne()
+                ?.let { r ->
+                    words[pair] = DuplicateAnswer.valueOf(r.value1()!!)
+                    if (r.value2()!!) derived += pair
                 }
-            }
+        }
         return Said(words, derived)
     }
 
