@@ -238,9 +238,8 @@ internal class Variances(val noise: Double, val counting: Double, val tau: Doubl
             val tau = WordsPerChar.KINDS.map { weights[TAU + it] }
             val noise = weights[NOISE]
             val counting = weights[COUNTING]
-            if (noise == null || counting == null || tau.any { it == null }) return null
-            if (noise <= 0 || tau.any { it!! <= 0 }) return null
-            return Variances(noise, counting, DoubleArray(tau.size) { tau[it]!! })
+            val told = noise != null && counting != null && tau.all { it != null && it > 0 } && noise > 0
+            return if (told) Variances(noise!!, counting!!, DoubleArray(tau.size) { tau[it]!! }) else null
         }
     }
 }
