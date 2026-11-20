@@ -53,23 +53,30 @@ internal class TextsCompared(
                     at[id]?.let { rowsOf(key).putHalves(it, halves) }
                     making += System.nanoTime() - made
                 }
-                log.info(
-                    "{}: the vectors of the titles and the descriptions streamed in {} ms, {} ms of them made",
-                    s.id,
-                    (System.nanoTime() - started) / NANOS_IN_MILLI,
-                    making / NANOS_IN_MILLI,
-                )
             } else
                 s.textVectors.ofMany(ids, encoder, keys).forEach { (id, texts) ->
                     texts.forEach { (key, v) -> at[id]?.let { rowsOf(key).put(it, v) } }
                 }
+            val streamed = System.nanoTime()
             val texts = textsOf(s, ids, at)
+            val read = System.nanoTime()
             // The description long, every row whole; the names of the fandoms and the line of the characters short
             val rows =
                 LetteredText.entries.map {
                     if (it == LetteredText.DESCRIPTION) Letters.wholeRows(texts.getValue(it))
                     else Letters.rows(texts.getValue(it))
                 }
+            if (ids.size > FEW)
+                log.info(
+                    "{}: the texts compared both ways in {} ms: the vectors {} ({} of them made), the texts {}, " +
+                        "their letters {}",
+                    s.id,
+                    (System.nanoTime() - started) / NANOS_IN_MILLI,
+                    (streamed - started) / NANOS_IN_MILLI,
+                    making / NANOS_IN_MILLI,
+                    (read - streamed) / NANOS_IN_MILLI,
+                    (System.nanoTime() - read) / NANOS_IN_MILLI,
+                )
             return TextsCompared(
                 titles.rows(),
                 titles.had,
