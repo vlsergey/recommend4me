@@ -22,8 +22,26 @@ internal class ValueIndex(values: List<String>) {
     /** The place of the value [key]; null of a value the task lacks. */
     operator fun get(key: String) = index[key]
 
-    /** The places of the values [list], each once; a value the task lacks left out. */
-    fun of(list: Collection<String>) = list.mapNotNull { index[it] }.distinct().toIntArray()
+    /**
+     * The places of the values [list], each once, in their order; a value the task lacks left out. A primitive array of
+     * a few, no list of boxed numbers and no set: asked some eight times a work and a facet of every work of a pass.
+     */
+    fun of(list: Collection<String>): IntArray {
+        if (list.isEmpty()) return NONE
+        val out = IntArray(list.size)
+        var n = 0
+        for (key in list) {
+            val place = index[key] ?: continue
+            var seen = false
+            for (q in 0 until n) if (out[q] == place) seen = true
+            if (!seen) out[n++] = place
+        }
+        return if (n == out.size) out else out.copyOf(n)
+    }
+
+    private companion object {
+        val NONE = IntArray(0)
+    }
 }
 
 /**
@@ -120,9 +138,12 @@ internal class FacetRead(
             read.drafts
                 .mapValues { (_, list) -> list.filter { it.facet == facet.key }.map { it.key } }
                 .filterValues { it.isNotEmpty() }
-        val corrected = ids.associateWith { id ->
-            TagHierarchy.corrected(emptyMap(), corrections[id].orEmpty(), within, store.singleFacets)
-        }
+        // Of the works the user answered on alone: of the rest, nothing
+        val corrected =
+            ids.filter { corrections[it] != null }
+                .associateWith { id ->
+                    TagHierarchy.corrected(emptyMap(), corrections.getValue(id), within, store.singleFacets)
+                }
         // An item whose values of the facet are all named: every other value rejected by the user's word
         val allNamed = BooleanArray(ids.size) { facet.key in read.complete[ids[it]].orEmpty() }
         return Owned(corrected, answers, drafted, allNamed, within)
