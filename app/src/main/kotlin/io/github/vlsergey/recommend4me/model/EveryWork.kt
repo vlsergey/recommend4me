@@ -120,7 +120,6 @@ class EveryWork(
         private val ratings = ratingsOf(type)
         private val interest = interestOf(type)
         private val clusters = works.of(type)
-        private val series = TypeSeries.read(type)
         private val none = Averages(emptyMap(), emptyMap())
 
         /**
@@ -134,6 +133,9 @@ class EveryWork(
             val members = named.flatMap(clusters::members)
             val own = keys.associateBy { it.id }
             val idsOf = members.groupBy({ it.source }, { it.id })
+            // The series of the portion's works alone, read around them: not every series of the type a portion
+            // (2026-11-20, a pass over the 1.4 million works of ficbook read them some 1400 times)
+            val series = TypeSeries.around(type, type.works.worksOf(members).values)
             // The site's values of the portion read once, for the works and their manners alike
             val values =
                 idsOf
