@@ -98,7 +98,7 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
             val began = ridge.steps
             val solved = ridge.solve(weights, lambda, x)
             x = solved
-            val (noise, counting) = lengths(solved, weights, rows.diagonal(weights), lambda, now)
+            val (noise, counting) = lengths(solved, rows.diagonal(weights), lambda, now)
             val moved = maxOf(changed(now.noise, noise), changed(now.counting, counting))
             now = Variances(noise, counting, at.tau)
             if (moved < CHANGE) return now to solved
@@ -114,28 +114,27 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
         DoubleArray(rows.features) { f -> if (kinds[f] < 0) 0.0 else 1 / tau[kinds[f]] }
 
     /**
-     * The two parts of the examples' deviation: every residual's square, its leverage taken back, by the inverse of its
-     * characters — a weighted least squares of a line, weighing each by the inverse of its variance's square, of the
-     * variances [at] —; a part below nought, nought, the other of the rest.
+     * The two parts of the examples' deviation: every residual's square by the inverse of its characters — a weighted
+     * least squares of a line, weighing each by the inverse of its variance's square, of the variances [at] —, the
+     * squares made larger by the share of the examples the steps fitted ([freedom]); a part below nought, nought, the
+     * other of the rest. Of all the examples, not of each: an example's own leverage, told of the features' diagonal
+     * alone, came to one and beyond for an example of several rare features, its square divided by nought — the
+     * deviation went from 0.003 to 1565 and back every other turn (2026-11-20).
      */
     private fun lengths(
         x: DoubleArray,
-        weights: DoubleArray,
         diagonal: DoubleArray,
         lambda: DoubleArray,
         at: Variances,
     ): Pair<Double, Double> {
-        val inverse =
-            DoubleArray(rows.features) { if (diagonal[it] + lambda[it] > 0) 1 / (diagonal[it] + lambda[it]) else 0.0 }
+        val fitted = freedom(diagonal, lambda)
+        val kept = if (fitted < rows.count) (rows.count - fitted) / rows.count else 1.0
         var s0 = 0.0
         var s1 = 0.0
         var s2 = 0.0
         var t0 = 0.0
         var t1 = 0.0
         for (i in 0 until rows.count) {
-            var leverage = inverse[0]
-            for (k in rows.offsets[i] until rows.offsets[i + 1]) leverage += inverse[rows.ids[k]]
-            val kept = 1 - minOf(weights[i] * leverage, ALMOST_ONE)
             val residual = rows.y[i] - rows.dot(i, x)
             val variance = residual * residual / kept
             val v = 1 / rows.chars[i]
@@ -161,6 +160,17 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
         return nextNoise to nextCounting
     }
 
+    /**
+     * The number of the steps the data fitted, of every feature its examples' weight in the [diagonal] over that and
+     * its penalty [lambda] (the trace of the matrix of influence, of its diagonal alone): the mean's one, a step held
+     * by its penalty less.
+     */
+    private fun freedom(diagonal: DoubleArray, lambda: DoubleArray): Double {
+        var sum = 0.0
+        for (f in diagonal.indices) if (diagonal[f] + lambda[f] > 0) sum += diagonal[f] / (diagonal[f] + lambda[f])
+        return sum
+    }
+
     private fun variance(v: DoubleArray): Double {
         val mean = v.average()
         return v.sumOf { (it - mean) * (it - mean) } / max(1, v.size - 1)
@@ -184,9 +194,6 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
 
         /** The last turns of a deviation that did not settle told in the log. */
         const val TOLD = 6
-
-        /** A leverage below one: a residual of a step of one example alone is not made infinite. */
-        const val ALMOST_ONE = 1 - 1e-9
     }
 }
 
