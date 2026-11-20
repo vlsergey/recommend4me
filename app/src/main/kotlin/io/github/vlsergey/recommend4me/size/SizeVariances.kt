@@ -16,6 +16,13 @@ import kotlin.math.max
 internal class SizeVariances(private val rows: SizeRows, private val kinds: IntArray, private val ridge: SizeRidge) {
     private val kindCount = WordsPerChar.KINDS.size
 
+    /** The solutions the choices of the penalties took, and the rounds of the choice: what a fitting cost. */
+    var choosing = 0
+        private set
+
+    var rounds = 0
+        private set
+
     /**
      * The steps [x] fitted of the penalties [lambda], the [variances] they are of, how much each example is trusted
      * ([trust]: of the examples of two sites, the chance they are of one text; none — every one wholly), and the error
@@ -60,7 +67,10 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
             val deviation = deviation(at, x)
             at = deviation.first
             x = deviation.second
+            val before = ridge.solutions
             val chosen = choice.chosen(at.weights(rows.chars, null), at.tau, x)
+            choosing += ridge.solutions - before
+            rounds++
             val better = chosen.error < held * (1 - CHANGE)
             val moved = !chosen.tau.contentEquals(at.tau)
             held = chosen.error

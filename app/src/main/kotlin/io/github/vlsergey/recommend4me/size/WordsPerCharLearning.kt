@@ -55,8 +55,14 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
         val begun = Variances.kept(type.sizes.kept(Variances.PREFIX))
         val (crossed, where) =
             solved(rows) { ridge ->
-                val fitted = SizeVariances(rows, WordsPerChar.kindsOf(names), ridge).fit(begun)
-                Crossed(fitted, ridge.meanHeld(fitted.weights()), ridge.solutions, ridge.steps)
+                val variances = SizeVariances(rows, WordsPerChar.kindsOf(names), ridge)
+                val fitted = variances.fit(begun)
+                Crossed(
+                    fitted,
+                    ridge.meanHeld(fitted.weights()),
+                    "${ridge.solutions} solutions — ${variances.choosing} of them choosing the penalties in " +
+                        "${variances.rounds} rounds — of ${ridge.steps} steps, solving ${ridge.nanos / NANOS} ms",
+                )
             }
         laps.lap("fitted on $where${if (begun == null) " begun anew" else ""}")
         val across = examples.across
@@ -93,7 +99,7 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
             "{}: the words to a character learnt from {} items of their own numbers and {} of two sites trusted {} " +
                 "in all, {} features, on a tenth held out {} by a logarithm, the mean alone {}; a work's own " +
                 "deviation {}, its count's of a character {} — its own text weighing as the model's at {} " +
-                "characters —, the steps' spread {}; {} solutions of {} steps in all: {}",
+                "characters —, the steps' spread {}; {}: {}",
             type.id,
             own,
             across,
@@ -107,8 +113,7 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
             WordsPerChar.KINDS.indices.joinToString {
                 "${WordsPerChar.KINDS[it]} %.4f".format(Math.sqrt(fitted.variances.tau[it]))
             },
-            crossed.solutions,
-            crossed.steps,
+            crossed.cost,
             laps,
         )
     }
@@ -138,12 +143,7 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
     }
 
     /** The model fitted of every example, the error of the mean alone on the tenth held out, and what it cost. */
-    private class Crossed(
-        val fitted: SizeVariances.Fitted,
-        val meanError: Double,
-        val solutions: Int,
-        val steps: Int,
-    )
+    private class Crossed(val fitted: SizeVariances.Fitted, val meanError: Double, val cost: String)
 
     /**
      * [body] of the ridge of [rows] on the card when there is one with room for them — its memory had in a block of
@@ -151,22 +151,27 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
      */
     private fun <T> solved(rows: SizeRows, body: (SizeRidge) -> T): Pair<T, String> {
         card()?.let { (cublas, kernels) ->
-            val bytes = SizeGram.OnCard.bytes(rows)
+            val bytes = SizeOnCard.bytes(rows)
             try {
                 return cublas.withMemory(bytes, bytes) { memory ->
-                    body(SizeRidge(rows, SizeGram.OnCard(rows, kernels, memory)))
+                    body(SizeRidge(rows, SizeOnCard(rows, kernels, memory)))
                 } to "the card"
             } catch (e: NoCardRoom) {
                 log.info("the words to a character fitted on the processor: {}", e.message)
             }
         }
-        return body(SizeRidge(rows, SizeGram.OnProcessor(rows))) to "the processor"
+        return body(SizeRidge(rows, SizeOnProcessor(rows))) to "the processor"
     }
 
     /** The card with the kernels of the ridge; none without a card, or of kernels that would not compile. */
     private fun card(): Pair<Cublas, CudaKernels>? {
         val cublas = cards.getIfAvailable()?.cublas() ?: return null
         return compiled?.takeIf { it.first === cublas }
-            ?: SizeGram.OnCard.kernels(cublas)?.let { cublas to it }?.also { compiled = it }
+            ?: SizeOnCard.kernels(cublas)?.let { cublas to it }?.also { compiled = it }
+    }
+
+    private companion object {
+        /** Nanoseconds in a millisecond. */
+        const val NANOS = 1_000_000
     }
 }

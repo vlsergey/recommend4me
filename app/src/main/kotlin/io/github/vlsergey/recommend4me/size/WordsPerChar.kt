@@ -102,7 +102,7 @@ class WordsPerChar(internal val weights: DoubleArray, val sample: Double) {
         /** The model of the [examples], their features named by [names], fitted on the processor ([SizeVariances]). */
         fun fit(examples: List<SizeExample>, names: List<String>): WordsPerChar {
             val rows = SizeRows(examples, names.size)
-            val fitted = SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeGram.OnProcessor(rows))).fit()
+            val fitted = SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeOnProcessor(rows))).fit()
             return WordsPerChar(fitted.x, fitted.variances.sample)
         }
 
@@ -112,7 +112,7 @@ class WordsPerChar(internal val weights: DoubleArray, val sample: Double) {
          */
         fun heldError(examples: List<SizeExample>, names: List<String>): Double {
             val rows = SizeRows(examples, names.size)
-            return SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeGram.OnProcessor(rows))).fit().held
+            return SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeOnProcessor(rows))).fit().held
         }
     }
 }
