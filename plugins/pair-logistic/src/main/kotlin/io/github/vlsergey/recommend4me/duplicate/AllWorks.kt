@@ -50,19 +50,27 @@ internal class AllWorks private constructor(val search: PairSearch) {
 
     private val authorNumber = HashMap<Long, Int>()
 
-    private fun numbered(ids: LongArray): IntArray =
-        ids.distinct().map { authorNumber.getOrPut(it) { authorNumber.size } }.sorted().toIntArray()
+    /** The authors [ids] by their numbers, ascending, each once: of none, none; a primitive array, no list a work. */
+    private fun numbered(ids: LongArray): IntArray {
+        if (ids.isEmpty()) return NONE
+        val out = IntArray(ids.size) { authorNumber.getOrPut(ids[it]) { authorNumber.size } }
+        out.sort()
+        var n = 0
+        for (q in out.indices) if (n == 0 || out[n - 1] != out[q]) out[n++] = out[q]
+        return if (n == out.size) out else out.copyOf(n)
+    }
 
     val authors: Lists = Lists.of(sites.flatMap { s -> s.authors.map(::numbered) })
     val kin: Lists = Lists.of(sites.flatMap { s -> s.kin.map(::numbered) })
 
+    /** Of every work the works answered on with it: the answers of every two sites looked up once, not once a work. */
     val passed: Lists =
         Lists.of(
             sites.indices.flatMap { a ->
+                val answered = sites.indices.mapNotNull { b -> search.answered[a to b]?.let { b to it } }
                 (0 until sites[a].count).map { i ->
-                    sites.indices
-                        .flatMap { b -> search.answered[a to b]?.get(i)?.map { start[b] + it }.orEmpty() }
-                        .toIntArray()
+                    if (answered.isEmpty()) NONE
+                    else answered.flatMap { (b, of) -> of[i]?.map { start[b] + it }.orEmpty() }.toIntArray()
                 }
             }
         )
@@ -88,6 +96,8 @@ internal class AllWorks private constructor(val search: PairSearch) {
     }
 
     companion object {
+        private val NONE = IntArray(0)
+
         /** The works of the [search] in one numbering; null when their trigrams are not of one width. */
         fun of(search: PairSearch): AllWorks? =
             if (search.sites.isEmpty() || search.sites.any { it.width != search.sites.first().width }) null
