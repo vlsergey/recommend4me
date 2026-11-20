@@ -7,6 +7,9 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(TextsCompared::class.java)
 
 /**
  * THE TEXTS OF A SITE'S WORKS COMPARED BOTH WAYS (owner, 2026-11-19: "for every text field both the trigram ones and
@@ -40,12 +43,23 @@ internal class TextsCompared(
             val descriptions = UnitRows(ids.size)
             fun rowsOf(key: String) = if (key == TextVectors.TITLE) titles else descriptions
             val keys = listOfNotNull(TextVectors.TITLE, description)
-            // Of every work of a site, every vector streamed as kept; of a few, theirs by their ids
-            if (ids.size > FEW)
+            // Of every work of a site, every vector streamed as kept; of a few, theirs by their ids. The time of the
+            // vectors made apart from the stream's: what of the reading is the database's
+            val started = System.nanoTime()
+            var making = 0L
+            if (ids.size > FEW) {
                 s.textVectors.forEachHalves(encoder, keys) { id, key, halves ->
+                    val made = System.nanoTime()
                     at[id]?.let { rowsOf(key).putHalves(it, halves) }
+                    making += System.nanoTime() - made
                 }
-            else
+                log.info(
+                    "{}: the vectors of the titles and the descriptions streamed in {} ms, {} ms of them made",
+                    s.id,
+                    (System.nanoTime() - started) / NANOS_IN_MILLI,
+                    making / NANOS_IN_MILLI,
+                )
+            } else
                 s.textVectors.ofMany(ids, encoder, keys).forEach { (id, texts) ->
                     texts.forEach { (key, v) -> at[id]?.let { rowsOf(key).put(it, v) } }
                 }
@@ -119,6 +133,8 @@ internal class TextsCompared(
                 fandoms[i]?.takeIf { it.isNotEmpty() }?.joinToString(", ") { names[it] ?: it }
             }
         }
+
+        private const val NANOS_IN_MILLI = 1_000_000L
 
         /** Of more works than so many, every work's texts streamed and picked from: one pass, not a query a chunk. */
         private const val FEW = 10_000

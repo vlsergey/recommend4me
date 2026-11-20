@@ -31,7 +31,8 @@ private constructor(
 
     /** Row [i] made of [v]'s [cols] numbers: of its largest, 127. */
     fun put(i: Int, v: FloatArray) {
-        val largest = (0 until cols).maxOfOrNull { abs(v[it]) } ?: 0f
+        var largest = 0f
+        for (q in 0 until cols) largest = maxOf(largest, abs(v[q]))
         val scale = if (largest > 0f) largest / LARGEST else 0f
         scales[first + i] = scale
         val at = i.toLong() * cols
