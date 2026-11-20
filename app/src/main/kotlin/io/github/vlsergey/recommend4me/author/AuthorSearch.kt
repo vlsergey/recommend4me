@@ -6,6 +6,8 @@ import io.github.vlsergey.recommend4me.duplicate.PairAnswers
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.tag.BoundEntry
+import io.github.vlsergey.recommend4me.tag.TagEntryRef
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
@@ -23,7 +25,8 @@ private val log = LoggerFactory.getLogger(AuthorSearch::class.java)
  * of — one work or a part of the other by the user's word, or the chance of one work the last search of the works' gave
  * the pair — or bound to one entry of a catalogue, with what tells of it ([AuthorEvidence]), and every pair told apart
  * or partly one; kept in place of the last search's ([AuthorCandidateRepository]), what a page of the offers is chosen
- * of. Planned by the user's pressing, and once at a start of a type never searched.
+ * of; and every author of works with their works counted and their names ([AuthorListingRepository]), what the tab of
+ * all the authors is. Planned by the user's pressing, and once at a start of a type never searched.
  */
 @Component
 class AuthorSearch(private val stores: Stores, private val tasks: Tasks, private val answers: PairAnswers) {
@@ -96,6 +99,8 @@ class AuthorSearch(private val stores: Stores, private val tasks: Tasks, private
         laps.lap("tallied")
         type.authorCandidates.replace(pairs, Instant.now(), library.writersOf.size)
         laps.lap("written")
+        listed(type, library)
+        laps.lap("listed")
         log.info(
             "{}: the authors' duplicates looked for among {} works — {} pairs of authors, {} of them told apart or " +
                 "partly one: {}",
@@ -107,11 +112,53 @@ class AuthorSearch(private val stores: Stores, private val tasks: Tasks, private
         )
     }
 
+    /**
+     * Every author of works of the [library], kept as the tab of all the authors chooses its page of them
+     * ([AuthorListingRepository]): their works counted, whether merged, whether bound to an entry, their names on the
+     * sites and of their entries.
+     */
+    private fun listed(type: TypeStore, library: AuthorLibrary) {
+        val bound = type.authors.entries.all()
+        val merged = type.authors.merged().keys
+        val names = namesOf(type, bound)
+        type.authorListing.replace(
+            library.worksOf.map { (id, works) ->
+                AuthorListed(id, works.size, id in merged, id in bound, names[id].orEmpty().joinToString(NAMES))
+            }
+        )
+    }
+
+    /**
+     * Of every author their names, lowercase: of every author of the sites bound to them, and of the entries they are
+     * [bound] to — what a name is looked for in.
+     */
+    private fun namesOf(type: TypeStore, bound: Map<Long, List<TagEntryRef>>): Map<Long, Set<String>> {
+        val out = HashMap<Long, MutableSet<String>>()
+        type.sources.forEach { s ->
+            val facet = authorFacetOf(s) ?: return@forEach
+            val ofKey = s.authors.bindingsOf(s.id)
+            val names = s.names(facet, ofKey.keys)
+            ofKey.forEach { (key, id) -> out.getOrPut(id) { HashSet() } += (names[key] ?: key).lowercase() }
+        }
+        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
+        bound.forEach { (id, refs) ->
+            refs.forEach { ref ->
+                kept[ref]?.let { e ->
+                    out.getOrPut(id) { HashSet() } += BoundEntry(ref.catalogue, e).names.map { it.lowercase() }
+                }
+            }
+        }
+        return out
+    }
+
     private companion object {
         /**
          * The place of [start] among the listeners of the application being ready: after the search of the works',
          * whose chances it reads.
          */
         const val START_ORDER = 30
+
+        /** Between two names of an author kept: a character no name holds, so a name looked for spans no two. */
+        const val NAMES = "\u0001"
     }
 }

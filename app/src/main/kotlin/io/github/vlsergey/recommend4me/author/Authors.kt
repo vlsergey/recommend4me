@@ -10,7 +10,6 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.tag.BoundEntry
 import io.github.vlsergey.recommend4me.tag.TagEntryRef
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -40,55 +39,21 @@ class Authors(
 
     /**
      * A page of the authors of the type with works, the most works first: every one, of several authors of the sites,
-     * or bound to an entry; of [search], those a name of theirs on a site or of their entry holds it. Their works are
-     * not listed. Null of no such type.
+     * or bound to an entry; of [search], those a name of theirs on a site or of their entry holds it — as the last
+     * search of the authors' duplicates read them, chosen in the database ([AuthorListingRepository]), the page's alone
+     * read whole. Their works are not listed. Null of no such type.
      */
     fun list(typeId: String, kind: AuthorKind, search: String?, offset: Int, limit: Int): AuthorPage? {
         val type = stores.type(typeId) ?: return null
-        val library = AuthorLibrary.of(type)
-        val bound = type.authors.entries.all()
-        val ofKind: Set<Long> =
-            when (kind) {
-                AuthorKind.ALL -> library.worksOf.keys
-                AuthorKind.MERGED -> library.worksOf.keys intersect type.authors.merged().keys
-                AuthorKind.CATALOGUED -> library.worksOf.keys intersect bound.keys
-            }
-        val needle = search?.trim()?.lowercase().orEmpty()
-        val found = if (needle.isEmpty()) ofKind else ofKind intersect named(type, needle, bound)
-        val page =
-            found
-                .sortedWith(compareByDescending<Long> { library.worksOf[it]?.size ?: 0 }.thenBy { it })
-                .drop(offset.coerceAtLeast(0))
-                .take(limit.coerceIn(1, MAX_PAGE))
+        val needle = search?.trim()?.lowercase()
+        val (total, rows) = type.authorListing.page(kind, needle, offset.coerceAtLeast(0), limit.coerceIn(1, MAX_PAGE))
+        val page = rows.map { it.author }
         val sites = sides.sites(type, page)
-        val entries = sides.entryInfos(type, bound.filterKeys { it in page })
+        val entries = sides.entryInfos(type, type.authors.entries.of(page))
         return AuthorPage(
-            total = found.size,
-            authors = page.map { sides.side(it, sites, entries, library, emptyList()) },
+            total = total,
+            authors = rows.map { sides.side(it.author, sites, entries, it.works, emptyList()) },
         )
-    }
-
-    /** The authors a name of theirs holds [needle], lowercase: of the sites and of the entries they are bound to. */
-    private fun named(type: TypeStore, needle: String, bound: Map<Long, List<TagEntryRef>>): Set<Long> {
-        val out = HashSet<Long>()
-        type.sources.forEach { s ->
-            val facet = authorFacetOf(s) ?: return@forEach
-            val ofKey = s.authors.bindingsOf(s.id)
-            val names = s.names(facet, ofKey.keys)
-            ofKey.forEach { (key, id) -> if ((names[key] ?: key).lowercase().contains(needle)) out += id }
-        }
-        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
-        bound.forEach { (id, refs) ->
-            if (
-                refs.any { ref ->
-                    kept[ref]?.let { e ->
-                        BoundEntry(ref.catalogue, e).names.any { it.lowercase().contains(needle) }
-                    } == true
-                }
-            )
-                out += id
-        }
-        return out
     }
 
     /** The author [id] with every work of theirs; null of no such type or author. */
@@ -98,7 +63,7 @@ class Authors(
         val own = library.worksOf[id].orEmpty()
         val shown = ShownWorks(type, library, own)
         val entries = sides.entryInfos(type, type.authors.entries.of(listOf(id)))
-        return sides.side(id, sides.sites(type, listOf(id)), entries, library, own.map { shown.of(it, id) })
+        return sides.side(id, sides.sites(type, listOf(id)), entries, own.size, own.map { shown.of(it, id) })
     }
 
     /**
@@ -139,7 +104,10 @@ class Authors(
     private fun struck(a: Long, b: Long, verdict: AuthorAnswer.Verdict) =
         stores.types.forEach { t ->
             when (verdict) {
-                AuthorAnswer.Verdict.SAME -> t.authorCandidates.gone(maxOf(a, b))
+                AuthorAnswer.Verdict.SAME -> {
+                    t.authorCandidates.gone(maxOf(a, b))
+                    t.authorListing.merged(maxOf(a, b), minOf(a, b))
+                }
                 AuthorAnswer.Verdict.DIFFERENT -> t.authorCandidates.said(a, b, false)
                 AuthorAnswer.Verdict.PARTIAL -> t.authorCandidates.said(a, b, true)
                 AuthorAnswer.Verdict.NONE -> t.authorCandidates.said(a, b, null)
@@ -155,10 +123,7 @@ class Authors(
         return if (text.isBlank()) emptyList()
         else {
             val found = plugins.tagCatalogues.flatMap { c -> c.find(text, languages).map { c.id to it } }
-            val ofEntry = HashMap<TagEntryRef, MutableList<Long>>()
-            type.authors.entries.all().forEach { (id, refs) ->
-                refs.forEach { ofEntry.getOrPut(it) { ArrayList() } += id }
-            }
+            val ofEntry = type.authors.entries.boundTo(found.map { (c, e) -> TagEntryRef(c, e.id) })
             val sites = sides.sites(type, found.flatMap { (c, e) -> ofEntry[TagEntryRef(c, e.id)].orEmpty() })
             found.map { (c, e) ->
                 val authors =

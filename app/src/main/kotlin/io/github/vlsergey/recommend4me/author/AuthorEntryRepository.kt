@@ -30,6 +30,19 @@ class AuthorEntryRepository(private val db: DSLContext) {
             .groupBy({ it.value1()!! }, { TagEntryRef(it.value2()!!, it.value3()!!) })
     }
 
+    /** The authors bound to each of the entries [refs]: the entries found of a catalogue, say. */
+    fun boundTo(refs: Collection<TagEntryRef>): Map<TagEntryRef, List<Long>> {
+        val e = NORMALIZED_AUTHOR_ENTRY
+        return refs
+            .distinct()
+            .flatMap { ref ->
+                db.select(e.AUTHOR).from(e).where(e.CATALOGUE.eq(ref.catalogue), e.ENTRY.eq(ref.entry)).fetch {
+                    ref to it.value1()!!
+                }
+            }
+            .groupBy({ it.first }, { it.second })
+    }
+
     /** The author [id] bound to the entry [ref] besides the ones they are — or, [bound] false, no more to it. */
     fun bind(id: Long, ref: TagEntryRef, bound: Boolean, now: Instant) {
         val e = NORMALIZED_AUTHOR_ENTRY

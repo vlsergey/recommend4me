@@ -23,18 +23,18 @@ class AuthorSides(
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>
 ) {
 
-    /** The author [id] as shown, with the works of theirs [rest] listed. */
+    /** The author [id] of [works] works as shown, with the works of theirs [rest] listed. */
     internal fun side(
         id: Long,
         sites: Map<Long, List<SiteAuthor>>,
         entries: Map<Long, List<TagEntryInfo>>,
-        library: AuthorLibrary,
+        works: Int,
         rest: List<AuthorWork>,
     ) =
         AuthorSide(
             id = id,
             sites = sites[id].orEmpty(),
-            works = library.worksOf[id].orEmpty().size,
+            works = works,
             rest = rest,
             propertyEntries = entries[id].orEmpty(),
         )

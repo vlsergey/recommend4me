@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.source
 
 import io.github.vlsergey.recommend4me.author.AuthorCandidateRepository
+import io.github.vlsergey.recommend4me.author.AuthorListingRepository
 import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.capture.CapturedPageRepository
 import io.github.vlsergey.recommend4me.capture.WantedPageRepository
@@ -346,6 +347,9 @@ class TypeStore(
 
     /** The pairs of authors the last search of the authors' duplicates found. */
     val authorCandidates = AuthorCandidateRepository(databases.model(type.id))
+
+    /** The authors of works the last search of the authors' duplicates read. */
+    val authorListing = AuthorListingRepository(databases.model(type.id))
     val sizes = WorkSizeRepository(databases.model(type.id))
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }

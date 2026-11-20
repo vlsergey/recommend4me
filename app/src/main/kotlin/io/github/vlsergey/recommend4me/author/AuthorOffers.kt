@@ -85,7 +85,7 @@ class AuthorOffers(
                 id,
                 sites,
                 entries,
-                library,
+                library.worksOf[id].orEmpty().size,
                 library.worksOf[id].orEmpty().filter { it !in inPairs }.map { shown.of(it, id) },
             )
         laps.lap("sides")
