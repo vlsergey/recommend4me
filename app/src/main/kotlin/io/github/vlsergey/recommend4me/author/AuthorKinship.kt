@@ -51,7 +51,7 @@ object AuthorKinship {
             Evidence(
                 type,
                 worksOf,
-                type.duplicates.touching(worksOf.values.flatten().distinct()),
+                type.duplicates.among(worksOf.values.flatten()),
                 said,
                 chances,
                 clusters,

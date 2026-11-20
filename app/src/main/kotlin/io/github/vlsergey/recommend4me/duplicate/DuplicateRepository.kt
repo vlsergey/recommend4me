@@ -140,13 +140,10 @@ class DuplicateRepository(private val db: DSLContext) {
      */
     fun replace(candidates: Collection<DuplicateCandidate>, search: DuplicateSearch, rarity: Map<String, Float>) {
         // Where the time goes, told in the log: the tables emptied, the rarities, the candidates ordered and written,
-        // the commit, the index
+        // the commit
         val laps = Laps()
         db.deleteFrom(DUPLICATE_SEARCH).execute()
         db.truncate(DUPLICATE_CANDIDATE).execute()
-        // The index of the other works built once after, not row by row: 1.24 million rows written in 9 s, not 28
-        // (H2 2.4, measured 2026-11-20). A search broken before it is built builds it, as it is made again
-        db.execute("DROP INDEX IF EXISTS $OTHER_INDEX")
         laps.lap("emptied")
         db.transaction { c ->
             this.rarity.replace(c.dsl(), rarity)
@@ -154,8 +151,6 @@ class DuplicateRepository(private val db: DSLContext) {
             fill(c.dsl(), candidates, search, laps)
         }
         laps.lap("committed")
-        db.execute("CREATE INDEX IF NOT EXISTS $OTHER_INDEX ON DUPLICATE_CANDIDATE(OTHER_SOURCE, OTHER_ITEM_ID)")
-        laps.lap("the index of the other works")
         log.info("the {} candidates of a search written: {}", candidates.size, laps)
     }
 
@@ -312,16 +307,14 @@ class DuplicateRepository(private val db: DSLContext) {
     fun all(): List<DuplicateCandidate> = read(DSL.noCondition())
 
     /**
-     * The candidates one work of which is among the [items]: of the works of an author, say. Found by the key of each
-     * work — the first of a pair by the table's own, the second by its index: a row of either among them all, or both
-     * at once, H2 walks the table for.
+     * The candidates both works of which are among the [items]: of the works of two authors, say. Found by the table's
+     * key, of each work the pairs it is the first of, the second looked up among them: no index of the second works
+     * written with every search.
      */
-    fun touching(items: Collection<ItemKey>): List<DuplicateCandidate> {
+    fun among(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        return items.distinct().flatMap { w ->
-            read(c.SOURCE.eq(w.source).and(c.ITEM_ID.eq(w.id))) +
-                read(c.OTHER_SOURCE.eq(w.source).and(c.OTHER_ITEM_ID.eq(w.id)))
-        }
+        val all = items.toHashSet()
+        return all.flatMap { w -> read(c.SOURCE.eq(w.source).and(c.ITEM_ID.eq(w.id))).filter { it.second in all } }
     }
 
     /** The candidates the [condition] picks, streamed. */
@@ -406,8 +399,6 @@ class DuplicateRepository(private val db: DSLContext) {
     companion object {
         private const val BATCH = 1000
 
-        /** The index of the candidates by the second work (the migrations' `duplicate_candidate_other`). */
-        private const val OTHER_INDEX = "DUPLICATE_CANDIDATE_OTHER"
         private const val FETCH = 5000
 
         /** The columns of a candidate written, in the order a row of them is bound. */
