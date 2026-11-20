@@ -15,6 +15,9 @@ class KeptRatios(private val weights: Map<String, Double>) {
     val fitted: Boolean
         get() = weights.isNotEmpty()
 
+    /** The characters a work's own count weighs as much as the model by ([WordsPerChar.sample]). */
+    private val sample = weights[WordsPerChar.SAMPLE] ?: 0.0
+
     /** The weight of the feature [name]; nought of one the model did not learn a step of. */
     private fun weightOf(name: String?): Double = name?.let { weights[it] } ?: 0.0
 
@@ -38,7 +41,7 @@ class KeptRatios(private val weights: Map<String, Double>) {
             var log = base
             for (v in compared.numbered[i]) log += byValue[v]
             val own = texts[compared.ids[i]]?.takeIf { it.first > 0 && it.second > 0 }
-            exp(if (own == null) log else WordsPerChar.blended(own.first, own.second, log))
+            exp(if (own == null) log else WordsPerChar.blended(own.first, own.second, log, sample))
         }
     }
 }

@@ -7,15 +7,15 @@ import java.util.stream.IntStream
 
 /**
  * The examples of the words to a character as rows of features, flat: every example's features one after another
- * ([features], the [offsets] of each example's first and of the end), its logarithm of the ratio ([y]) and its weight;
- * of [features] numbers the first of which, the mean, every example has besides.
+ * ([features], the [offsets] of each example's first and of the end), its logarithm of the ratio ([y]) and the
+ * characters it is of ([chars]); of [features] numbers the first of which, the mean, every example has besides.
  */
 internal class SizeRows(examples: List<SizeExample>, val features: Int) {
     val count = examples.size
     val offsets = IntArray(count + 1)
     val ids: IntArray
     val y = DoubleArray(count) { examples[it].logRatio }
-    val weight = DoubleArray(count) { examples[it].weight }
+    val chars = DoubleArray(count) { examples[it].chars }
 
     init {
         examples.forEachIndexed { i, e -> offsets[i + 1] = offsets[i] + e.features.size }
@@ -76,7 +76,7 @@ internal interface SizeGram : AutoCloseable {
 
     /** On the processor, the examples in parts side by side. */
     class OnProcessor(private val rows: SizeRows) : SizeGram {
-        private var weights = rows.weight
+        private var weights = DoubleArray(rows.count)
 
         override fun weigh(weights: DoubleArray) {
             this.weights = weights
@@ -96,10 +96,6 @@ internal interface SizeGram : AutoCloseable {
         private val products = memory.bytes(rows.count.toLong() * Double.SIZE_BYTES)
         private val x = memory.bytes(rows.features.toLong() * Double.SIZE_BYTES)
         private val out = memory.bytes(rows.features.toLong() * Double.SIZE_BYTES)
-
-        init {
-            weigh(rows.weight)
-        }
 
         override fun weigh(weights: DoubleArray) = this.weights.upload(bits(weights))
 

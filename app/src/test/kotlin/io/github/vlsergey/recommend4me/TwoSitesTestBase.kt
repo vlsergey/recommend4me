@@ -18,7 +18,7 @@ import io.github.vlsergey.recommend4me.job.JobsController
 import io.github.vlsergey.recommend4me.model.ModelController
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.settings.SettingsController
-import io.github.vlsergey.recommend4me.size.WordsPerCharFitting
+import io.github.vlsergey.recommend4me.size.WordsPerCharLearning
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
@@ -105,7 +105,7 @@ abstract class TwoSitesTestBase : BaseTest() {
     @Autowired lateinit var searchDocuments: io.github.vlsergey.recommend4me.search.SearchDocuments
     @Autowired lateinit var workSizes: WorkSizes
 
-    @Autowired lateinit var sizeFitting: WordsPerCharFitting
+    @Autowired lateinit var sizeLearning: WordsPerCharLearning
 
     protected fun alpha(body: String) =
         captures.capturePage(CaptureRequest("https://alpha.example/work/${body.substringBefore('|')}", body))

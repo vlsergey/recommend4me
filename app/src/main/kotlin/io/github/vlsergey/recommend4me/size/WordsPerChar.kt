@@ -30,19 +30,16 @@ class SizeFeatures {
 class SizeExample(val features: IntArray, val words: Double, val chars: Double) {
     val logRatio: Double
         get() = ln(words / chars)
-
-    /** What the example weighs: a short text tells its ratio by few words. */
-    val weight: Double
-        get() = chars / (chars + WordsPerChar.SAMPLE)
 }
 
 /**
  * HOW MANY WORDS A WORK HAS TO A CHARACTER, spaces among the characters — a ridge regression of the logarithm of the
- * ratio over a work's features: of all the works one mean and each feature's step from it, an author's words saying
- * much of a work and a tag's less, each by its own penalty. A work's own numbers weigh over the model's by how many
- * characters they count ([of]).
+ * ratio over a work's features: of all the works one mean and each feature's step from it, each kind of feature held by
+ * a penalty of its own; the penalties, and how much a work's own text weighs, worked out of the data ([SizeVariances])
+ * — no number of the code's own (owner, 2026-11-20). A work's own numbers weigh over the model's by how many characters
+ * they count: as much as [sample] of them weigh as the model.
  */
-class WordsPerChar(internal val weights: DoubleArray) {
+class WordsPerChar(internal val weights: DoubleArray, val sample: Double) {
     /** The logarithm of the ratio of a work of these features: a feature met after the fitting, none. */
     fun log(features: IntArray): Double {
         var sum = weights[0]
@@ -53,23 +50,26 @@ class WordsPerChar(internal val weights: DoubleArray) {
     /** The ratio of a work of these features, of its [own] numbers when it has them. */
     fun of(features: IntArray, own: SizeExample?): Double {
         val model = log(features)
-        return exp(if (own == null) model else blended(own.words, own.chars, model))
+        return exp(if (own == null) model else blended(own.words, own.chars, model, sample))
     }
 
-    /** The weight of every feature the model learnt a step of, by the feature's name of [names]: what is kept. */
+    /**
+     * The weight of every feature the model learnt a step of, by the feature's name of [names], and its [sample] by
+     * [SAMPLE]: what is kept.
+     */
     fun named(names: List<String>): Map<String, Double> =
-        weights.indices.filter { weights[it] != 0.0 }.associate { names[it] to weights[it] }
+        weights.indices.filter { weights[it] != 0.0 }.associate { names[it] to weights[it] } + (SAMPLE to sample)
 
     companion object {
         /**
          * The logarithm of the ratio of a text of its own [words] and [chars], and of the [model]'s: its own weighing
-         * over the model's by how many characters it counts.
+         * over the model's as its characters to the [sample]'s.
          */
-        fun blended(words: Double, chars: Double, model: Double): Double =
-            (chars * ln(words / chars) + SAMPLE * model) / (chars + SAMPLE)
+        fun blended(words: Double, chars: Double, model: Double, sample: Double): Double =
+            (chars * ln(words / chars) + sample * model) / (chars + sample)
 
-        /** The characters a work's own numbers weigh as much as the model by. */
-        const val SAMPLE = 5000.0
+        /** The name [sample] is kept by among the weights: no feature is named so. */
+        const val SAMPLE = "model.sample"
 
         /**
          * The beginnings of the features' names: a site's, and of the values of the index as the search of duplicates
@@ -83,34 +83,27 @@ class WordsPerChar(internal val weights: DoubleArray) {
         /** The feature every work has, the first of [SizeFeatures]. */
         const val MEAN = "mean"
 
-        /**
-         * The penalty of a feature's weight, found by the cross-validation over the works known on 2026-10-30: the mean
-         * nearly free, a language — few works of any but the first — lightly held, an author a little more, a tag — one
-         * of many that say little — most.
-         */
-        private fun penalty(feature: String) =
-            when {
-                feature == MEAN -> MEAN_PENALTY
-                feature.startsWith(LANGUAGE) -> LANGUAGE_PENALTY
-                feature.startsWith(AUTHOR) -> AUTHOR_PENALTY
-                feature.startsWith(SOURCE) -> SOURCE_PENALTY
-                else -> TAG_PENALTY
+        /** The kinds of features, each of a penalty of its own: the sites, the languages, the authors, the tags. */
+        val KINDS = listOf("sites", "languages", "authors", "tags")
+
+        /** The kind of every feature of [names], by [KINDS]; of the mean, none (-1): it is held by no penalty. */
+        fun kindsOf(names: List<String>): IntArray =
+            IntArray(names.size) {
+                val name = names[it]
+                when {
+                    name == MEAN -> -1
+                    name.startsWith(SOURCE) -> 0
+                    name.startsWith(LANGUAGE) -> 1
+                    name.startsWith(AUTHOR) -> 2
+                    else -> KINDS.size - 1
+                }
             }
 
-        /** The penalties of [penalty], by what the feature is. */
-        private const val MEAN_PENALTY = 1e-6
-        private const val LANGUAGE_PENALTY = 0.1
-        private const val AUTHOR_PENALTY = 1.0
-        private const val SOURCE_PENALTY = 3.0
-        private const val TAG_PENALTY = 10.0
-
-        /** The penalty of every feature of [names], by what it is. */
-        fun penalties(names: List<String>): DoubleArray = DoubleArray(names.size) { penalty(names[it]) }
-
-        /** The model of the [examples], their features named by [names], solved on the processor ([SizeRidge]). */
+        /** The model of the [examples], their features named by [names], fitted on the processor ([SizeVariances]). */
         fun fit(examples: List<SizeExample>, names: List<String>): WordsPerChar {
             val rows = SizeRows(examples, names.size)
-            return WordsPerChar(SizeRidge(rows, penalties(names), SizeGram.OnProcessor(rows)).fit())
+            val fitted = SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeGram.OnProcessor(rows))).fit()
+            return WordsPerChar(fitted.x, fitted.sample)
         }
 
         /**
@@ -119,8 +112,9 @@ class WordsPerChar(internal val weights: DoubleArray) {
          */
         fun outOfFold(examples: List<SizeExample>, names: List<String>): Double {
             val rows = SizeRows(examples, names.size)
-            val ridge = SizeRidge(rows, penalties(names), SizeGram.OnProcessor(rows))
-            return ridge.outOfFold(ridge.fit())
+            val ridge = SizeRidge(rows, SizeGram.OnProcessor(rows))
+            val fitted = SizeVariances(rows, kindsOf(names), ridge).fit()
+            return ridge.outOfFold(fitted.weights(), fitted.lambda, fitted.x)
         }
     }
 }

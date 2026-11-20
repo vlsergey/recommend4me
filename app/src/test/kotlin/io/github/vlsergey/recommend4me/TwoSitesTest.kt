@@ -79,7 +79,7 @@ class TwoSitesTest : TwoSitesTestBase() {
             rows.getOrPut("beta") { HashSet() } += "z2"
         }
         background.run()
-        sizeFitting.fit(type)
+        sizeLearning.fit(type)
         assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())
         val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
         assertEquals(SizeNumber(900.0, true), first.words)
