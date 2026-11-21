@@ -35,7 +35,7 @@ internal class ListIndexEvents(
         stores.types.forEach { type ->
             when {
                 !indexing.current(type.id) -> indexing.plan(type.id, ListIndexing.FORMAT)
-                indexing.pending(type) -> indexing.plan(type.id, "changes")
+                indexing.pending(type) -> indexing.plan(type.id, "start")
             }
         }
 
