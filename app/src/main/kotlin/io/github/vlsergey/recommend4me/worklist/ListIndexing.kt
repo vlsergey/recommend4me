@@ -119,8 +119,8 @@ class ListIndexing(
         val clusters = works.of(type)
         val named = ListChanges.named(type, clusters, since, whole)
         val gathered = System.currentTimeMillis()
-        var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
         val from = HashMap<WorkScope, TaskCursor>()
+        var written = whole.sumOf { writeWhole(type, it, index, clusters, anew, from) }
         named.forEach { (sourceId, ids) ->
             type.source(sourceId)?.let { s ->
                 ids.chunked(PORTION).forEach { written += writeNamed(s, it.toSet(), index, clusters, from) }
@@ -131,8 +131,8 @@ class ListIndexing(
         index.stages.changed(WRITTEN, started.toEpochMilli())
         index.commit()
         val committed = System.currentTimeMillis()
-        // Of a source written whole, every work from the first
-        val told = if (whole.isEmpty()) from else WorkScope.entries.associateWith { TaskCursor.FIRST }
+        // Of an index made anew, every work from the first
+        val told = if (!anew) from else WorkScope.entries.associateWith { TaskCursor.FIRST }
         if (told.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, told, anew))
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} gone — the changes " +
@@ -174,18 +174,17 @@ class ListIndexing(
         val rows = ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted)
         val found = rows.mapTo(HashSet()) { it.key.id }
         index.replace(rows, ids.filter { it !in found }.map { ItemKey(s.id, it) })
-        rows.forEach { r ->
-            val scope = if (r.values.marked) WorkScope.MARKED else WorkScope.OTHER
-            val at = TaskCursor(r.values.prediction ?: Double.NEGATIVE_INFINITY, r.key.toString())
-            from[scope] = TaskCursor.earlier(from[scope], at)!!
-        }
+        rows.forEach { r -> from(r, from) }
         return rows.size
     }
 
     /**
-     * Every document of the source [sourceId] made anew, those of the items gone removed: how many were written. The
-     * values the models gave its items and their predictions as the index kept them — none of an index made [anew] —
-     * every stage of the tasks over the works to be done again ([WorkFields] first).
+     * Every item of the source [sourceId] read whole, the documents of those its document is not alike made anew
+     * ([sameAs]; owner, 2026-11-21: "read really everything, and rewrite what changed") — every one of an index made
+     * [anew] —, those of the items gone removed: how many were written. The values the models gave its items and their
+     * predictions as the index kept them; of every document made anew every stage of the tasks over the works to be
+     * done again ([WorkFields] first) — of each scope from the first of them on, kept in [from] — a document alike
+     * keeping its own.
      */
     private fun writeWhole(
         type: TypeStore,
@@ -193,14 +192,26 @@ class ListIndexing(
         index: ListIndex,
         clusters: WorkClusters,
         anew: Boolean,
+        from: MutableMap<WorkScope, TaskCursor>,
     ): Int {
         val s = type.source(sourceId) ?: return 0
         val kept = if (anew) emptyMap() else ListModelValues.ofEvery(index, sourceId)
         val predicted = if (anew) emptyMap() else index.written { ListPredictions.ofEvery(it, sourceId) }
         val rows = ListRows.read(s, null, clusters, kept, predicted)
-        index.replace(rows)
+        // Compared a portion at a time with the documents as written before any is: one reading of the index
+        val other =
+            if (anew) rows
+            else
+                index.written { reader ->
+                    rows.chunked(PORTION).flatMap { portion ->
+                        val written = ListKeptRows.of(reader, sourceId, portion.map { it.key.id })
+                        portion.filter { r -> written[r.key.id]?.let(r::sameAs) != true }
+                    }
+                }
+        index.replace(other)
         index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
-        return rows.size
+        other.forEach { r -> from(r, from) }
+        return other.size
     }
 
     companion object {
@@ -215,6 +226,13 @@ class ListIndexing(
 
         /** The documents a writing reads and replaces at a time: the memory of a writing of many, not a meaning. */
         private const val PORTION = 10_000
+
+        /** The place of the row [r] among the works of its scope, the earliest of each scope kept in [from]. */
+        private fun from(r: ListRow, from: MutableMap<WorkScope, TaskCursor>) {
+            val scope = if (r.values.marked) WorkScope.MARKED else WorkScope.OTHER
+            val at = TaskCursor(r.values.prediction ?: Double.NEGATIVE_INFINITY, r.key.toString())
+            from[scope] = TaskCursor.earlier(from[scope], at)!!
+        }
 
         /** Since when the documents of the [index] hold every change; of an index never so written, of every date. */
         private fun writtenOf(index: ListIndex): Instant =
