@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.duplicate.PairAnswers
 import io.github.vlsergey.recommend4me.laps.Laps
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.tag.BoundEntry
@@ -65,6 +66,8 @@ class AuthorSearch(private val stores: Stores, private val tasks: Tasks, private
      */
     private fun search(type: TypeStore) {
         val laps = Laps()
+        val folded = folded(type)
+        laps.lap("accounts by their names folded", folded)
         val library = AuthorLibrary.of(type)
         laps.lap("works")
         val evidence = AuthorEvidence(library)
@@ -110,6 +113,42 @@ class AuthorSearch(private val stores: Stores, private val tasks: Tasks, private
             pairs.count { it.partly != null },
             laps,
         )
+    }
+
+    /**
+     * Every account of a site given by the name alone — "name:Lorem", by a dump or by a place another site's page lists
+     * — of no work any more, whose normalized author has an account of the site's own key of that name, folded into it
+     * ([AuthorRepository.named]): one account of the site, not two (owner, 2026-11-21: «name:Shy Cat» of no work beside
+     * Shy Cat's own); how many. A name some work still has stays: its works are keyed first
+     * ([io.github.vlsergey.recommend4me.item.NamedValues]).
+     */
+    private fun folded(type: TypeStore): Int {
+        var folded = 0
+        type.sources.forEach { s ->
+            val facet =
+                s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR && it.byName != null } ?: return@forEach
+            val prefix = facet.byName!!
+            val bound = s.authors.bindingsOf(s.id)
+            val named = bound.filterKeys { it.startsWith(prefix) }
+            if (named.isEmpty()) return@forEach
+            val ofNamed = named.values.toSet()
+            val own = bound.entries.filter { !it.key.startsWith(prefix) && it.value in ofNamed }
+            val names = s.items.facetNames(facet.key, own.map { it.key })
+            val ownOf = own.groupBy({ it.value }, { it.key })
+            // Of a name an own key of the same author has, the one key; then of those, the names no work has
+            val ofName = named.mapNotNull { (key, id) ->
+                val name = key.removePrefix(prefix)
+                ownOf[id].orEmpty().filter { names[it]?.trim() == name }.singleOrNull()?.let { key to it }
+            }
+            val given = s.items.given(facet.key, ofName.map { it.first }).toSet()
+            ofName.forEach { (key, ownKey) ->
+                if (key !in given) {
+                    s.authors.named(s.id, key, ownKey)
+                    folded++
+                }
+            }
+        }
+        return folded
     }
 
     /**

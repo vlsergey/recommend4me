@@ -70,4 +70,38 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         binding.bind(stores.source("beta")!!, listOf("twice", "twice"))
         assertTrue(stores.type("books")!!.authors.bindingsOf("beta").containsKey("twice"))
     }
+
+    @Test
+    fun `a place given by the name is the account of the site's own key of that name`() {
+        alpha("ap5|Fortis|hay|Fortis et liber||")
+        beta("ap6|Liber|hay|Liber et fortis")
+        stores.source("alpha")!!.items.setFacet("ap5", Books.AUTHOR.key, listOf(FacetValue("ap-dan", "Dan")))
+        stores.source("beta")!!.items.setFacet("ap6", Books.AUTHOR.key, listOf(FacetValue("ap-cat", "Cat Ap")))
+        val dictionary = stores.type("books")!!.authors
+        val dan = madeInBackground { dictionary.bindingsOf("alpha")["ap-dan"] }
+        madeInBackground { dictionary.bindingsOf("beta")["ap-cat"] }
+        // Dan's page lists beta's page of the account by its name: the account of its own key, no other made
+        contexts.of("alpha").authorPlaces("ap-dan", listOf("https://beta.example/author/name:Cat Ap"))
+        assertEquals(dan, dictionary.bindingsOf("beta", listOf("ap-cat"))["ap-cat"])
+        assertEquals(emptyMap(), dictionary.bindingsOf("beta", listOf("name:Cat Ap")))
+    }
+
+    @Test
+    fun `an account given by the name before its own key was known is folded into it by the search of the authors`() {
+        alpha("ap7|Clarus|hay|Clarus et altus||")
+        stores.source("alpha")!!.items.setFacet("ap7", Books.AUTHOR.key, listOf(FacetValue("ap-eve", "Eve")))
+        val dictionary = stores.type("books")!!.authors
+        madeInBackground { dictionary.bindingsOf("alpha")["ap-eve"] }
+        // Eve's page lists beta's page of an account by its name, of no key known yet: an account by the name
+        contexts.of("alpha").authorPlaces("ap-eve", listOf("https://beta.example/author/name:Fay Ap"))
+        assertEquals(setOf("name:Fay Ap"), dictionary.bindingsOf("beta", listOf("name:Fay Ap")).keys)
+        // The account's own key comes with a work of it; the search of the authors folds the one by the name into it
+        beta("ap8|Altus|hay|Altus et clarus")
+        stores.source("beta")!!.items.setFacet("ap8", Books.AUTHOR.key, listOf(FacetValue("ap-fay", "Fay Ap")))
+        background.run()
+        authors.searchAuthorDuplicates("books")
+        background.run()
+        assertEquals(emptyMap(), dictionary.bindingsOf("beta", listOf("name:Fay Ap")))
+        assertEquals(setOf("ap-fay"), dictionary.bindingsOf("beta", listOf("ap-fay")).keys)
+    }
 }
