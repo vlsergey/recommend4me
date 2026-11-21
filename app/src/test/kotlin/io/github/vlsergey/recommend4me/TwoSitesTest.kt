@@ -31,6 +31,7 @@ import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndexing
+import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -74,8 +75,8 @@ class TwoSitesTest : TwoSitesTestBase() {
         // Words of five letters and a space: one word to six characters
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
         // Written past the application's events: their documents of the index of the list, which the model reads, made
-        listIndexing.itemsChanged(a, listOf("z1"), "items")
-        listIndexing.itemsChanged(b, listOf("z2"), "items")
+        listIndexing.itemsChanged(a, listOf("z1"), WorkDatum.DATA, "items")
+        listIndexing.itemsChanged(b, listOf("z2"), WorkDatum.DATA, "items")
         background.run()
         sizeLearning.fit(type)
         assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())

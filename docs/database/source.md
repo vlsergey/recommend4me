@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index |
+| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index; when every outer kind of its data last changed — what the site says of it (`data_at`), its chapters' texts (`chapters_at`), its reviews (`reviews_at`), its pictures analysed (`pictures_at`) —: what the stages of the tasks over the works take it by, each by the kinds it reads |
 | `every_item_change` | when every item of the source last changed in what the index of the list holds of it — a dictionary its values are drafted by: one row |
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
@@ -83,6 +83,10 @@ erDiagram
         INTEGER text_breaks "null"
         INTEGER text_other "null"
         TIMESTAMPTZ changed_at "null"
+        TIMESTAMPTZ data_at "null"
+        TIMESTAMPTZ chapters_at "null"
+        TIMESTAMPTZ reviews_at "null"
+        TIMESTAMPTZ pictures_at "null"
     }
     item_facet {
         VARCHAR item_id PK, FK

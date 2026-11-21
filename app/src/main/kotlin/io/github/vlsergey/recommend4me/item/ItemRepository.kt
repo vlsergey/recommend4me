@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_VERSION
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.StoredItem
+import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.Record
@@ -54,7 +55,7 @@ private constructor(
     ) : this(
         db,
         { ids ->
-            ItemChanges(db).changed(ids, Instant.now())
+            ItemChanges(db).changed(ids, WorkDatum.DATA, Instant.now())
             changed(ids)
         },
         FacetDictionaryRepository(db),
@@ -83,6 +84,7 @@ private constructor(
                         .set(ITEM.UPDATED_AT, updatedAt)
                         .set(ITEM.FIRST_SEEN_AT, now)
                         .set(ITEM.CHANGED_AT, now)
+                        .set(ITEM.DATA_AT, now)
                         .execute()
                 } else if (
                     headChanged(known.value1(), known.value2(), known.value3(), known.value4(), item, updatedAt)
@@ -93,6 +95,7 @@ private constructor(
                         .set(ITEM.VERSION, item.version)
                         .set(ITEM.UPDATED_AT, updatedAt)
                         .set(ITEM.CHANGED_AT, now)
+                        .set(ITEM.DATA_AT, now)
                         .where(ITEM.ITEM_ID.eq(item.id))
                         .execute()
                 }

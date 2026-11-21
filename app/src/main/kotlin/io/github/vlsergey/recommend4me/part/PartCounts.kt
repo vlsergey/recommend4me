@@ -48,11 +48,13 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
                 ?.intoList()
         // Written, and the item's date with them, only as they change: what the index of the list holds of it
         if (kept == null || kept == counts) return
+        val now = Instant.now()
         var update =
             db.update(ITEM)
                 .set(ITEM.TEXT_WORDS, counts[0])
                 .set(ITEM.TEXT_CHARS, counts[1])
-                .set(ITEM.CHANGED_AT, Instant.now())
+                .set(ITEM.CHANGED_AT, now)
+                .set(ITEM.CHAPTERS_AT, now)
         COLUMNS.forEachIndexed { k, column -> update = update.set(column, counts[k + 2]) }
         update.where(ITEM.ITEM_ID.eq(itemId)).execute()
     }

@@ -2,17 +2,20 @@ package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
-import io.github.vlsergey.recommend4me.model.WorkPredictionFillEvent
+import io.github.vlsergey.recommend4me.part.WorkChapterWindowFillEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
+import io.github.vlsergey.recommend4me.textvector.WorkTextVectorFillEvent
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.TakenWork
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -22,14 +25,14 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(WorkTexts::class.java)
 
 /**
- * THE DOCUMENTS OF THE SEARCH OF THE WORKS — THE THIRD OF THE TASKS OVER THE WORKS (owner, 2026-11-19: "and so on with
- * the third task"; docs/computations.md, 9 and 10): of the works whose expectations were made
- * ([WorkPredictionFillEvent]) from the first of them; a task of the marked and rated works, and one of the others after
- * every other task, a [PORTION] of them a turn ([turn]) — the highest expected first, from where the last turn left —:
- * the documents of those whose item changed since written ([WorkStage.TEXTS]) brought into the search plugin's index
- * ([SourceCatchUp]: of the site's and the user's values alone, a document whose fingerprint did not change not written
- * again), every one marked done. An index of the plugin not of its format, or never brought to every work
- * ([SearchProvider.current]), is made anew empty as the task begins, and every work's document written again since.
+ * THE DOCUMENTS OF THE SEARCH OF THE WORKS — THE STAGE [WorkStage.TEXTS] ([StageSweeps]; docs/computations.md, 9 and
+ * 10): of the works whose data, answers, chapters, vectors or chapters' windows changed past its mark — the vectors and
+ * the windows done of them first —; a task of the marked and rated works, and one of the others after every other task,
+ * a [PORTION] of them a turn ([turn]) — the highest expected first, from where the last turn left —: their documents
+ * brought into the search plugin's index ([SourceCatchUp]: of the site's and the user's values alone, a document whose
+ * fingerprint did not change not written again), every one marked done. An index of the plugin not of its format, or
+ * never brought to every work ([SearchProvider.current]), is made anew empty as the task begins, and every work's
+ * document written again since.
  */
 @Component
 class WorkTexts(
@@ -38,6 +41,7 @@ class WorkTexts(
     private val documents: SearchDocuments,
     private val tasks: Tasks,
     private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
 ) {
     private val sources = SourceCatchUp(documents)
 
@@ -63,10 +67,22 @@ class WorkTexts(
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "searchFormat", TaskCursor.FIRST) } }
     }
 
-    /** The expectations of works made: their documents of the search written from the first of them on. */
+    /** The documents of works written anew, of what the search reads changed: their documents of the search written. */
     @EventListener
-    fun predicted(event: WorkPredictionFillEvent) =
-        event.from.forEach { (scope, from) -> plan(event.type, scope, "predicted", from) }
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
+
+    /** The vectors of the texts the search waits for done: the documents of the works they got past written. */
+    @EventListener
+    fun vectorsFilled(event: WorkTextVectorFillEvent) = plan(event.type, event.scope, "texts", TaskCursor.FIRST)
+
+    /** The chapters' windows the search waits for done: the documents of the works they got past written. */
+    @EventListener
+    fun windowsFilled(event: WorkChapterWindowFillEvent) = plan(event.type, event.scope, "parts", TaskCursor.FIRST)
 
     /** The documents of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
@@ -99,14 +115,13 @@ class WorkTexts(
         if (provider == null || type == null) return null
         val index = lists.of(typeId)
         if (!provider.current(typeId)) {
-            // Made anew empty: every work's document written again since
+            // Made anew empty: every work's document written again
             provider.rebuild(typeId, emptySequence())
-            index.stages.changed(SINCE, System.currentTimeMillis())
-            index.commit()
+            sweeps.reset(STAGE, typeId, type.sources.map { it.id })
         }
-        val stale = NextWorks.before(WorkStage.TEXTS, index.stages.since(SINCE) ?: 1L)
-        val items = NextWorks.next(index, scope, stale, cursor, portion)
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
         if (items.isNotEmpty()) written(provider, type, index, scope, items)
+        if (items.size < portion) sweeps.complete(STAGE, typeId, scope)
         return items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
@@ -124,7 +139,7 @@ class WorkTexts(
                 val s = type.source(source) ?: return@sumOf 0
                 sources.written(provider, type.id, s, keys)
             }
-        WorkStage.TEXTS.done(index, items.map { it.key }, started)
+        sweeps.done(STAGE, type.id, scope, items.map { it.key })
         index.commit()
         log.info(
             "{}: the documents of the search of {} {} works brought in in {} ms, {} of them written again",
@@ -143,9 +158,7 @@ class WorkTexts(
         /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
         const val PORTION = 1000
 
-        /**
-         * What the index of the list tells of since when the index of the search was made anew ([StageTimes.since]).
-         */
-        const val SINCE = "texts"
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.TEXTS
     }
 }

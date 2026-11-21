@@ -11,12 +11,21 @@ import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
+import io.github.vlsergey.recommend4me.worklist.WorkStage
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
 /** The vectors of the windows of the chapters of these items of a source were written. */
 data class SiteItemChapterVectorChangeEvent(val source: String, val ids: List<String>)
+
+/**
+ * Every change of the chapters of the works of the [scope] of the [type] encoded ([WorkStage.WINDOWS]): the stages
+ * reading their windows, or waiting for them, look again.
+ */
+data class WorkChapterWindowFillEvent(val type: String, val scope: WorkScope)
 
 /**
  * THE VECTORS OF THE CHAPTERS OF THE WORKS — A TASK OVER THE WORKS (owner, 2026-11-19: "why is this not split into the
@@ -34,17 +43,20 @@ class PartVectors(
     private val events: ApplicationEventPublisher,
     private val tasks: Tasks,
     private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
 ) {
 
     @Volatile private var busy = false
 
     fun running(): Boolean = busy
 
-    /** The parts of works of a source saved: of its type, the marked and rated works and the others from the first. */
+    /** The documents of works written anew, of their chapters changed: their parts encoded. */
     @EventListener
-    fun partsSaved(event: SiteItemChapterChangeEvent) {
-        val type = stores.typeOf(event.source).id
-        WorkScope.entries.forEach { plan(type, it, "parts", TaskCursor.FIRST) }
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "parts", TaskCursor.FIRST)
+            }
     }
 
     // What the last run of the application left undone of it: planned again by the queue at its start, from where it
@@ -88,19 +100,29 @@ class PartVectors(
                         ItemKey(s.id, it)
                     }
                 }
+        val sources = type?.sources.orEmpty().map { it.id }
+        // Of none waiting, a sweep of none: its mark moves up to its horizon all the same
         val items =
-            if (waiting.isEmpty()) emptyList()
-            else NextWorks.next(lists.of(typeId), scope, NextWorks.among(waiting), cursor, portion)
+            if (type == null || encoder == null) emptyList()
+            else sweeps.next(STAGE, typeId, sources, scope, cursor, portion, NextWorks.among(waiting))
         var gaveWay = false
         if (items.isNotEmpty()) {
             val works = items.groupBy({ it.key.source }, { it.key.id }).mapValues { it.value.toSet() }
+            val encoded = HashSet<ItemKey>()
             try {
                 val reached = Reached()
-                while (!tasks.stopping && !gaveWay && encodeSome(reached, works) > 0) gaveWay = tasks.outranked
+                while (!tasks.stopping && !gaveWay && encodeSome(reached, works, encoded) > 0) gaveWay = tasks.outranked
             } finally {
                 busy = false
             }
+            // The works whose windows were encoded dated so: what the sets and the search read of them changed
+            if (!gaveWay) sweeps.done(STAGE, typeId, scope, items.map { it.key })
+            sweeps.made(STAGE, typeId, scope, encoded)
+            lists.of(typeId).commit()
         }
+        // None waiting any more: every change of the chapters done up to the sweep's horizon
+        if (!gaveWay && items.size < portion && sweeps.complete(STAGE, typeId, scope))
+            events.publishEvent(WorkChapterWindowFillEvent(typeId, scope))
         return if (gaveWay) cursor else items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
@@ -115,9 +137,9 @@ class PartVectors(
 
     /**
      * Encodes a batch of parts of every source's works of the [portion], their windows and then their paragraphs, from
-     * past those [reached]; returns how many.
+     * past those [reached], the works whose windows were encoded kept in [encoded]; returns how many.
      */
-    private fun encodeSome(reached: Reached, portion: Map<String, Set<String>>): Int {
+    private fun encodeSome(reached: Reached, portion: Map<String, Set<String>>, encoded: MutableSet<ItemKey>): Int {
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
         stores.sources.forEach { s ->
@@ -131,8 +153,9 @@ class PartVectors(
             todo.forEachIndexed { i, part ->
                 s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
             }
-            // The works searched by the meaning of their chapters' windows: indexed again with them
+            // What the models learnt of these works read: told, the models fitted of them fitted again
             events.publishEvent(SiteItemChapterVectorChangeEvent(s.id, todo.map { it.itemId }.distinct()))
+            todo.forEach { encoded += ItemKey(s.id, it.itemId) }
             done += todo.size
         }
         stores.sources.forEach { s ->
@@ -182,5 +205,8 @@ class PartVectors(
          * queue for hours — minutes, not days (user, 2026-11-17).
          */
         private const val PORTION_WORKS = 50
+
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.WINDOWS
     }
 }

@@ -175,9 +175,13 @@ lost (owner, 2026-11-19: "the queue is kept in the database: nothing is to be ru
 because it is a start"). **What the databases date is not named at all:** a row changed keeps the date
 of its change, set by the write that changes it (`item.changed_at`, `normalized_work.changed_at`), and a
 work over it reads what changed since its own last run, whose date it keeps with what it wrote (the index
-of the list, `ListIndexing`; owner, 2026-11-21: "why name them and keep the names at all?"). The
-predictions of the works are kept in the index of the list alone (`ListPredictions`), written in place
-where they change as it keeps them, three digits. A start plans a work only of what the data say — an index of another
+of the list, `ListIndexing`; owner, 2026-11-21: "why name them and keep the names at all?"). **A stage
+of the tasks over the works keeps the date up to which it did every change it reads** (`StageSweeps`;
+owner, 2026-11-21: "every consumer has a variable of time — up to which date every element is processed"):
+it takes the works by the dates of the kinds of data it declares it reads (`WorkStage.reads`, `WorkDatum`),
+up to the marks of the stages it waits for (`after`) — no stage resets another's work, a stage to be done of
+every work again is marked at nought. The predictions of the works are kept in the index of the list alone
+(`ListPredictions`), written in place where they change as it keeps them, three digits. A start plans a work only of what the data say — an index of another
 format or not brought to every work (`SearchProvider.current`), a type never searched — never
 every work again in case something changed while the application was down: what changes then is a
 tool or a migration, which asks for what follows itself.

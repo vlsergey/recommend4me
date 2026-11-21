@@ -1,15 +1,20 @@
 package io.github.vlsergey.recommend4me.cast
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
-import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.Task
-import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
-import java.time.Instant
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
+import io.github.vlsergey.recommend4me.worklist.WorkStage
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -21,11 +26,19 @@ private val log = LoggerFactory.getLogger(CastNames::class.java)
 data class SiteItemCastEncodeEvent(val source: String, val ids: List<String>)
 
 /**
- * THE TEXTS OF THE SAID CASTS ENCODED, IN THE BACKGROUND: of every work whose line changed, the texts every way of
- * reading the casts asks for ([CastReader.encoded]) — the names, the pairings written so — encoded and kept as the
- * short texts are ([PhraseVectors]), a text once, after a quiet; the works waiting kept in the queue. In the queue of
- * the computations ([Tasks]), never on the thread of a request: the models read the vectors kept alone ([CastReading]).
- * The queue of the works waiting is the only thing kept here.
+ * Every change of the casts of the works of the [scope] of the [type] encoded ([WorkStage.CAST]): the stages reading
+ * their names, or waiting for them, look again.
+ */
+data class WorkCastNameFillEvent(val type: String, val scope: WorkScope)
+
+/**
+ * THE TEXTS OF THE SAID CASTS ENCODED — THE STAGE [WorkStage.CAST] OF THE TASKS OVER THE WORKS ([StageSweeps]): of the
+ * works whose data changed past its mark, the texts every way of reading the casts asks for ([CastReader.encoded]) —
+ * the names, the pairings written so — encoded and kept as the short texts are ([PhraseVectors]), a text once; a task
+ * of the marked and rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) —
+ * the highest expected first, from where the last turn left —; every work marked done, those of texts encoded anew
+ * dated so: the fields read them ([CastReading]). In the queue of the computations ([Tasks]), never on the thread of a
+ * request.
  */
 @Component
 class CastNames(
@@ -33,48 +46,70 @@ class CastNames(
     private val plugins: Plugins,
     private val phrases: PhraseVectors,
     private val tasks: Tasks,
+    private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
     private val events: ApplicationEventPublisher,
 ) {
-    // What the last run of the application left undone of it: planned again by the queue at its start
+    // What the last run of the application left undone of it: planned again by the queue at its start, from where it
+    // was to go on
     init {
-        tasks.resumption.resumes(WHAT) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+        tasks.resumption.resumes(KIND) { left, reason ->
+            val type = left.work.type ?: return@resumes
+            val scopes = left.work.works?.let(::listOf) ?: WorkScope.entries
+            scopes.forEach { plan(type, it, reason, left.cursor ?: TaskCursor.FIRST) }
+        }
     }
 
+    /** The documents of works written anew, of their data changed: the texts of their casts encoded. */
     @EventListener
-    fun itemsChanged(event: SiteItemWriteEvent) {
-        val store = stores.source(event.source)?.takeIf(::encodes) ?: return
-        tasks.keys.want(WORK, event.ids.map { "${store.id}$SEP$it" })
-        schedule(QUIET_SECONDS, "items")
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
+
+    /**
+     * The texts of the casts of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor].
+     */
+    fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
+        tasks.plan(
+            Task(KIND, type = typeId, works = scope),
+            null,
+            reason,
+            priority = NextWorks.priority(scope),
+            cursor = cursor,
+        ) {
+            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let { tasks.again("sweep", cursor = it) }
+        }
+
+    /**
+     * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose casts' texts are to be encoded, from the
+     * [cursor] on, encoded; where the next turn goes on from — none when none is left.
+     */
+    internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
+        val type = stores.type(typeId) ?: return null
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
+        if (items.isNotEmpty()) {
+            val made =
+                items.groupBy({ it.key.source }, { it.key.id }).flatMap { (source, ids) ->
+                    val s = stores.source(source)?.takeIf(::encodes) ?: return@flatMap emptyList()
+                    encode(s, ids)
+                        .also { if (it.isNotEmpty()) events.publishEvent(SiteItemCastEncodeEvent(source, it)) }
+                        .map { ItemKey(source, it) }
+                }
+            sweeps.done(STAGE, typeId, scope, items.map { it.key })
+            sweeps.made(STAGE, typeId, scope, made)
+            lists.of(typeId).commit()
+        }
+        if (items.size < portion && sweeps.complete(STAGE, typeId, scope))
+            events.publishEvent(WorkCastNameFillEvent(typeId, scope))
+        return items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
     /** Whether a way of reading asks for texts of the source's casts at all: it has a line, and a way is installed. */
     private fun encodes(store: SourceStore): Boolean =
         WorkCasts.facetOf(store) != null && plugins.castReaders.isNotEmpty()
-
-    /**
-     * The works the queue keeps waiting ([TaskKeys.wanted]) — of every source, one work — encoded after [delaySeconds]
-     * of quiet; whatever reads them again told out of the queue, it plans its own work.
-     */
-    private fun schedule(delaySeconds: Long, reason: String) =
-        tasks.plan(
-            WORK,
-            Instant.now().plusSeconds(delaySeconds),
-            reason,
-            after = { encoded: Map<String, List<String>> ->
-                encoded.forEach { (source, ids) ->
-                    if (ids.isNotEmpty()) events.publishEvent(SiteItemCastEncodeEvent(source, ids))
-                }
-            },
-        ) {
-            val taken = tasks.keys.wanted(WORK)
-            val encoded =
-                taken
-                    .groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
-                    .mapNotNull { (source, ids) -> stores.source(source)?.let { source to encode(it, ids) } }
-                    .toMap()
-            tasks.keys.done(WORK, taken)
-            encoded
-        }
 
     /**
      * The texts of the casts of the works [ids] of the [store] not encoded yet, encoded now; the works that had any.
@@ -103,17 +138,12 @@ class CastNames(
     }
 
     private companion object {
-        val WHAT = TaskKind.ENCODE_SITE_ITEM_CASTS
+        val KIND = TaskKind.ENCODE_SITE_ITEM_CASTS
 
-        /** One work of every source: their works told apart by their keys ("<source>\t<id>"). */
-        val WORK = Task(WHAT)
+        /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
+        const val PORTION = 1000
 
-        const val SEP = '\t'
-
-        /** After the start's own steps: the texts of the works and their vectors first. */
-        const val START_DELAY_SECONDS = 90L
-
-        /** A few seconds after the last capture of a series of pages. */
-        const val QUIET_SECONDS = 10L
+        /** The stage of the tasks over the works it is. */
+        val STAGE = WorkStage.CAST
     }
 }

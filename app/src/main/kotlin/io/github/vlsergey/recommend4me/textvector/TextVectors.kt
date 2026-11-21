@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import org.slf4j.LoggerFactory
@@ -30,22 +31,21 @@ private val log = LoggerFactory.getLogger(TextVectors::class.java)
 data class SiteItemTextVectorChangeEvent(val source: String, val ids: List<String>)
 
 /**
- * The vectors of the site's text fields made of works of the [type], from where of each of the works ([from]): their
- * fields computed next ([WorkStage.FIELDS]).
+ * Every change the vectors of the site's text fields read of the works of the [scope] of the [type] done
+ * ([WorkStage.VECTORS]): the stages reading them, or waiting for them, look again.
  */
-data class WorkTextVectorFillEvent(val type: String, val from: Map<WorkScope, TaskCursor>)
+data class WorkTextVectorFillEvent(val type: String, val scope: WorkScope)
 
 /**
  * THE VECTORS OF THE SITE'S TEXT FIELDS OF THE WORKS — THE FIRST OF THE TASKS OVER THE WORKS (owner, 2026-11-19: "we
  * split the vectors into the marked works and the other works"; docs/computations.md, 9 and 10): of every text the
  * models read ([TextDef.block][io.github.vlsergey.recommend4me.source.TextDef.block]), those searched by meaning, and
  * the title ([TITLE]), of the text as the user corrected it, kept with its hash and the encoder that made them — a text
- * is encoded again when it or the encoder changed. Of the works whose documents of the list were written anew
- * ([WorkDocumentWriteEvent]), of every work by an encoder of the index never seen ([start]); a task of the marked and
- * rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) — the highest expected
- * first, from where the last turn left —: the texts new or changed encoded, those gone dropped, every one marked done
- * ([WorkStage.VECTORS]), the fields of those whose vectors changed to be computed again; told
- * ([WorkTextVectorFillEvent]).
+ * is encoded again when it or the encoder changed. THE STAGE [WorkStage.VECTORS] ([StageSweeps]): of the works whose
+ * data or answers changed past its mark, of every work by an encoder of the index never seen ([start]); a task of the
+ * marked and rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) — the
+ * highest expected first, from where the last turn left —: the texts new or changed encoded, those gone dropped, every
+ * one marked done, the works whose vectors changed dated so: the stages reading them see them.
  *
  * A WORK THE USER OPENS — its card or its page — has its texts encoded on the spot ([encodeOwn]).
  */
@@ -57,6 +57,7 @@ class TextVectors(
     private val tasks: Tasks,
     private val windows: TextWindows,
     private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
 ) {
     /** Whether texts are being encoded now. */
     val running: Boolean
@@ -85,10 +86,14 @@ class TextVectors(
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
     }
 
-    /** The documents of works written anew: their texts encoded from the first of them on. */
+    /** The documents of works written anew, of what the texts are made of changed: the works of it encoded. */
     @EventListener
-    fun documentsWritten(event: WorkDocumentWriteEvent) =
-        event.from.forEach { (scope, from) -> plan(event.type, scope, if (event.anew) "listFormat" else "items", from) }
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
 
     /** The texts of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
@@ -120,33 +125,34 @@ class TextVectors(
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
         val type = stores.type(typeId)
         val encoder = plugins.textEncoder()
-        val index = lists.of(typeId)
-        val items =
-            if (type == null || encoder == null) null
-            else
-                NextWorks.next(
-                    index,
-                    scope,
-                    NextWorks.before(WorkStage.VECTORS, vectorsSince(index, encoder)),
-                    cursor,
-                    portion,
-                )
-        when {
-            items == null -> events.publishEvent(WorkTextVectorFillEvent(typeId, mapOf(scope to cursor)))
-            items.isNotEmpty() -> {
-                if (!done(type!!, index, encoder!!, items.map { it.key })) return cursor
-                events.publishEvent(WorkTextVectorFillEvent(typeId, mapOf(scope to items.first().cursor())))
-            }
-        }
-        return items?.lastOrNull()?.cursor()?.takeIf { items.size == portion }
+        if (type == null || encoder == null) return null
+        madeBy(type, encoder)
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
+        val gaveWay = items.isNotEmpty() && !done(type, scope, encoder, items.map { it.key })
+        if (!gaveWay && items.size < portion && sweeps.complete(STAGE, typeId, scope))
+            events.publishEvent(WorkTextVectorFillEvent(typeId, scope))
+        return if (gaveWay) cursor else items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
     /**
-     * Of the items [keys] of the [type], the texts new or changed encoded by the [encoder], those gone dropped, every
-     * item marked done, the fields of those whose vectors changed to be computed again; committed. False, nothing
-     * marked done, of a turn that gave way to a work the user asked for ([Tasks.outranked]).
+     * The vectors of the [type] by the [encoder]: of an encoder other than the one they were made by last — never seen,
+     * or seen before another —, told so, and the stage to be done of every work again.
      */
-    private fun done(type: TypeStore, index: ListIndex, encoder: TextEncoder, keys: List<ItemKey>): Boolean {
+    private fun madeBy(type: TypeStore, encoder: TextEncoder) {
+        val index = lists.of(type.id)
+        if (madeBy(index, encoder)) return
+        val now = System.currentTimeMillis()
+        index.stages.changed(VECTORS_SINCE, now)
+        index.stages.changed(vectorsBy(encoder.id), now)
+        sweeps.reset(STAGE, type.id, type.sources.map { it.id })
+    }
+
+    /**
+     * Of the items [keys] of the [scope] of the [type], the texts new or changed encoded by the [encoder], those gone
+     * dropped, every item marked done, those whose vectors changed dated so ([StageSweeps.made]); committed. False,
+     * nothing marked done, of a turn that gave way to a work the user asked for ([Tasks.outranked]).
+     */
+    private fun done(type: TypeStore, scope: WorkScope, encoder: TextEncoder, keys: List<ItemKey>): Boolean {
         val started = System.currentTimeMillis()
         busy = true
         val changed =
@@ -157,12 +163,12 @@ class TextVectors(
             } finally {
                 busy = false
             }
-        // Of a turn that gave way, the works not marked done — met again, their texts found encoded — but the fields
-        // of those encoded anew to be computed again all the same: the next turn finds them unchanged
+        // Of a turn that gave way, the works not marked done — met again, their texts found encoded — but those encoded
+        // anew dated all the same: the next turn finds them unchanged
         val gaveWay = tasks.outranked
-        if (!gaveWay) WorkStage.VECTORS.done(index, keys, started)
-        WorkStage.FIELDS.again(index, changed)
-        index.commit()
+        if (!gaveWay) sweeps.done(STAGE, type.id, scope, keys)
+        sweeps.made(STAGE, type.id, scope, changed)
+        lists.of(type.id).commit()
         log.info(
             "{}: the texts of {} works held, of {} encoded anew, in {} ms{}",
             type.id,
@@ -231,6 +237,9 @@ class TextVectors(
         /** The task of the queue encoding the works' texts. */
         private val KIND = TaskKind.ENCODE_SITE_ITEM_TEXTS
 
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.VECTORS
+
         /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
         const val PORTION = 1000
 
@@ -257,20 +266,6 @@ class TextVectors(
          */
         private const val BATCH = 128
     }
-}
-
-/**
- * Since when the vectors of the [index] are to be made by the [encoder]: an encoder other than the one they were made
- * by last — never seen, or seen before another — is told now: every vector made before it is of another.
- */
-private fun vectorsSince(index: ListIndex, encoder: TextEncoder): Long {
-    if (!madeBy(index, encoder)) {
-        val now = System.currentTimeMillis()
-        index.stages.changed(VECTORS_SINCE, now)
-        index.stages.changed(vectorsBy(encoder.id), now)
-        index.commit()
-    }
-    return index.stages.since(VECTORS_SINCE) ?: 1L
 }
 
 /**

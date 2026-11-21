@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.worklist.ListDocuments
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import java.time.Instant
@@ -43,9 +42,7 @@ class Scoring(
     fun score(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?): PortionScored {
         val predicted = scored(catalogue, model, interest)
         val written = ListPredictions.write(indexes.of(catalogue.type.id), catalogue.type, predicted)
-        // The highest a work stands as the index keeps it: every one of the portion kept so, written or not
-        val highest = predicted.maxOfOrNull { ListDocuments.kept(it.second.score)!! }
-        return PortionScored(predicted.size, written.size, highest)
+        return PortionScored(predicted.size, written.size)
     }
 
     /** The prediction of every item of the works of the [catalogue], a chunk of them at a time side by side. */
@@ -145,8 +142,5 @@ class Scoring(
     }
 }
 
-/**
- * Of a portion scored ([Scoring.score]): how many items, of how many the prediction changed, and the highest a work of
- * it stands as its prediction is kept — none of no item.
- */
-class PortionScored(val items: Int, val changed: Int, val highest: Double? = null)
+/** Of a portion scored ([Scoring.score]): how many items, of how many the prediction changed. */
+class PortionScored(val items: Int, val changed: Int)

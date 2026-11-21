@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.W
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_RATING
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.series.SeriesGroups
+import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -46,7 +47,7 @@ class WorkMembership(private val db: DSLContext) {
         giveWord(tx, from, into, newestOnly = true)
         keepOneOfSingle(tx, into, single)
         SeriesGroups.merged(tx, from, into)
-        WorkChanges.changed(tx, listOf(into), now)
+        WorkChanges.changed(tx, listOf(into), WorkDatum.MEMBERS, now)
         tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(from)).execute()
     }
 
@@ -189,7 +190,7 @@ class WorkMembership(private val db: DSLContext) {
         }
         if (mark != null) putInterest(tx, id, mark.interesting!!, mark.markedAt!!)
         giveWord(tx, old, id, newestOnly = false)
-        WorkChanges.changed(tx, listOf(old, id), now)
+        WorkChanges.changed(tx, listOf(old, id), WorkDatum.MEMBERS, now)
         id
     }
 
@@ -214,7 +215,7 @@ class WorkMembership(private val db: DSLContext) {
         if (left == null) tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(id)).execute()
         else {
             if (current != null) giveGrade(tx, id, left, current)
-            WorkChanges.changed(tx, listOf(id), Instant.now())
+            WorkChanges.changed(tx, listOf(id), WorkDatum.MEMBERS, Instant.now())
         }
     }
 

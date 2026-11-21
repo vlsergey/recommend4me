@@ -1,12 +1,11 @@
 package io.github.vlsergey.recommend4me.worklist
 
-import io.github.vlsergey.recommend4me.cast.SiteItemCastEncodeEvent
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
-import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
+import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
@@ -39,37 +38,40 @@ internal class ListIndexEvents(
             }
         }
 
+    /** What the site says of items, or what is drafted of them, changed. */
     @EventListener
-    fun itemsChanged(event: WorkChangeEvent) = indexing.itemsChanged(source(event.source), event.ids, "items")
+    fun itemsChanged(event: WorkChangeEvent) =
+        indexing.itemsChanged(source(event.source), event.ids, WorkDatum.DATA, "items")
 
     /**
-     * The windows of the works' chapters encoded: what the models and the search read of them changed — the items
-     * dated, every stage of their works done before it to be done again ([StageBehind]).
+     * The texts of the works' chapters written: what their windows and the search read; the words and the characters of
+     * their texts among their numbers dated as they change
+     * ([io.github.vlsergey.recommend4me.part.PartCounts.totalled]).
      */
     @EventListener
-    fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) =
-        indexing.itemsChanged(source(event.source), event.ids, "parts")
+    fun chaptersWritten(event: SiteItemChapterChangeEvent) =
+        indexing.itemsChanged(source(event.source), event.ids, WorkDatum.CHAPTERS, "parts")
 
-    /**
-     * The texts of the works' chapters written: the words and the characters of their texts among their numbers, the
-     * item dated by their writing as they change ([io.github.vlsergey.recommend4me.part.PartCounts.totalled]).
-     */
+    /** The works' pictures analysed: what their fields, expectations and sets read. */
     @EventListener
-    fun chaptersWritten(event: SiteItemChapterChangeEvent) = indexing.plan(stores.typeOf(event.source).id, "parts")
-
-    @EventListener
-    fun castNamesEncoded(event: SiteItemCastEncodeEvent) =
-        indexing.itemsChanged(source(event.source), event.ids, "castNames")
+    fun picturesAnalysed(event: SiteItemPictureAnalysisEvent) =
+        indexing.itemsChanged(source(event.source), event.ids, WorkDatum.PICTURES, "pictures")
 
     @EventListener
     fun answered(event: WorkFieldChangeEvent) =
-        indexing.worksChanged(stores.type(event.type)!!, listOf(ItemKey(event.source, event.itemId)), "answer")
+        indexing.worksChanged(
+            stores.type(event.type)!!,
+            listOf(ItemKey(event.source, event.itemId)),
+            WorkDatum.ANSWERS,
+            "answer",
+        )
 
     @EventListener
     fun gradesChanged(event: WorkGradeChangeEvent) =
         indexing.worksChanged(
             stores.type(event.type)!!,
             listOf(ItemKey(event.source, event.itemId)),
+            WorkDatum.GRADES,
             if (event.merged) "regrouped" else "grade",
         )
 
@@ -78,6 +80,7 @@ internal class ListIndexEvents(
         indexing.worksChanged(
             stores.type(event.type)!!,
             listOf(ItemKey(event.source, event.itemId)),
+            WorkDatum.GRADES,
             if (event.merged) "regrouped" else "interest",
         )
 

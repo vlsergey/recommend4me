@@ -30,8 +30,8 @@ class KeptRow(
     val title: String,
     val facets: Map<String, List<String>>,
     val numbers: Map<String, Double>,
-    /** When the work last changed, as written; -1 of none. */
-    val changed: Long,
+    /** When every kind of data of the work last changed, as written ([WorkDatum]); a kind of none left out. */
+    val dates: Map<WorkDatum, Long>,
     /** The stages of the tasks over its work, as written: not compared, kept of a document made anew. */
     val stages: WorkStages,
 )
@@ -48,7 +48,23 @@ fun ListRow.sameAs(kept: KeptRow): Boolean =
         title == kept.title &&
         facets.filterValues { it.isNotEmpty() } == kept.facets &&
         numbers == kept.numbers &&
-        (changedAt?.toEpochMilli() ?: -1L) == kept.changed
+        dates.filterKeys { it.outer } == kept.dates.filterKeys { it.outer }
+
+/**
+ * The row over its document as written ([kept]): the stages that did it and the dates of what they made of it carried;
+ * the row itself of a document of none.
+ */
+fun ListRow.over(kept: KeptRow?): ListRow = kept?.let { with(it.stages, it.dates) } ?: this
+
+/** Whether a date the databases keep of the row is another than its document as written ([kept]) holds. */
+fun ListRow.datedOtherThan(kept: KeptRow): Boolean = dates.filterKeys { it.outer } != kept.dates.filterKeys { it.outer }
+
+/**
+ * The outer kinds of data of the row whose dates are other than its document as written ([kept]) holds: every one of
+ * none.
+ */
+fun ListRow.changedOf(kept: KeptRow?): Set<WorkDatum> =
+    WorkDatum.entries.filterTo(HashSet()) { it.outer && dates[it] != null && dates[it] != kept?.dates?.get(it) }
 
 /** THE DOCUMENTS OF THE INDEX OF THE LIST AS WRITTEN, of the items asked for by their keys ([KeptRow]). */
 object ListKeptRows {
@@ -83,8 +99,8 @@ object ListKeptRows {
         private val graded = DocValues.getNumeric(r, ListDocuments.GRADED)
         private val marked = DocValues.getNumeric(r, ListDocuments.MARKED)
         private val title = DocValues.getBinary(r, ListDocuments.TITLE)
-        private val changed = DocValues.getNumeric(r, ListDocuments.CHANGED_AT)
-        private val stages = WorkStage.entries.map { DocValues.getNumeric(r, it.field) }
+        private val dates = WorkDatum.entries.associateWith { DocValues.getNumeric(r, it.field) }
+        private val stages = WorkStage.entries.associateWith { DocValues.getNumeric(r, it.field) }
         private val stored = r.storedFields()
 
         /** The documents of works of several items. */
@@ -122,13 +138,11 @@ object ListKeptRows {
                     numbers
                         .filterValues { it.advanceExact(doc) }
                         .mapValues { (_, v) -> NumericUtils.sortableLongToDouble(v.nextValue()) },
-                changed = if (changed.advanceExact(doc)) changed.longValue() else -1,
-                // The stages in the order of their fields
-                stages =
-                    stages
-                        .map { if (it.advanceExact(doc)) it.longValue() else 0L }
-                        .iterator()
-                        .let { at -> WorkStages(at.next(), at.next(), at.next(), at.next()) },
+                dates =
+                    dates
+                        .mapNotNull { (datum, v) -> if (v.advanceExact(doc)) datum to v.longValue() else null }
+                        .toMap(),
+                stages = WorkStages(stages.mapValues { (_, v) -> if (v.advanceExact(doc)) v.longValue() else 0L }),
             )
         }
     }

@@ -4,43 +4,39 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.setvector.WorkSetVectorFillEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
+import io.github.vlsergey.recommend4me.textvector.WorkTextVectorFillEvent
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.TakenWork
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkFieldFillEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(WorkPredictions::class.java)
 
 /**
- * The expected grade and interest made of works of the [type], from where of each of the works ([from]): their
- * documents of the search written next ([WorkStage.TEXTS]).
- */
-data class WorkPredictionFillEvent(val type: String, val from: Map<WorkScope, TaskCursor>)
-
-/**
- * THE EXPECTED GRADE AND INTEREST OF THE WORKS — THE SECOND OF THE TASKS OVER THE WORKS (owner, 2026-11-19: "its work
- * (writing the computed fields) leads to planning the task 'set the grade and the interest'… and so on with the third
- * task"; docs/computations.md, 9 and 10): of the works whose fields were written ([WorkFieldFillEvent]) from the first
- * of them, of every work by a new model of the grades ([begin]); a task of the marked and rated works, and one of the
- * others after every other task, a [PORTION] of them a turn ([turn]) — the highest expected first, from where the last
- * turn left —: each scored by the models kept of the fields the index of the list keeps ([EveryWork.ofKeys]), their
- * predictions written where they changed ([Scoring.score]), every one marked done ([WorkStage.PREDICTED]); told
- * ([WorkPredictionFillEvent]): their documents of the search written next. Of no model of the grades, none scored: the
- * next task told alike.
+ * THE EXPECTED GRADE AND INTEREST OF THE WORKS — THE STAGE [WorkStage.PREDICTED] ([StageSweeps]; owner, 2026-11-19:
+ * "its work (writing the computed fields) leads to planning the task 'set the grade and the interest'";
+ * docs/computations.md, 9 and 10): of the works whose data, answers, grades, items, fields, vectors, pictures or sets
+ * changed past its mark — the fields done of them first —, of every work by a new model of the grades ([begin]); a task
+ * of the marked and rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) —
+ * the highest expected first, from where the last turn left —: each scored by the models kept of the fields the index
+ * of the list keeps ([EveryWork.ofKeys]), their predictions written where they changed ([Scoring.score]), every one
+ * marked done. Of no model of the grades, none scored.
  *
  * THE AVERAGE WORK of a new model counted along its pass ([AverageCount]) — every work's features and vectors as they
  * are scored — kept at the end of the pass of the other works, the last, for the next training
@@ -58,7 +54,7 @@ class WorkPredictions(
     private val tasks: Tasks,
     private val works: Works,
     private val lists: ListIndexes,
-    private val events: ApplicationEventPublisher,
+    private val sweeps: StageSweeps,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start, from where it
     // was to go on
@@ -76,17 +72,31 @@ class WorkPredictions(
      * anew.
      */
     fun begin(type: TypeStore, reason: String) {
-        val index = lists.of(type.id)
-        index.stages.changed(SINCE, System.currentTimeMillis())
-        index.commit()
+        sweeps.reset(STAGE, type.id, type.sources.map { it.id })
         type.sweep.save(SweepState(trainedAt(type), AverageWork.basis(plugins, type), Instant.now(), 0, 0, null))
         WorkScope.entries.forEach { plan(type.id, it, reason, TaskCursor.FIRST) }
     }
 
-    /** The fields of works written: their expectations made from the first of them on. */
+    /** The documents of works written anew, of what the expectations are made of changed: their expectations made. */
     @EventListener
-    fun fieldsFilled(event: WorkFieldFillEvent) =
-        event.from.forEach { (scope, from) -> plan(event.type, scope, "fields", from) }
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
+
+    /** The fields the expectations wait for done: the expectations of the works they got past made. */
+    @EventListener
+    fun fieldsFilled(event: WorkFieldFillEvent) = plan(event.type, event.scope, "fields", TaskCursor.FIRST)
+
+    /** The vectors of the texts the expectations read done: of the works whose vectors changed, made. */
+    @EventListener
+    fun vectorsFilled(event: WorkTextVectorFillEvent) = plan(event.type, event.scope, "texts", TaskCursor.FIRST)
+
+    /** The sets the expectations read done: of the works whose sets changed, made. */
+    @EventListener
+    fun setsFilled(event: WorkSetVectorFillEvent) = plan(event.type, event.scope, "setVectors", TaskCursor.FIRST)
 
     /** The expectations of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
@@ -116,18 +126,15 @@ class WorkPredictions(
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
         val type = stores.contentType(typeId)
         val index = lists.of(typeId)
-        val model = kept.load(type)
-        val items = model?.let {
-            val since = maxOf(it.meta.trainedAtMillis, index.stages.since(SINCE) ?: 0L)
-            NextWorks.next(index, scope, NextWorks.before(WorkStage.PREDICTED, since), cursor, portion)
+        // Of no model of the grades, no expectation to make
+        val model = kept.load(type) ?: return null
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
+        if (items.isNotEmpty()) scored(type, index, model, scope, items)
+        val next = items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
+        if (next == null) {
+            sweeps.complete(STAGE, typeId, scope)
+            if (scope == WorkScope.OTHER) finish(type)
         }
-        when {
-            // No expectation to make: the next task goes on from where this one was to
-            items == null -> events.publishEvent(WorkPredictionFillEvent(typeId, mapOf(scope to cursor)))
-            items.isNotEmpty() -> scored(type, index, model, scope, items)
-        }
-        val next = items?.lastOrNull()?.cursor()?.takeIf { items.size == portion }
-        if (next == null && items != null && scope == WorkScope.OTHER) finish(type)
         return next
     }
 
@@ -152,21 +159,16 @@ class WorkPredictions(
         val clusters = works.of(type)
         val done = items.mapTo(HashSet()) { it.key }
         var scored = 0
-        // The highest the portion's works stand, before and as scored now: the next task goes on from it, whichever
-        // the index of the list holds when it begins — told of the predictions of before, a work scored higher than
-        // it stood was above the cursor, and its document of the search never written
-        var highest = items.first().grade
         var changed = 0
         val named = items.map { clusters.representative(it.key) }.distinct()
         everyWork.ofKeys(type, likeness, named, count, kept = true) { read ->
             val made = scoring.score(read.catalogue, model, interest)
             count?.addAll(read)
             scored += made.items
-            made.highest?.let { highest = maxOf(highest, it) }
             changed += made.changed
             read.catalogue.items.forEach { done += clusters.members(it.key) }
         }
-        WorkStage.PREDICTED.done(index, done, started)
+        sweeps.done(STAGE, type.id, scope, done)
         index.commit()
         if (state != null && count != null)
             type.sweep.save(
@@ -188,7 +190,6 @@ class WorkPredictions(
             changed,
             scored,
         )
-        events.publishEvent(WorkPredictionFillEvent(type.id, mapOf(scope to TaskCursor(highest))))
     }
 
     /** The sums of the average work counted so far by the pass [state] of the [type]. */
@@ -221,8 +222,8 @@ class WorkPredictions(
         /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
         const val PORTION = 1000
 
-        /** What the index of the list tells of since when every expectation is to be made anew ([begin]). */
-        const val SINCE = "predicted"
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.PREDICTED
 
         /** When the model of the grades of the [type] kept was trained; the beginning of time of none. */
         private fun trainedAt(type: TypeStore): Instant = type.models.trainedAt() ?: Instant.EPOCH

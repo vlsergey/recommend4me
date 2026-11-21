@@ -156,9 +156,12 @@ databases stay the truth: the index is written in the queue of the computations 
 a second after something it holds changed — an item's data, an answer, the values the model gives, a
 grade, a mark of interest, a regrouping of the works — of what changed since its last writing, by the
 dates the databases keep with the rows (`item.changed_at`, `normalized_work.changed_at`), the date of
-the writing kept with the index's commit: nothing is named in the queue. The predictions of the works
-are kept in the index alone (`ListPredictions`), written in place by what makes them where they change
-as the index keeps them, to three digits; an index of another format is made anew whole.
+the writing kept with the index's commit: nothing is named in the queue. Every document holds the date
+every kind of data of its work last changed (`WorkDatum`), and the stages of the tasks over the works take
+the works by them, each by the kinds it reads, up to its own mark (`StageSweeps`, docs/computations.md, c).
+The predictions of the works are kept in the index alone (`ListPredictions`), written in place by what
+makes them where they change as the index keeps them, to three digits; an index of another format is
+written anew whole over its documents, the values of the models and the predictions read of them.
 
 ## Works, items and their data
 

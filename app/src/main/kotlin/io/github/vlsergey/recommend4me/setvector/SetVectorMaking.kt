@@ -1,17 +1,21 @@
 package io.github.vlsergey.recommend4me.setvector
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
-import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
-import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
-import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
-import io.github.vlsergey.recommend4me.source.SourceContexts
+import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.part.WorkChapterWindowFillEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
-import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
-import java.time.Duration
-import java.time.Instant
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
+import io.github.vlsergey.recommend4me.worklist.TakenWork
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
+import io.github.vlsergey.recommend4me.worklist.WorkStage
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -21,13 +25,19 @@ import org.springframework.stereotype.Service
 private val log = LoggerFactory.getLogger(SetVectorMaking::class.java)
 
 /**
- * THE MAKING OF THE SETS' VECTORS ([SetVectors]) IN THE QUEUE OF THE COMPUTATIONS, one work of a type (owner,
- * 2026-11-19: "no loop in the background in the code: a work that sees it has a tail plans itself again"; "where did
- * the missing ones come from — why is it not a consequence of an outer event?"): a set grows of an event alone — the
- * works' reviews written, their texts' windows made, their pictures analysed — and those works are kept waiting in the
- * queue ([TaskKeys]), made a portion at a time, the graded works first, then from the top of the recommendations down;
- * a tail left planned again after it ([Tasks.again]), its bound the sets made already. Every set of a type is made
- * again when the encoder of the directions kept is not the one in use.
+ * Every change the sets read of the works of the [scope] of the [type] done ([WorkStage.SETS]): the stages reading
+ * them, or waiting for them, look again.
+ */
+data class WorkSetVectorFillEvent(val type: String, val scope: WorkScope)
+
+/**
+ * THE MAKING OF THE SETS' VECTORS ([SetVectors]) — THE STAGE [WorkStage.SETS] OF THE TASKS OVER THE WORKS
+ * ([StageSweeps]; owner, 2026-11-21: "a self-evident decomposition of dependencies"): of the works whose chapters'
+ * windows, reviews or pictures changed past its mark — the windows done of them first —, of every work of a type whose
+ * directions are of another encoder than the one in use ([start]); a task of the marked and rated works, and one of the
+ * others after every other task, a [PORTION] of them a turn ([turn]) — the highest expected first, from where the last
+ * turn left —: of every kind of set, each work's set made of its members now and kept, every work marked done, those
+ * whose set was made dated so: the fields and the expectations read them.
  *
  * THE DIRECTIONS ARE FITTED ONCE per content type, on a sample of its catalogue, and kept ([SetDirections]); the
  * members of the sets are read by [SetMembers].
@@ -37,29 +47,36 @@ class SetVectorMaking(
     private val stores: Stores,
     private val sets: SetMembers,
     private val directions: SetDirections,
-    private val contexts: SourceContexts,
     private val events: ApplicationEventPublisher,
     private val tasks: Tasks,
+    private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
 ) {
     /** Whether the vectors of some type's sets are to be made. */
-    fun running(): Boolean = stores.types.any { tasks.due(work(it.id)) }
+    fun running(): Boolean = stores.types.any { type -> WorkScope.entries.any { tasks.due(work(type.id, it)) } }
 
-    // What the last run of the application left undone of it: planned again by the queue at its start
+    // What the last run of the application left undone of it: planned again by the queue at its start, from where it
+    // was to go on
     init {
-        // Of a work of a source of before (app V4), every work of the source waiting
-        tasks.resumption.resumes(TaskKind.MAKE_SITE_ITEM_SET_VECTORS) { left, reason ->
-            left.work.type?.let { plan(it, reason) } ?: left.work.source?.let { whole(it, reason) }
+        tasks.resumption.resumes(KIND) { left, reason ->
+            val type = left.work.type ?: return@resumes
+            val scopes = left.work.works?.let(::listOf) ?: WorkScope.entries
+            scopes.forEach { plan(type, it, reason, left.cursor ?: TaskCursor.FIRST) }
         }
     }
 
-    /** The works written: their sets of reviews may have grown. */
-    @EventListener fun itemsWritten(event: SiteItemWriteEvent) = grew(event.source, event.ids, "items")
+    /** The documents of works written anew, of what their sets are made of changed: their sets made. */
+    @EventListener
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
 
-    /** The windows of the works' chapters made: their sets of chapters may have grown. */
-    @EventListener fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) = grew(event.source, event.ids, "parts")
-
-    /** The works' pictures analysed: their sets of screenshots may have grown. */
-    @EventListener fun picturesAnalysed(event: SiteItemPictureAnalysisEvent) = grew(event.source, event.ids, "pictures")
+    /** The chapters' windows the sets wait for done: the sets of the works they got past made. */
+    @EventListener
+    fun windowsFilled(event: WorkChapterWindowFillEvent) = plan(event.type, event.scope, "parts", TaskCursor.FIRST)
 
     /**
      * Of every type whose sets' directions were fitted by another encoder than the one in use — a model of the pictures
@@ -75,88 +92,69 @@ class SetVectorMaking(
                     encoder != null && kept != null && kept != encoder
                 }
             if (!other) return@forEach
-            tasks.keys.want(work(type.id), type.sources.map { "${it.id}$SEP$WHOLE" })
-            plan(type.id, "setsGrew")
+            sweeps.reset(STAGE, type.id, type.sources.map { it.id })
+            WorkScope.entries.forEach { plan(type.id, it, "setsGrew", TaskCursor.FIRST) }
         }
 
-    /** Every work of the [source] waiting, the making planned. */
-    private fun whole(source: String, reason: String) {
-        val type = stores.typeOf(source).id
-        tasks.keys.want(work(type), listOf("$source$SEP$WHOLE"))
-        plan(type, reason)
-    }
-
-    /** The sets of the works [ids] of the [source] may have grown: kept waiting, their making planned. */
-    private fun grew(source: String, ids: Collection<String>, reason: String) {
-        if (ids.isEmpty()) return
-        val type = stores.typeOf(source).id
-        tasks.keys.want(work(type), ids.map { "$source$SEP$it" })
-        plan(type, reason, ids.size)
-    }
-
-    private fun plan(type: String, reason: String, count: Int = 1) =
-        tasks.plan(work(type), Instant.now().plus(QUIET), reason, count) { made(type) }
+    /** The sets of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
+    fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
+        tasks.plan(work(typeId, scope), null, reason, priority = NextWorks.priority(scope), cursor = cursor) {
+            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let { tasks.again("sweep", cursor = it) }
+        }
 
     /**
-     * The vectors of the sets of the works waiting made, a [PORTION] of each source and kind at most: of a tail left,
-     * the work planned again after it, the works waiting kept ([Tasks.again]) — the sets made already its bound.
+     * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose sets are to be made, from the [cursor]
+     * on, made; where the next turn goes on from — none when none is left.
      */
-    private fun made(typeId: String) {
-        val type = stores.type(typeId) ?: return
-        val work = work(typeId)
-        val taken = tasks.keys.wanted(work)
-        if (taken.isEmpty()) return
-        val asked = taken.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
-        val turn = Turn()
+    internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
+        val type = stores.type(typeId) ?: return null
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
+        if (items.isNotEmpty()) made(type, scope, items)
+        if (items.size < portion && sweeps.complete(STAGE, typeId, scope))
+            events.publishEvent(WorkSetVectorFillEvent(typeId, scope))
+        return items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
+    }
+
+    /** The sets of every kind of the [items] of the [scope] of the [type] made and kept, dated so; committed, told. */
+    private fun made(type: TypeStore, scope: WorkScope, items: List<TakenWork>) {
+        val started = System.currentTimeMillis()
+        val made = HashSet<ItemKey>()
+        val asked = items.groupBy({ it.key.source }, { it.key.id })
         SetKind.entries.forEach { kind ->
             val encoder = sets.encoderOf(kind) ?: return@forEach
-            // The sizes of the sets read once, for the directions and for what grew alike
+            // The sizes of the sets read once, for the directions and for the works made alike
             val sizes = type.sources.associateWith { sets.sizes(it, kind, encoder) }
             val embedding = directions.inUse(type, kind, encoder, sizes) ?: return@forEach
             type.sources.forEach { s ->
-                asked[s.id]?.let { ids -> made(s, kind, embedding, sizes[s].orEmpty(), ids, turn) }
+                asked[s.id]?.let { ids -> made += made(s, kind, embedding, sizes[s].orEmpty(), ids) }
             }
         }
+        sweeps.done(STAGE, type.id, scope, items.map { it.key })
+        sweeps.made(STAGE, type.id, scope, made)
+        lists.of(type.id).commit()
         // The model learns the new vectors as they come, a portion at a time
-        if (turn.made > 0) events.publishEvent(SiteItemSetVectorChangeEvent(typeId, turn.made))
-        if (turn.tail) tasks.again("portion") else tasks.keys.done(work, taken)
+        if (made.isNotEmpty()) events.publishEvent(SiteItemSetVectorChangeEvent(type.id, made.size))
+        log.info(
+            "{}: the sets of {} {} works made in {} ms, {} of them of members",
+            type.id,
+            items.size,
+            scope.value,
+            System.currentTimeMillis() - started,
+            made.size,
+        )
     }
 
-    /** What a turn of the work made, and whether it left a tail. */
-    private class Turn {
-        var made = 0
-        var tail = false
-    }
-
-    /**
-     * Of the source [s], the vectors of the sets of [kind] of the works [ids] waiting — of every one of [WHOLE] — whose
-     * set grew past its vector made, a [PORTION] at most, the likeliest works first.
-     */
+    /** Of the source [s], the vectors of the sets of [kind] of the works [ids] that have members made: those works. */
     private fun made(
         s: SourceStore,
         kind: SetKind,
         embedding: StoredEmbedding,
         all: Map<String, Int>,
         ids: List<String>,
-        turn: Turn,
-    ) {
-        val have = if (WHOLE in ids) all else ids.mapNotNull { id -> all[id]?.let { id to it } }.toMap()
-        val stored = if (have.isEmpty()) emptyMap() else s.setVectors.sources(kind, embedding.id)
-        val todo = have.filter { (id, n) -> n > 0 && stored[id] != n }.keys
-        if (todo.isEmpty()) return
-        val ordered = contexts.of(s.id).itemsInOrder().filter { it in todo }
-        ordered.take(PORTION).chunked(CHUNK).forEach { chunk ->
-            save(s, kind, embedding, have, chunk)
-            turn.made += chunk.size
-        }
-        turn.tail = turn.tail || ordered.size > PORTION
-        log.info(
-            "{}: vectors of the {} of {} of {} works made",
-            s.id,
-            kind.key,
-            minOf(PORTION, ordered.size),
-            ordered.size,
-        )
+    ): List<ItemKey> {
+        val have = ids.mapNotNull { id -> all[id]?.takeIf { it > 0 }?.let { id to it } }.toMap()
+        have.keys.chunked(CHUNK).forEach { chunk -> save(s, kind, embedding, have, chunk) }
+        return have.keys.map { ItemKey(s.id, it) }
     }
 
     /** The vectors of the sets of [kind] of the items [ids] made and kept, each with the size [have] of its set. */
@@ -178,16 +176,15 @@ class SetVectorMaking(
     companion object {
         private const val CHUNK = 200
 
-        /** The sets made by one turn of the work, of a source and a kind: minutes, a grade and a training between. */
-        private const val PORTION = 2_000
+        /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
+        private const val PORTION = 1000
 
-        /** The quiet after a change before the sets are made: the changes of a crawl's pages at once. */
-        private val QUIET: Duration = Duration.ofSeconds(30)
+        /** The task of the queue making the works' sets' vectors. */
+        private val KIND = TaskKind.MAKE_SITE_ITEM_SET_VECTORS
 
-        /** The key of a work waiting in the queue: its source and its id; of every work of the source, [WHOLE]. */
-        private const val SEP = '\t'
-        private const val WHOLE = ""
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.SETS
 
-        private fun work(type: String) = Task(TaskKind.MAKE_SITE_ITEM_SET_VECTORS, type = type)
+        private fun work(type: String, scope: WorkScope) = Task(KIND, type = type, works = scope)
     }
 }

@@ -1,12 +1,16 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.worklist.WorkDatum
+import java.time.Instant
 import kotlin.concurrent.withLock
 
 /** The reviews of a source's items, as the source's plugin writes and reads them; the writes one at a time. */
 internal class SourceItemReviews(private val store: SourceStore) : ItemReviewStore {
     override fun saveReviews(itemId: String, reviews: List<ReviewData>) =
         store.writing.withLock {
-            store.reviews.save(itemId, reviews)
+            // Dated as they change: what the sets of the reviews are made of
+            if (store.reviews.save(itemId, reviews))
+                store.changes.changed(listOf(itemId), WorkDatum.REVIEWS, Instant.now())
         }
 
     override fun reviewIds(itemId: String): Set<String> = store.reviews.ids(itemId)

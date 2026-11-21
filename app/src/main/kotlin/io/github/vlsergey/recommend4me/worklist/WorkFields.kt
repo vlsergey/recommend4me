@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.cast.WorkCastNameFillEvent
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
+import io.github.vlsergey.recommend4me.setvector.WorkSetVectorFillEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -22,10 +24,10 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(WorkFields::class.java)
 
 /**
- * The fields the models compute written of works of the [type], from where of each of the works ([from]): their
- * expected grade and interest made next ([WorkStage.PREDICTED]).
+ * Every change the fields read of the works of the [scope] of the [type] done ([WorkStage.FIELDS]): the stages reading
+ * them, or waiting for them, look again.
  */
-data class WorkFieldFillEvent(val type: String, val from: Map<WorkScope, TaskCursor>)
+data class WorkFieldFillEvent(val type: String, val scope: WorkScope)
 
 /**
  * The fields of every marked and rated work of the [type] computed by the models as they are now: the models of the
@@ -34,15 +36,15 @@ data class WorkFieldFillEvent(val type: String, val from: Map<WorkScope, TaskCur
 data class RatedWorkValueFillEvent(val type: String)
 
 /**
- * THE FIELDS THE MODELS COMPUTE, WRITTEN INTO THE INDEX OF THE LIST — THE FIRST OF THE TASKS OVER THE WORKS (owner,
- * 2026-11-19: "the listener of the event of a change of the fields' models creates the task of computing the fields… in
- * two copies: for the marked and/or rated works and for the other works"; docs/computations.md, 9 and 10): of a source
- * whose fields' models were fitted anew ([fitted]), of an index made anew, every work's fields to be computed again
- * ([WorkStage.FIELDS]); a task of the marked and rated works, and one of the others after every other task, a [PORTION]
- * of them a turn ([turn]) — the highest expected first, from where the last turn left —: the values the models give
- * each made now ([WorkModelValues]), the documents of those other than kept made anew, every one marked done; told
- * ([WorkFieldFillEvent]): their expected grade and interest made next. The marked and rated all done, the models of the
- * grades are made of them ([RatedWorkValueFillEvent]).
+ * THE FIELDS THE MODELS COMPUTE, WRITTEN INTO THE INDEX OF THE LIST — THE STAGE [WorkStage.FIELDS] ([StageSweeps];
+ * owner, 2026-11-19: "the listener of the event of a change of the fields' models creates the task of computing the
+ * fields… in two copies: for the marked and/or rated works and for the other works"; docs/computations.md, 9 and 10):
+ * of the works whose data, answers, vectors, pictures, sets or cast changed past its mark — the stages making them done
+ * of them first —, of every work of a source whose fields' models were fitted anew ([fitted]); a task of the marked and
+ * rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) — the highest expected
+ * first, from where the last turn left —: the values the models give each made now ([WorkModelValues]), the documents
+ * of those other than kept made anew and dated so, every one marked done. The marked and rated all done, the models of
+ * the grades are made of them ([RatedWorkValueFillEvent]).
  */
 @Component
 class WorkFields(
@@ -51,6 +53,7 @@ class WorkFields(
     private val tasks: Tasks,
     private val indexes: ListIndexes,
     private val modelValues: WorkModelValues,
+    private val sweeps: StageSweeps,
     private val events: ApplicationEventPublisher,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start, from where it
@@ -64,22 +67,36 @@ class WorkFields(
     }
 
     /**
-     * The models of a source's fields fitted anew: every work of it done before is to be done again, the marked and
-     * rated and the others from the first.
+     * The models of a source's fields fitted anew: every work of it is to be done again, the marked and rated and the
+     * others from the first.
      */
     @EventListener
     fun fitted(event: FieldModelFitEvent) {
         val type = stores.typeOf(event.source)
-        val index = indexes.of(type.id)
-        index.stages.changed(since(event.source), System.currentTimeMillis())
-        index.commit()
+        sweeps.reset(STAGE, type.id, listOf(event.source))
         WorkScope.entries.forEach { plan(type.id, it, "chances", TaskCursor.FIRST) }
     }
 
-    /** The vectors of the site's text fields of works made: their fields computed from the first of them on. */
+    /** The documents of works written anew, of what the fields are made of changed: their fields computed. */
     @EventListener
-    fun vectorsMade(event: WorkTextVectorFillEvent) =
-        event.from.forEach { (scope, from) -> plan(event.type, scope, "texts", from) }
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (event.anew || STAGE.follows(event.data))
+            WorkScope.entries.forEach {
+                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+            }
+    }
+
+    /** The vectors of the texts the fields wait for done: the fields of the works they got past computed. */
+    @EventListener
+    fun vectorsFilled(event: WorkTextVectorFillEvent) = plan(event.type, event.scope, "texts", TaskCursor.FIRST)
+
+    /** The names of the casts the fields wait for done: the fields of the works they got past computed. */
+    @EventListener
+    fun castNamesFilled(event: WorkCastNameFillEvent) = plan(event.type, event.scope, "castNames", TaskCursor.FIRST)
+
+    /** The sets the fields wait for done: the fields of the works they got past computed. */
+    @EventListener
+    fun setsFilled(event: WorkSetVectorFillEvent) = plan(event.type, event.scope, "setVectors", TaskCursor.FIRST)
 
     /** The fields of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
@@ -98,34 +115,18 @@ class WorkFields(
      * [cursor] on, done; where the next turn goes on from — none when none is left.
      */
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
-        val type = stores.type(typeId)
-        val index = indexes.of(typeId)
-        val items = type?.let { stale(it, index, scope, cursor, portion) }.orEmpty()
-        if (type != null && items.isNotEmpty()) filled(type, index, scope, items)
+        val type = stores.type(typeId) ?: return null
+        // Of the sources whose models work out a field
+        val sources = type.sources.filter { s -> s.schema.facets.any { it.infer } }.map { it.id }
+        val items = sweeps.next(STAGE, typeId, sources, scope, cursor, portion)
+        if (items.isNotEmpty()) filled(type, indexes.of(typeId), scope, items)
         val next = items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
-        // The pass of the marked and rated works ended — of this turn, or of the turns before when it found none left
-        val passed = items.isNotEmpty() || cursor != TaskCursor.FIRST
-        if (next == null && scope == WorkScope.MARKED && passed) events.publishEvent(RatedWorkValueFillEvent(typeId))
+        // The marked and rated all done: the models of the grades made of them
+        if (next == null && sweeps.complete(STAGE, typeId, scope)) {
+            events.publishEvent(WorkFieldFillEvent(typeId, scope))
+            if (scope == WorkScope.MARKED) events.publishEvent(RatedWorkValueFillEvent(typeId))
+        }
         return next
-    }
-
-    /**
-     * The next [portion] items of the [scope] of the [type] whose fields are to be computed, from the [cursor] on: of
-     * the sources whose models work out a field, those done before the models held.
-     */
-    private fun stale(
-        type: TypeStore,
-        index: ListIndex,
-        scope: WorkScope,
-        cursor: TaskCursor,
-        portion: Int,
-    ): List<TakenWork> {
-        val since =
-            type.sources
-                .filter { s -> s.schema.facets.any { it.infer } }
-                .associate { it.id to (index.stages.since(since(it.id)) ?: 1L) }
-        return if (since.isEmpty()) emptyList()
-        else NextWorks.next(index, scope, NextWorks.before(WorkStage.FIELDS, since), cursor, portion)
     }
 
     /** The fields of the [items] of the [scope] of the [type] computed, written where they changed, told. */
@@ -136,9 +137,9 @@ class WorkFields(
             items.groupBy({ it.key.source }, { it.key.id }).entries.sumOf { (source, ids) ->
                 val s = type.source(source) ?: return@sumOf 0
                 val known = EveryItemFacets(s.items.facetsOf(ids), s.corrections.facetsOf(ids))
-                write(s, index, clusters, modelValues.of(s, ids, known), ids, started)
+                write(s, index, scope, clusters, modelValues.of(s, ids, known), ids)
             }
-        WorkStage.FIELDS.done(index, items.map { it.key }, started)
+        sweeps.done(STAGE, type.id, scope, items.map { it.key })
         index.commit()
         log.info(
             "{}: the fields of {} {} works computed in {} ms, {} of them other than kept",
@@ -148,30 +149,29 @@ class WorkFields(
             System.currentTimeMillis() - started,
             changed,
         )
-        events.publishEvent(WorkFieldFillEvent(type.id, mapOf(scope to items.first().cursor())))
     }
 
     /**
      * Of the items [ids] of the source [s], the documents of those whose values [fresh] are not those the [index] keeps
-     * made anew — their fields computed [at], their expectation to be made again, their document of the search as it
-     * was —: how many.
+     * made anew, with their stages and dates as written, what the models gave them dated by the stage's horizon
+     * ([StageSweeps.dateOf]): the expectation and whatever reads the fields see them. How many.
      */
     private fun write(
         s: SourceStore,
         index: ListIndex,
+        scope: WorkScope,
         clusters: WorkClusters,
         fresh: Map<String, Map<String, List<String>>>,
         ids: List<String>,
-        at: Long,
     ): Int {
         val kept = ListModelValues.of(index, s.id, ids)
         val other = ids.filter { id -> asSets(fresh[id]) != asSets(kept[id]) }
         if (other.isNotEmpty()) {
-            val stages = WorkStages.of(index, s.id, other)
-            val predicted = index.written { ListPredictions.of(it, s.id, other) }
+            val (predicted, written) =
+                index.written { ListPredictions.of(it, s.id, other) to ListKeptRows.of(it, s.id, other) }
             index.replace(
-                ListRows.read(s, other, clusters, fresh, predicted) {
-                    WorkStages(stages[it]?.vectorsAt ?: 0, at, 0, stages[it]?.textsAt ?: 0)
+                ListRows.read(s, other, clusters, fresh, predicted).map { r ->
+                    r.over(written[r.key.id]).dated(WorkDatum.FIELDS, sweeps.dateOf(STAGE, s.type, scope, r.key))
                 }
             )
         }
@@ -185,8 +185,8 @@ class WorkFields(
         /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
         const val PORTION = 1000
 
-        /** What the index tells of since when the models of the [source]'s fields hold ([StageTimes.since]). */
-        fun since(source: String) = "fields:$source"
+        /** The stage of the tasks over the works it is. */
+        private val STAGE = WorkStage.FIELDS
 
         /** The values of every facet as sets: their order is no change. */
         private fun asSets(values: Map<String, List<String>>?): Map<String, Set<String>> =

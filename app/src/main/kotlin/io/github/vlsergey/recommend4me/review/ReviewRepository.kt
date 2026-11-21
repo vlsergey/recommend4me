@@ -21,7 +21,12 @@ data class StoredReview(
 class ReviewRepository(private val db: DSLContext) {
 
     /** Stores the reviews, a known one updated (its author may have edited it). */
-    fun save(itemId: String, reviews: List<ReviewData>) {
+    /** The [reviews] of the item kept, a review of its id written anew; whether any was new or other than kept. */
+    fun save(itemId: String, reviews: List<ReviewData>): Boolean {
+        val kept = ofItem(itemId).associateBy { it.reviewId }
+        val other = reviews.any { r ->
+            kept[r.id.take(ID_LENGTH)].let { it == null || it.content != r.content || it.stars != r.stars }
+        }
         reviews.forEach { r ->
             val key = textKeyOf(r.content)
             db.insertInto(REVIEW)
@@ -38,6 +43,7 @@ class ReviewRepository(private val db: DSLContext) {
                 .set(REVIEW.TEXT_KEY, key)
                 .execute()
         }
+        return other
     }
 
     fun ids(itemId: String): Set<String> =
