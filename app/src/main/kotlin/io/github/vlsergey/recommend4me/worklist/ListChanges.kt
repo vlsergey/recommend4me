@@ -4,6 +4,9 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import java.time.Instant
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(ListChanges::class.java)
 
 /**
  * WHAT CHANGED OF A CONTENT TYPE SINCE ITS INDEX OF THE LIST WAS LAST WRITTEN, by the dates the databases keep
@@ -31,12 +34,25 @@ internal object ListChanges {
         whole: Set<String>,
     ): Map<String, Set<String>> {
         val keys = HashSet<ItemKey>()
+        val told = HashMap<String, Int>()
         type.sources
             .filter { it.id !in whole }
             .forEach { s ->
-                s.changes.since(since).forEach { keys += clusters.members(ItemKey(s.id, it)) }
+                val changed = s.changes.since(since)
+                if (changed.isNotEmpty()) told[s.id] = changed.size
+                changed.forEach { keys += clusters.members(ItemKey(s.id, it)) }
             }
-        type.works.changedSince(since).forEach { keys += clusters.members(it) }
-        return keys.filter { it.source !in whole }.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
+        val works = type.works.changedSince(since)
+        works.forEach { keys += clusters.members(it) }
+        val named = keys.filter { it.source !in whole }.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
+        log.info(
+            "{}: changed since {}: items {}, items of the works changed {}; named with their works' items {}",
+            type.id,
+            since,
+            told,
+            works.size,
+            named.mapValues { it.value.size },
+        )
+        return named
     }
 }
