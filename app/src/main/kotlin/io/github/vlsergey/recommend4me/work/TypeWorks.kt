@@ -2,11 +2,21 @@ package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository.Companion.DIFFERENT
 import io.github.vlsergey.recommend4me.item.ItemKey
+import java.time.Instant
 
 /**
  * THE NORMALIZED WORKS OF THE ITEMS OF ONE CONTENT TYPE: of its [sources], the works of items and the items of works.
  */
 class TypeWorks(private val works: WorkRepository, private val sources: Collection<String>) {
+
+    /** The works of the [items] changed by the user's word [at] ([WorkChanges]). */
+    fun changed(items: Collection<ItemKey>, at: Instant) = works.changes.changed(items, at)
+
+    /** The items of the type whose works changed at [since] or after. */
+    fun changedSince(since: Instant): List<ItemKey> = works.changes.itemsSince(sources, since)
+
+    /** Whether a work of the type changed at [since] or after. */
+    fun anySince(since: Instant): Boolean = works.changes.anySince(sources, since)
 
     /** The items of the [works] among the type's sources: work to its items. */
     fun itemsOf(works: Collection<Long>): Map<Long, List<ItemKey>> = this.works.itemsOf(works, sources)

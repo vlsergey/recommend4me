@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
-import io.github.vlsergey.recommend4me.task.TaskKeys
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
@@ -27,48 +26,20 @@ private val log = LoggerFactory.getLogger(ListIndexing::class.java)
  */
 data class WorkDocumentWriteEvent(val type: String, val from: Map<WorkScope, TaskCursor>, val anew: Boolean = false)
 
-/** What is to be written of a content type's index: the names of what changed since the last writing. */
-class ListWaiting {
-    /** The items whose documents are made anew, by source. */
-    val rows = HashMap<String, MutableSet<String>>()
-
-    /** The sources every document of which is made anew. */
-    val whole = HashSet<String>()
-
-    /** What waits as the queue keeps it ([TaskKeys.want]): a key of every name. */
-    fun keys(): List<String> =
-        rows.flatMap { (source, ids) -> ids.map { "$ROW$SEP$source$SEP$it" } } + whole.map { "$WHOLE$SEP$it" }
-
-    companion object {
-        private const val ROW = "row"
-        private const val WHOLE = "whole"
-        private const val SEP = '\t'
-
-        /** What waits of the [keys] the queue keeps ([keys]). */
-        fun of(keys: Collection<String>): ListWaiting =
-            ListWaiting().apply {
-                keys.forEach { k ->
-                    val parts = k.split(SEP)
-                    when (parts[0]) {
-                        ROW -> rows.getOrPut(parts[1]) { HashSet() } += parts[2]
-                        WHOLE -> whole += parts[1]
-                    }
-                }
-            }
-    }
-}
-
 /**
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
- * every content type, after a quiet, of every change since the last one at once:
- * - the documents of the items a change names made anew, of every item of their works: their data, the user's answers
- *   and corrections, the values the models gave them as the index kept them — of two works merged or taken apart, every
- *   item of them before ([io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent.items]);
- * - of a source whole, every item, those gone removed; an index of another format made anew whole. Of every document
- *   made anew every stage of the tasks over the works is to be done again, the vectors of the site's text fields first:
- *   told ([WorkDocumentWriteEvent]).
+ * every content type, after a quiet, of every change since its last writing at once, by the dates the databases keep
+ * (owner, 2026-11-21: "why name them and keep the names at all? the index has the date it was last built, a work the
+ * date it was last changed"; the date of the writing kept with the index's commit, [WRITTEN]):
+ * - the documents of the items changed since made anew ([io.github.vlsergey.recommend4me.item.ItemChanges]), and of the
+ *   items of the works the user's word changed ([io.github.vlsergey.recommend4me.work.WorkChanges]: an answer, a grade,
+ *   a mark of interest, two works merged or taken apart), of every item of their works: their data, the user's answers
+ *   and corrections, the values the models gave them as the index kept them;
+ * - of a source changed whole, every item; an index of another format made anew whole; the documents of the items gone
+ *   from their source removed. Of every document made anew every stage of the tasks over the works is to be done again,
+ *   the vectors of the site's text fields first: told ([WorkDocumentWriteEvent]).
  *
- * What waits is the names of the items alone, never their data: the databases are read when the work runs.
+ * Nothing is named in the queue: what changed is read of the databases when the work runs, and a stop loses nothing.
  */
 @Component
 class ListIndexing(
@@ -79,16 +50,24 @@ class ListIndexing(
     private val events: ApplicationEventPublisher,
 ) {
     /**
-     * What the [change] names added to what waits of the content type [typeId] — kept in the queue ([TaskKeys.want]): a
-     * stop leaves it to the next start — and its writing planned, for the [reason] the interface words
-     * ([ListIndexEvents]).
+     * The items [ids] of the source [s] changed in what the index holds of them — of none, every item of it: dated
+     * ([io.github.vlsergey.recommend4me.item.ItemChanges]), the writing planned for the [reason] the interface words.
      */
-    fun change(typeId: String, reason: String, change: ListWaiting.() -> Unit) {
-        tasks.keys.want(work(typeId), ListWaiting().apply(change).keys())
-        plan(typeId, reason)
+    fun itemsChanged(s: SourceStore, ids: Collection<String>, reason: String) {
+        if (ids.isEmpty()) s.changes.everyChanged(Instant.now()) else s.changes.changed(ids, Instant.now())
+        plan(s.type, reason)
     }
 
-    /** The writing of what waits of the content type [typeId] planned, for the [reason]; nothing added to it. */
+    /**
+     * The works of the [items] of the content type [type] changed by the user's word: dated
+     * ([io.github.vlsergey.recommend4me.work.WorkChanges]), the writing planned for the [reason].
+     */
+    fun worksChanged(type: TypeStore, items: Collection<ItemKey>, reason: String) {
+        type.works.changed(items, Instant.now())
+        plan(type.id, reason)
+    }
+
+    /** The writing of what changed of the content type [typeId] planned, for the [reason]. */
     fun plan(typeId: String, reason: String) {
         // The user's own action the list is looked at for, and an index never made — an empty list — go ahead of the
         // background's works: of the user's change, first only of a press (owner, 2026-11-19: first only "the button
@@ -107,14 +86,13 @@ class ListIndexing(
 
     private fun work(typeId: String) = Task(WORK, type = typeId)
 
-    // What the last run of the application left undone of it: planned again by the queue at its start — what it named
-    // the queue kept
+    // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         tasks.resumption.resumes(WORK) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
 
     /**
-     * What waits of the content type [typeId] written now, in the queue, for a caller that waits for it — what stands
+     * What changed of the content type [typeId] written now, in the queue, for a caller that waits for it — what stands
      * for the background in a test ([io.github.vlsergey.recommend4me.task.inBackground]).
      */
     fun writeWaiting(typeId: String) = tasks.run(work(typeId)) { write(typeId) }
@@ -122,44 +100,58 @@ class ListIndexing(
     /** Whether the index of the content type [typeId] is of this format. */
     fun current(typeId: String): Boolean = indexes.of(typeId).current()
 
-    /** What waits of the content type [typeId] written to its index, and committed. */
+    /** Whether anything of the [type] changed since its index was last written: what a start plans its writing of. */
+    fun pending(type: TypeStore): Boolean = ListChanges.any(type, writtenOf(indexes.of(type.id)))
+
+    /** What changed of the content type [typeId] since the last writing written to its index, and committed. */
     private fun write(typeId: String) {
         val type = stores.type(typeId) ?: return
-        val taken = tasks.keys.wanted(work(typeId))
-        if (taken.isEmpty()) return
-        val w = ListWaiting.of(taken)
-        val started = System.currentTimeMillis()
+        val started = Instant.now()
         val index = indexes.of(typeId)
-        val clusters = works.of(type)
         // An index of another format made anew whole
         val anew = !index.current()
         if (anew) index.clear()
-        val whole = if (anew) type.sources.map { it.id }.toSet() else w.whole
-        val named = named(clusters, w, whole)
+        val since = writtenOf(index)
+        val whole = if (anew) type.sources.map { it.id }.toSet() else ListChanges.whole(type, since)
+        val clusters = works.of(type)
+        val named = ListChanges.named(type, clusters, since, whole)
         val gathered = System.currentTimeMillis()
         var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
         val from = HashMap<WorkScope, TaskCursor>()
         named.forEach { (sourceId, ids) ->
-            type.source(sourceId)?.let { written += writeNamed(type, it, ids, index, clusters, from) }
+            type.source(sourceId)?.let { s ->
+                ids.chunked(PORTION).forEach { written += writeNamed(type, s, it.toSet(), index, clusters, from) }
+            }
         }
+        val gone = type.sources.filter { it.id !in whole }.sumOf { removeGone(it, index) }
         val replaced = System.currentTimeMillis()
+        index.stages.changed(WRITTEN, started.toEpochMilli())
         index.commit()
         val committed = System.currentTimeMillis()
-        tasks.keys.done(work(typeId), taken)
         // Of a source written whole, every work from the first
         val told = if (whole.isEmpty()) from else WorkScope.entries.associateWith { TaskCursor.FIRST }
         if (told.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, told, anew))
         log.info(
-            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew — the items named {}, " +
-                "read and replaced {}, committed {}",
+            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} gone — the changes " +
+                "read {}, read and replaced {}, committed {}",
             typeId,
-            System.currentTimeMillis() - started,
+            committed - started.toEpochMilli(),
             whole.size,
             written,
-            gathered - started,
+            gone,
+            gathered - started.toEpochMilli(),
             replaced - gathered,
             committed - replaced,
         )
+    }
+
+    /**
+     * Of the source [s], the documents of its items gone removed — when the index holds more of them than the source
+     * has items: an item taken out of the library, nothing of it left to be dated —; how many.
+     */
+    private fun removeGone(s: SourceStore, index: ListIndex): Int {
+        if (index.documentsOf(s.id) <= s.items.count()) return 0
+        return index.keepOnly(s.id, s.items.keys().mapTo(HashSet()) { it.id })
     }
 
     /**
@@ -206,23 +198,22 @@ class ListIndexing(
         return rows.size
     }
 
-    /**
-     * The items whose documents are made anew, by source, of a source not made anew [whole]: those the changes named
-     * with every item of their works.
-     */
-    private fun named(
-        clusters: WorkClusters,
-        w: ListWaiting,
-        whole: Set<String>,
-    ): Map<String, Set<String>> {
-        val keys = HashSet<ItemKey>()
-        w.rows.forEach { (source, ids) -> ids.forEach { keys += clusters.members(ItemKey(source, it)) } }
-        return keys.filter { it.source !in whole }.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
-    }
-
     companion object {
         /** The work of the queue writing the index of a content type's list. */
         val WORK = TaskKind.WRITE_LIST_INDEX
+
+        /**
+         * Of the stages the index keeps with its commits ([StageTimes]): since when its documents hold every change of
+         * the databases — the start of their last writing, milliseconds.
+         */
+        const val WRITTEN = "written"
+
+        /** The documents a writing reads and replaces at a time: the memory of a writing of many, not a meaning. */
+        private const val PORTION = 10_000
+
+        /** Since when the documents of the [index] hold every change; of an index never so written, of every date. */
+        private fun writtenOf(index: ListIndex): Instant =
+            index.stages.since(WRITTEN)?.let(Instant::ofEpochMilli) ?: Instant.EPOCH
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L
@@ -231,6 +222,6 @@ class ListIndexing(
         const val FORMAT = "listFormat"
 
         /** The reasons that are the user's own actions: their writing goes ahead of the background's works. */
-        private val USERS = setOf("answer")
+        private val USERS = setOf("answer", "grade", "interest")
     }
 }

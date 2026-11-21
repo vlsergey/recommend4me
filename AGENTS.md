@@ -172,7 +172,11 @@ work is to be done of — the items, the fandoms its owner names — is kept wit
 `Tasks.keys`: `want` as the change comes, `wanted` as the work begins, `done` once written), never
 in the memory alone: a work resumed does what was asked, not everything because what was asked was
 lost (owner, 2026-11-19: "the queue is kept in the database: nothing is to be run at a start just
-because it is a start"). A start plans a work only of what the data say — an index of another
+because it is a start"). **What the databases date is not named at all:** a row changed keeps the date
+of its change, set by the write that changes it (`item.changed_at`, `normalized_work.changed_at`,
+`prediction.changed_at` — of a prediction, as the list keeps it, three digits), and a work over it reads
+what changed since its own last run, whose date it keeps with what it wrote (the index of the list:
+`ListIndexing`, `WorkValues`; owner, 2026-11-21: "why name them and keep the names at all?"). A start plans a work only of what the data say — an index of another
 format or not brought to every work (`SearchProvider.current`), a type never searched — never
 every work again in case something changed while the application was down: what changes then is a
 tool or a migration, which asks for what follows itself.

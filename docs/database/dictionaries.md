@@ -23,7 +23,7 @@
 | `site_author_place` | the places on the web a site's author's page lists as theirs ("Места в сети" of fanfics.me), as it showed them last: the address, and of one that is an author's page of another source, that author (`place_source`, `place_author`) — the same person, merged with them |
 | `normalized_author_distinct` | two authors the user told apart, or said are partly one (`partly`: a part of the works of one is the other's): never offered as one again |
 | `normalized_author_entry` | an entry of a catalogue (Wikidata) an author is bound to |
-| `normalized_work` | a work of the user's, whatever sites have it |
+| `normalized_work` | a work of the user's, whatever sites have it; when the user's word on it, or its items, last changed (`changed_at`): the documents of its items in the index of the list written anew by the next writing of it |
 | `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one. How much the item says of the work (`fullness`: the characters of its texts, then the values of its facets), and whether the site gives it a value the work is shown by first (`shown_first`: a finished book), measured as it changes: the work is shown with those so shown first, then the one saying the most |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
 | `series_group` | a group of works the user said to be one series ("one series" of two works) |
@@ -128,6 +128,7 @@ erDiagram
     }
     normalized_work {
         BIGINT id PK
+        TIMESTAMPTZ changed_at "null"
     }
     normalized_work_relation {
         BIGINT first_work PK, FK

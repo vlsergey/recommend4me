@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
+import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
@@ -34,9 +35,25 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
             CharClasses.of(text).forEachIndexed { k, v -> classes[k] += v }
         }
         val some = parts.isNotEmpty()
+        val counts =
+            listOf(sum?.value1()?.toInt(), sum?.value2()?.toInt()) +
+                COLUMNS.indices.map { k ->
+                    if (some) classes[k] else null
+                }
+        val kept =
+            db.select(listOf(ITEM.TEXT_WORDS, ITEM.TEXT_CHARS) + COLUMNS)
+                .from(ITEM)
+                .where(ITEM.ITEM_ID.eq(itemId))
+                .fetchOne()
+                ?.intoList()
+        // Written, and the item's date with them, only as they change: what the index of the list holds of it
+        if (kept == null || kept == counts) return
         var update =
-            db.update(ITEM).set(ITEM.TEXT_WORDS, sum?.value1()?.toInt()).set(ITEM.TEXT_CHARS, sum?.value2()?.toInt())
-        COLUMNS.forEachIndexed { k, column -> update = update.set(column, if (some) classes[k] else null) }
+            db.update(ITEM)
+                .set(ITEM.TEXT_WORDS, counts[0])
+                .set(ITEM.TEXT_CHARS, counts[1])
+                .set(ITEM.CHANGED_AT, Instant.now())
+        COLUMNS.forEachIndexed { k, column -> update = update.set(column, counts[k + 2]) }
         update.where(ITEM.ITEM_ID.eq(itemId)).execute()
     }
 

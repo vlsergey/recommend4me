@@ -23,6 +23,9 @@ class WorkRepository(private val db: DSLContext) {
     /** The user's word on two works that stay two. */
     val relations = WorkRelations(db)
 
+    /** When the user's word on a work, or its items, last changed. */
+    val changes = WorkChanges(db)
+
     /** Those of the [items] of the [source] bound to a normalized work, with the version kept of each. */
     fun boundAmong(source: String, items: Collection<String>): Map<String, String> =
         items

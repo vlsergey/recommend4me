@@ -153,9 +153,12 @@ a sorted value; its dates; and what changes of its work without it — graded, t
 chance of interest, their product — updated in place. The filters, the orders, the count and the
 page are a query of it; only the cards of the page are read of the databases, by their keys. The
 databases stay the truth: the index is written in the queue of the computations (`ListIndexing`)
-a second after what it names changed — an item's data, an answer, the values the model gives, a
-grade, a mark of interest, the predictions of a sweep of the scores, a regrouping of the works — and of
-every item at every start; an index of another format is made anew whole.
+a second after something it holds changed — an item's data, an answer, the values the model gives, a
+grade, a mark of interest, a regrouping of the works — of what changed since its last writing, by the
+dates the databases keep with the rows (`item.changed_at`, `normalized_work.changed_at`), the date of
+the writing kept with the index's commit: nothing is named in the queue. The predictions are written in
+place (`WorkValues`) of those changed as the index keeps them, to three digits
+(`prediction.changed_at`); an index of another format is made anew whole.
 
 ## Works, items and their data
 

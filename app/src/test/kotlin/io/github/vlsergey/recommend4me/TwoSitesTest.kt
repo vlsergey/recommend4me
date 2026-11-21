@@ -74,10 +74,8 @@ class TwoSitesTest : TwoSitesTestBase() {
         // Words of five letters and a space: one word to six characters
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
         // Written past the application's events: their documents of the index of the list, which the model reads, made
-        listIndexing.change("books", "items") {
-            rows.getOrPut("alpha") { HashSet() } += "z1"
-            rows.getOrPut("beta") { HashSet() } += "z2"
-        }
+        listIndexing.itemsChanged(a, listOf("z1"), "items")
+        listIndexing.itemsChanged(b, listOf("z2"), "items")
         background.run()
         sizeLearning.fit(type)
         assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())

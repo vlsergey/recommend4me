@@ -32,7 +32,7 @@ internal const val NAME_LENGTH = 1000
  * The items of one source as its source database holds them: what every item has, its facets, numbers and texts, and
  * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemValueKeys],
  * [ItemNumbers], [ItemTexts], [ItemKeyList]), this one by the items' heads. [changed] is told of every item whose
- * searchable data was written.
+ * searchable data was written, the item's date ([ItemChanges]) set as it is.
  */
 class ItemRepository
 private constructor(
@@ -51,7 +51,14 @@ private constructor(
     constructor(
         db: DSLContext,
         changed: (Collection<String>) -> Unit,
-    ) : this(db, changed, FacetDictionaryRepository(db))
+    ) : this(
+        db,
+        { ids ->
+            ItemChanges(db).changed(ids, Instant.now())
+            changed(ids)
+        },
+        FacetDictionaryRepository(db),
+    )
 
     /**
      * Creates or updates an item; true when it is new or its version changed. The head and its version in one
@@ -75,6 +82,7 @@ private constructor(
                         .set(ITEM.VERSION, item.version)
                         .set(ITEM.UPDATED_AT, updatedAt)
                         .set(ITEM.FIRST_SEEN_AT, now)
+                        .set(ITEM.CHANGED_AT, now)
                         .execute()
                 } else if (
                     headChanged(known.value1(), known.value2(), known.value3(), known.value4(), item, updatedAt)
@@ -84,6 +92,7 @@ private constructor(
                         .set(ITEM.TITLE, item.title)
                         .set(ITEM.VERSION, item.version)
                         .set(ITEM.UPDATED_AT, updatedAt)
+                        .set(ITEM.CHANGED_AT, now)
                         .where(ITEM.ITEM_ID.eq(item.id))
                         .execute()
                 }

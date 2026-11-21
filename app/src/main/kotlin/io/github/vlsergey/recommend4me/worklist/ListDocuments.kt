@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import java.math.BigDecimal
+import java.math.MathContext
 import org.apache.lucene.document.BinaryDocValuesField
 import org.apache.lucene.document.Document
 import org.apache.lucene.document.DoubleDocValuesField
@@ -110,13 +112,25 @@ object ListDocuments {
         return doc
     }
 
-    /** The values of [values] as the fields updated in place. */
+    /** The values of [values] as the fields updated in place, each to its [DIGITS] ([kept]). */
     fun valueFields(values: RowValues): Array<Field> =
         arrayOf(
             NumericDocValuesField(GRADED, if (values.graded) 1L else 0L),
             NumericDocValuesField(MARKED, if (values.marked) 1L else 0L),
-            DoubleDocValuesField(PREDICTION, values.prediction ?: Double.NEGATIVE_INFINITY),
-            DoubleDocValuesField(INTEREST, values.interest ?: Double.NEGATIVE_INFINITY),
-            DoubleDocValuesField(EXPECTED, values.expected ?: Double.NEGATIVE_INFINITY),
+            DoubleDocValuesField(PREDICTION, kept(values.prediction) ?: Double.NEGATIVE_INFINITY),
+            DoubleDocValuesField(INTEREST, kept(values.interest) ?: Double.NEGATIVE_INFINITY),
+            DoubleDocValuesField(EXPECTED, kept(values.expected) ?: Double.NEGATIVE_INFINITY),
         )
+
+    /**
+     * A prediction, a chance, an expectation as the index keeps it: to its first [DIGITS] (owner, 2026-11-21: "the
+     * grade and the interest are three digits") — a change beyond them is none of the list's, its document not written
+     * for it ([io.github.vlsergey.recommend4me.model.PredictionRepository.write]).
+     */
+    fun kept(value: Double?): Double? =
+        if (value == null || value == 0.0 || !value.isFinite()) value
+        else BigDecimal(value).round(MathContext(DIGITS)).toDouble()
+
+    /** The digits a value of the list is kept to. */
+    const val DIGITS = 3
 }

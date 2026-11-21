@@ -143,6 +143,7 @@ flowchart LR
     o_start --> w_searchAuthorDuplicates
     o_start --> w_searchDuplicates
     o_start --> w_writeListIndex
+    o_start --> w_writeWorkValues
     o_universes_languages --> e_WorkChangeEvent
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
@@ -200,12 +201,12 @@ flowchart LR
     e_WorkFieldFillEvent --> w_predictWorks
     e_WorkGradeChangeEvent --> w_fitGradeModels
     e_WorkGradeChangeEvent --> w_nameTags
-    e_WorkGradeChangeEvent --> w_writeWorkValues
+    e_WorkGradeChangeEvent --> w_writeListIndex
     e_WorkGroupChangeEvent --> w_eraseDifferentInSeries
     e_WorkGroupChangeEvent --> w_makeWorkManners
     e_WorkGroupChangeEvent --> w_writeListIndex
     e_WorkInterestChangeEvent --> w_fitGradeModels
-    e_WorkInterestChangeEvent --> w_writeWorkValues
+    e_WorkInterestChangeEvent --> w_writeListIndex
     e_WorkMannerChangeEvent --> w_fitGradeModels
     e_WorkPredictionChangeEvent --> w_writeWorkValues
     e_WorkPredictionFillEvent --> w_indexWorkTexts

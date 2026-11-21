@@ -46,6 +46,7 @@ class WorkMembership(private val db: DSLContext) {
         giveWord(tx, from, into, newestOnly = true)
         keepOneOfSingle(tx, into, single)
         SeriesGroups.merged(tx, from, into)
+        WorkChanges.changed(tx, listOf(into), now)
         tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(from)).execute()
     }
 
@@ -188,6 +189,7 @@ class WorkMembership(private val db: DSLContext) {
         }
         if (mark != null) putInterest(tx, id, mark.interesting!!, mark.markedAt!!)
         giveWord(tx, old, id, newestOnly = false)
+        WorkChanges.changed(tx, listOf(old, id), now)
         id
     }
 
@@ -210,7 +212,10 @@ class WorkMembership(private val db: DSLContext) {
             .execute()
         val left = members(tx, id).firstOrNull()
         if (left == null) tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(id)).execute()
-        else if (current != null) giveGrade(tx, id, left, current)
+        else {
+            if (current != null) giveGrade(tx, id, left, current)
+            WorkChanges.changed(tx, listOf(id), Instant.now())
+        }
     }
 
     /** A grade of a work: what is kept of it whatever item it stands through. */

@@ -13,6 +13,7 @@ import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
+import org.apache.lucene.search.TermQuery
 import org.apache.lucene.store.FSDirectory
 
 /**
@@ -62,12 +63,15 @@ class ListIndex(dir: Path) : AutoCloseable {
         gone.forEach { writer.deleteDocuments(Term(KEY, it.toString())) }
     }
 
-    /** The documents of the [source] whose items are not among [present] removed. */
-    fun keepOnly(source: String, present: Set<String>) {
-        keysWith(Term(SOURCE, source))
-            .filter { ItemKey.parse(it).id !in present }
-            .forEach { writer.deleteDocuments(Term(KEY, it)) }
+    /** The documents of the [source] whose items are not among [present] removed: how many. */
+    fun keepOnly(source: String, present: Set<String>): Int {
+        val gone = keysWith(Term(SOURCE, source)).filter { ItemKey.parse(it).id !in present }
+        gone.forEach { writer.deleteDocuments(Term(KEY, it)) }
+        return gone.size
     }
+
+    /** How many documents of the [source] there are, as written so far. */
+    fun documentsOf(source: String): Int = written { IndexSearcher(it).count(TermQuery(Term(SOURCE, source))) }
 
     /** The [block] of a reading of the index as written so far, committed or not. */
     fun <T> written(block: (DirectoryReader) -> T): T = DirectoryReader.open(writer).use(block)
