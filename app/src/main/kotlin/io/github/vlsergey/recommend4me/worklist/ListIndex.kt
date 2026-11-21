@@ -69,9 +69,6 @@ class ListIndex(dir: Path) : AutoCloseable {
             .forEach { writer.deleteDocuments(Term(KEY, it)) }
     }
 
-    /** The keys of the items of works of several items as written so far: those a regrouping may have moved. */
-    fun linked(): List<ItemKey> = keysWith(Term(ListDocuments.LINKED, ListDocuments.YES)).map(ItemKey::parse)
-
     /** The [block] of a reading of the index as written so far, committed or not. */
     fun <T> written(block: (DirectoryReader) -> T): T = DirectoryReader.open(writer).use(block)
 

@@ -103,9 +103,9 @@ internal object ListRows {
             if (ids == null) s.items.keys()
             else s.items.heads(ids).values.map { ItemKeys(it.id, it.version, it.updatedAt, it.firstSeenAt) }
         if (heads.isEmpty()) return emptyList()
-        val ratings = s.ratings.all().groupBy { it.itemId }
+        val ratings = (if (ids == null) s.ratings.all() else s.ratings.ofItems(ids)).groupBy { it.itemId }
         val predicted = if (ids == null) type.predictions.predicted(s.id) else type.predictions.predicted(s.id, ids)
-        val marks = s.interest.all()
+        val marks = if (ids == null) s.interest.all() else s.interest.ofItems(ids)
         val corrections =
             if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
         val facets = facetsOf(s, ids, model, corrections)

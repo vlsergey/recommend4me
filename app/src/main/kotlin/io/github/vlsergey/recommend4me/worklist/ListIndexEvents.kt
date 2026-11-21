@@ -90,5 +90,11 @@ internal class ListIndexEvents(
     fun predictionsChanged(event: WorkPredictionChangeEvent) = values.change(event.type, "models", event.keys)
 
     @EventListener
-    fun regrouped(event: WorkGroupChangeEvent) = indexing.change(event.type, "regrouped") { regrouped = true }
+    fun regrouped(event: WorkGroupChangeEvent) {
+        // Of works put in a series or out of it, of authors, no item's work moved
+        if (event.items.isEmpty()) return
+        indexing.change(event.type, "regrouped") {
+            event.items.forEach { rows.getOrPut(it.source) { HashSet() } += it.id }
+        }
+    }
 }

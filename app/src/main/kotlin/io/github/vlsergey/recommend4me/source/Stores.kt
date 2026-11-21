@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
@@ -258,7 +259,9 @@ class SourceStore(
 
     /** The normalized authors: the authors of every site bound to them. */
     val authors =
-        AuthorRepository(databases.dictionaries.dsl) { events.publishEvent(WorkGroupChangeEvent(contentType.id)) }
+        AuthorRepository(databases.dictionaries.dsl) {
+            events.publishEvent(WorkGroupChangeEvent(contentType.id, emptyList()))
+        }
 
     /**
      * The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the
@@ -297,13 +300,13 @@ class TypeStore(
         get() = type.id
 
     /** Told of the user's every word that puts works, series or authors together or apart. */
-    private val regrouped = { events.publishEvent(WorkGroupChangeEvent(type.id)) }
+    private val regrouped = { items: Collection<ItemKey> -> events.publishEvent(WorkGroupChangeEvent(type.id, items)) }
 
     /** The normalized works of the type's items. */
     val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })
 
     /** The works the user said to be one series. */
-    val seriesGroups = SeriesGroups(databases.dictionaries.dsl, regrouped)
+    val seriesGroups = SeriesGroups(databases.dictionaries.dsl) { regrouped(emptyList()) }
 
     val links =
         TypeLinkRepository(
@@ -318,7 +321,7 @@ class TypeStore(
         UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
-    val authors = AuthorRepository(databases.dictionaries.dsl, regrouped)
+    val authors = AuthorRepository(databases.dictionaries.dsl) { regrouped(emptyList()) }
 
     val models = ModelRepository(databases.model(type.id))
     val predictions = PredictionRepository(databases.model(type.id))

@@ -35,19 +35,13 @@ class ListWaiting {
     /** The sources every document of which is made anew. */
     val whole = HashSet<String>()
 
-    /** Whether works were merged or split. */
-    var regrouped = false
-
     /** What waits as the queue keeps it ([TaskKeys.want]): a key of every name. */
     fun keys(): List<String> =
-        rows.flatMap { (source, ids) -> ids.map { "$ROW$SEP$source$SEP$it" } } +
-            whole.map { "$WHOLE$SEP$it" } +
-            listOfNotNull(REGROUPED.takeIf { regrouped })
+        rows.flatMap { (source, ids) -> ids.map { "$ROW$SEP$source$SEP$it" } } + whole.map { "$WHOLE$SEP$it" }
 
     companion object {
         private const val ROW = "row"
         private const val WHOLE = "whole"
-        private const val REGROUPED = "regrouped"
         private const val SEP = '\t'
 
         /** What waits of the [keys] the queue keeps ([keys]). */
@@ -58,7 +52,6 @@ class ListWaiting {
                     when (parts[0]) {
                         ROW -> rows.getOrPut(parts[1]) { HashSet() } += parts[2]
                         WHOLE -> whole += parts[1]
-                        REGROUPED -> regrouped = true
                     }
                 }
             }
@@ -69,8 +62,8 @@ class ListWaiting {
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
  * every content type, after a quiet, of every change since the last one at once:
  * - the documents of the items a change names made anew, of every item of their works: their data, the user's answers
- *   and corrections, the values the models gave them as the index kept them;
- * - of a regrouping of the works, of every item of a work of several before and after;
+ *   and corrections, the values the models gave them as the index kept them — of two works merged or taken apart, every
+ *   item of them before ([io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent.items]);
  * - of a source whole, every item, those gone removed; an index of another format made anew whole. Of every document
  *   made anew every stage of the tasks over the works is to be done again, the vectors of the site's text fields first:
  *   told ([WorkDocumentWriteEvent]).
@@ -142,7 +135,7 @@ class ListIndexing(
         val anew = !index.current()
         if (anew) index.clear()
         val whole = if (anew) type.sources.map { it.id }.toSet() else w.whole
-        val named = named(index, clusters, w, whole)
+        val named = named(clusters, w, whole)
         val gathered = System.currentTimeMillis()
         var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
         val from = HashMap<WorkScope, TaskCursor>()
@@ -215,20 +208,15 @@ class ListIndexing(
 
     /**
      * The items whose documents are made anew, by source, of a source not made anew [whole]: those the changes named
-     * with every item of their works, and of a regrouping every item of a work of several before and after it.
+     * with every item of their works.
      */
     private fun named(
-        index: ListIndex,
         clusters: WorkClusters,
         w: ListWaiting,
         whole: Set<String>,
     ): Map<String, Set<String>> {
         val keys = HashSet<ItemKey>()
         w.rows.forEach { (source, ids) -> ids.forEach { keys += clusters.members(ItemKey(source, it)) } }
-        if (w.regrouped) {
-            keys += index.linked()
-            clusters.linkedWorks().forEach(keys::addAll)
-        }
         return keys.filter { it.source !in whole }.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
     }
 
