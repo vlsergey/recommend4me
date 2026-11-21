@@ -136,7 +136,7 @@ class WorkFields(
             items.groupBy({ it.key.source }, { it.key.id }).entries.sumOf { (source, ids) ->
                 val s = type.source(source) ?: return@sumOf 0
                 val known = EveryItemFacets(s.items.facetsOf(ids), s.corrections.facetsOf(ids))
-                write(type, s, index, clusters, modelValues.of(s, ids, known), ids, started)
+                write(s, index, clusters, modelValues.of(s, ids, known), ids, started)
             }
         WorkStage.FIELDS.done(index, items.map { it.key }, started)
         index.commit()
@@ -157,7 +157,6 @@ class WorkFields(
      * was —: how many.
      */
     private fun write(
-        type: TypeStore,
         s: SourceStore,
         index: ListIndex,
         clusters: WorkClusters,
@@ -169,8 +168,9 @@ class WorkFields(
         val other = ids.filter { id -> asSets(fresh[id]) != asSets(kept[id]) }
         if (other.isNotEmpty()) {
             val stages = WorkStages.of(index, s.id, other)
+            val predicted = index.written { ListPredictions.of(it, s.id, other) }
             index.replace(
-                ListRows.read(type, s, other, clusters, fresh) {
+                ListRows.read(s, other, clusters, fresh, predicted) {
                     WorkStages(stages[it]?.vectorsAt ?: 0, at, 0, stages[it]?.textsAt ?: 0)
                 }
             )

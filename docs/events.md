@@ -62,7 +62,6 @@ flowchart LR
     e_WorkGroupChangeEvent["WorkGroupChangeEvent"]
     e_WorkInterestChangeEvent["WorkInterestChangeEvent"]
     e_WorkMannerChangeEvent["WorkMannerChangeEvent"]
-    e_WorkPredictionChangeEvent["WorkPredictionChangeEvent"]
     e_WorkPredictionFillEvent["WorkPredictionFillEvent"]
     e_WorkTextVectorFillEvent["WorkTextVectorFillEvent"]
     w_analyseSiteItemPictures{{"analyseSiteItemPictures"}}
@@ -143,7 +142,6 @@ flowchart LR
     o_start --> w_searchAuthorDuplicates
     o_start --> w_searchDuplicates
     o_start --> w_writeListIndex
-    o_start --> w_writeWorkValues
     o_universes_languages --> e_WorkChangeEvent
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
@@ -208,7 +206,6 @@ flowchart LR
     e_WorkInterestChangeEvent --> w_fitGradeModels
     e_WorkInterestChangeEvent --> w_writeListIndex
     e_WorkMannerChangeEvent --> w_fitGradeModels
-    e_WorkPredictionChangeEvent --> w_writeWorkValues
     e_WorkPredictionFillEvent --> w_indexWorkTexts
     e_WorkTextVectorFillEvent --> w_fillWorkFields
     w_analyseSiteItemPictures --> e_SiteItemPictureAnalysisEvent
@@ -222,14 +219,12 @@ flowchart LR
     w_fillWorkFields --> e_RatedWorkValueFillEvent
     w_fillWorkFields --> e_WorkFieldFillEvent
     w_fitFieldModels --> e_FieldModelFitEvent
-    w_fitGradeModels --> e_WorkPredictionChangeEvent
     w_fitGradeModels --> w_predictWorks
     w_keepOutWorks --> e_SiteItemRemoveEvent
     w_makeSiteItemSetVectors --> e_SiteItemSetVectorChangeEvent
     w_makeSiteItemSetVectors --> w_fitSetDirections
     w_makeWorkManners --> e_WorkMannerChangeEvent
     w_nameTags --> w_countTags
-    w_predictWorks --> e_WorkPredictionChangeEvent
     w_predictWorks --> e_WorkPredictionFillEvent
     w_searchFieldModelAnew --> w_fitFieldModels
     w_writeListIndex --> e_WorkDocumentWriteEvent
@@ -260,19 +255,19 @@ flowchart LR
 | `chooseUniverseEntry` | WorkChangeEvent | — |
 | `completeFacet` | WorkFieldChangeEvent | — |
 | `correctFacet` | TagChangeEvent, WorkChangeEvent, WorkFieldChangeEvent | nameTags |
-| `correctField` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkPredictionChangeEvent | fitGradeModels |
+| `correctField` | SiteItemTextVectorChangeEvent, WorkChangeEvent | fitGradeModels, writeWorkValues |
 | `createTagAbove` | TagChangeEvent, WorkChangeEvent | nameTags |
 | `fitPairModels` | — | fitDuplicateModel |
 | `getExplanation` | — | fitHeldOutModel |
 | `getHeldOut` | — | fitHeldOutModel |
-| `getItem` | SiteItemTextVectorChangeEvent, WorkPredictionChangeEvent | — |
-| `getPage` | SiteItemTextVectorChangeEvent, WorkPredictionChangeEvent | — |
+| `getItem` | SiteItemTextVectorChangeEvent | writeWorkValues |
+| `getPage` | SiteItemTextVectorChangeEvent | writeWorkValues |
 | `getPicture` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `giveMatchFeedback` | SiteItemMarkChangeEvent | — |
 | `ignoreTag` | TagChangeEvent | — |
 | `judgeSearch` | SearchJudgmentEvent | — |
 | `keepOutTag` | — | keepOutWorks |
-| `linkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkInterestChangeEvent, WorkPredictionChangeEvent | fitGradeModels |
+| `linkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkInterestChangeEvent | fitGradeModels, writeWorkValues |
 | `listHierarchyOffers` | — | nameTags |
 | `listJobs` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `markInterest` | WorkInterestChangeEvent | — |
@@ -284,7 +279,7 @@ flowchart LR
 | `nameUniverse` | FandomRelationChangeEvent, WorkChangeEvent | renameFandoms |
 | `nameUniverseEntry` | WorkChangeEvent | — |
 | `rateItem` | WorkGradeChangeEvent | — |
-| `refreshItem` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemTextVectorChangeEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent, WorkPredictionChangeEvent | — |
+| `refreshItem` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemTextVectorChangeEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | writeWorkValues |
 | `refreshTagEntries` | TagChangeEvent, WorkChangeEvent | — |
 | `refreshUniverse` | WorkChangeEvent | — |
 | `relateTags` | TagChangeEvent, WorkChangeEvent | nameTags |
@@ -304,9 +299,9 @@ flowchart LR
 | `unanswerMarking` | WorkFieldChangeEvent | — |
 | `uncompleteFacet` | WorkFieldChangeEvent | — |
 | `uncorrectFacet` | WorkFieldChangeEvent | — |
-| `uncorrectField` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkPredictionChangeEvent | fitGradeModels |
+| `uncorrectField` | SiteItemTextVectorChangeEvent, WorkChangeEvent | fitGradeModels, writeWorkValues |
 | `undoDuplicateWord` | WorkGradeChangeEvent, WorkInterestChangeEvent | fitDuplicateModel |
-| `unlinkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkPredictionChangeEvent | fitGradeModels |
+| `unlinkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent | fitGradeModels, writeWorkValues |
 | `unmarkInterest` | WorkInterestChangeEvent | — |
 | `unmarkPicture` | SiteItemMarkChangeEvent | — |
 | `unmarkReview` | SiteItemMarkChangeEvent | — |

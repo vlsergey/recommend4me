@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
@@ -43,6 +44,7 @@ class Recommendations(
     private val fitting: ModelFitting,
     private val predictions: WorkPredictions,
     private val scoring: Scoring,
+    private val indexes: ListIndexes,
 ) {
     private val trainingNow = ConcurrentHashMap.newKeySet<String>()
     private val pending = ConcurrentHashMap<String, PendingTraining>()
@@ -161,7 +163,10 @@ class Recommendations(
                 // The rated works scored at once, of the works the training read; every work by the pass of the
                 // expectations
                 tasks.progress(SCORING_FROM, TaskStep.SCORE_RATED)
-                if (model != null) scoring.score(catalogue, model, interest)
+                if (model != null) {
+                    scoring.score(catalogue, model, interest)
+                    indexes.of(typeId).commit()
+                }
                 predictions.begin(type, "trained")
             } finally {
                 trainingNow -= typeId

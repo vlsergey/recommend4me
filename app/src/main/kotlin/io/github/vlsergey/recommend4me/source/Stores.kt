@@ -28,7 +28,6 @@ import io.github.vlsergey.recommend4me.mark.MarkRepository
 import io.github.vlsergey.recommend4me.model.AverageWorkRepository
 import io.github.vlsergey.recommend4me.model.HeldOutRepository
 import io.github.vlsergey.recommend4me.model.ModelRepository
-import io.github.vlsergey.recommend4me.model.PredictionRepository
 import io.github.vlsergey.recommend4me.model.ScoreSweepRepository
 import io.github.vlsergey.recommend4me.part.PartRepository
 import io.github.vlsergey.recommend4me.picture.PictureFiles
@@ -325,7 +324,6 @@ class TypeStore(
     val authors = AuthorRepository(databases.dictionaries.dsl, regrouped)
 
     val models = ModelRepository(databases.model(type.id))
-    val predictions = PredictionRepository(databases.model(type.id))
 
     /** The average work as the last sweep of the scores counted it: what a training reads instead of every work. */
     val averageWork = AverageWorkRepository(databases.model(type.id))

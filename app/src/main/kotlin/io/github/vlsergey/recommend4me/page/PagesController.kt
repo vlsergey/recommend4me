@@ -99,10 +99,11 @@ class PagesController(
         // Every item of the work read once, its chances made now in memory — one chain of the models a source — for
         // the suggestions and the values both, as the screen of a work reads them
         val members = cards.membersRead(type, clusters.members(key), null, laps.within("chances "))
-        scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
+        val predicted = scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
         laps.lap("expectation")
         val summary =
-            cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull() ?: return null
+            cards.cards(type, listOf(key), clusters = clusters, members = members, predicted = predicted).firstOrNull()
+                ?: return null
         laps.lap("card")
         val chances = members.chances[key].orEmpty()
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }

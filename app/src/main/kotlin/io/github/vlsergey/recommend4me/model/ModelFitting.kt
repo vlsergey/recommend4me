@@ -5,6 +5,9 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.scorer.FittedScorer
 import io.github.vlsergey.recommend4me.scorer.Scorer
+import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -18,7 +21,11 @@ private val log = LoggerFactory.getLogger(ModelFitting::class.java)
  * models that had not seen the graded works say of them.
  */
 @Component
-class ModelFitting(private val plugins: Plugins, private val json: JsonMapper) {
+class ModelFitting(
+    private val plugins: Plugins,
+    private val json: JsonMapper,
+    private val indexes: ListIndexes,
+) {
 
     /** The model of the grades fitted on the [catalogue] and kept; null without a scorer, or with too few grades. */
     fun grades(catalogue: Catalogue): TrainedModel? {
@@ -28,9 +35,17 @@ class ModelFitting(private val plugins: Plugins, private val json: JsonMapper) {
         val p = if (scorer == null) null else Prepared.grades(catalogue)
         return when {
             scorer == null -> null.also { log.warn("{}: no scorer plugin: the works are not ranked", type.id) }
-            p == null -> null.also { type.models.forget() }
+            p == null -> null.also { forget(type) }
             else -> grades(catalogue, scorer, p, began)
         }
+    }
+
+    /** The models of the [type] forgotten, and every prediction they made of its works: of too few grades. */
+    private fun forget(type: TypeStore) {
+        type.models.forget()
+        val index = indexes.of(type.id)
+        ListPredictions.forget(index, type)
+        index.commit()
     }
 
     /** The model of the grades fitted by [scorer] on the rows [p] of the [catalogue], and kept. */

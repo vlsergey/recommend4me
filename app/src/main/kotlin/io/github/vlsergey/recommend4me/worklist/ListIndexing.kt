@@ -13,6 +13,9 @@ import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
+import org.apache.lucene.index.Term
+import org.apache.lucene.search.IndexSearcher
+import org.apache.lucene.search.TermQuery
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -120,7 +123,7 @@ class ListIndexing(
         val from = HashMap<WorkScope, TaskCursor>()
         named.forEach { (sourceId, ids) ->
             type.source(sourceId)?.let { s ->
-                ids.chunked(PORTION).forEach { written += writeNamed(type, s, it.toSet(), index, clusters, from) }
+                ids.chunked(PORTION).forEach { written += writeNamed(s, it.toSet(), index, clusters, from) }
             }
         }
         val gone = type.sources.filter { it.id !in whole }.sumOf { removeGone(it, index) }
@@ -150,24 +153,25 @@ class ListIndexing(
      * has items: an item taken out of the library, nothing of it left to be dated —; how many.
      */
     private fun removeGone(s: SourceStore, index: ListIndex): Int {
-        if (index.documentsOf(s.id) <= s.items.count()) return 0
+        val documents = index.written { IndexSearcher(it).count(TermQuery(Term(ListDocuments.SOURCE, s.id))) }
+        if (documents <= s.items.count()) return 0
         return index.keepOnly(s.id, s.items.keys().mapTo(HashSet()) { it.id })
     }
 
     /**
      * The documents of the items [ids] of the source [s] made anew, those of the items gone removed: the values the
-     * models gave them as the index kept them, every stage to be done again — of each scope from the first of them on,
-     * kept in [from]. How many were written.
+     * models gave them and their predictions as the index kept them, every stage to be done again — of each scope from
+     * the first of them on, kept in [from]. How many were written.
      */
     private fun writeNamed(
-        type: TypeStore,
         s: SourceStore,
         ids: Set<String>,
         index: ListIndex,
         clusters: WorkClusters,
         from: MutableMap<WorkScope, TaskCursor>,
     ): Int {
-        val rows = ListRows.read(type, s, ids, clusters, ListModelValues.of(index, s.id, ids))
+        val predicted = index.written { ListPredictions.of(it, s.id, ids) }
+        val rows = ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted)
         val found = rows.mapTo(HashSet()) { it.key.id }
         index.replace(rows, ids.filter { it !in found }.map { ItemKey(s.id, it) })
         rows.forEach { r ->
@@ -180,8 +184,8 @@ class ListIndexing(
 
     /**
      * Every document of the source [sourceId] made anew, those of the items gone removed: how many were written. The
-     * values the models gave its items as the index kept them — none of an index made [anew] — every stage of the tasks
-     * over the works to be done again ([WorkFields] first).
+     * values the models gave its items and their predictions as the index kept them — none of an index made [anew] —
+     * every stage of the tasks over the works to be done again ([WorkFields] first).
      */
     private fun writeWhole(
         type: TypeStore,
@@ -192,7 +196,8 @@ class ListIndexing(
     ): Int {
         val s = type.source(sourceId) ?: return 0
         val kept = if (anew) emptyMap() else ListModelValues.ofEvery(index, sourceId)
-        val rows = ListRows.read(type, s, null, clusters, kept)
+        val predicted = if (anew) emptyMap() else index.written { ListPredictions.ofEvery(it, sourceId) }
+        val rows = ListRows.read(s, null, clusters, kept, predicted)
         index.replace(rows)
         index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
         return rows.size

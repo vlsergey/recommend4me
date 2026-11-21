@@ -199,21 +199,18 @@ class WorkPredictions(
 
     /**
      * The other works all expected, the last: of a pass by a new model, the average work counted kept for the next
-     * training, the predictions of the items gone removed, the pass forgotten. Nothing of no pass under way.
+     * training, the pass forgotten. Nothing of no pass under way.
      */
     private fun finish(type: TypeStore) {
         val state = type.sweep.load() ?: return
-        val gone = scoring.forgetGone(type)
         if (state.counted != null) type.averageWork.save(counted(type, state).made(), state.basis)
         type.sweep.forget()
         log.info(
-            "{}: every work expected in {} s since the pass began: {} predictions made, {} of them changed, " +
-                "{} of items gone removed",
+            "{}: every work expected in {} s since the pass began: {} predictions made, {} of them changed",
             type.id,
             Duration.between(state.began, Instant.now()).toSeconds(),
             state.scored,
             state.changed,
-            gone,
         )
     }
 

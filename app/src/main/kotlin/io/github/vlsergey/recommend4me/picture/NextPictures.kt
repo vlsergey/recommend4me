@@ -3,12 +3,14 @@ package io.github.vlsergey.recommend4me.picture
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 
 /**
  * The next pictures of every source to download and analyse, the sources that have work sharing it: of each, the graded
  * works' first, then by prediction, then the newest.
  */
-internal class NextPictures(private val stores: Stores) {
+internal class NextPictures(private val stores: Stores, private val indexes: ListIndexes) {
 
     /** The next pictures, [limit] at most, but those of [skip] (source, item, position): those in flight. */
     fun of(encoder: ImageEncoder, limit: Int, skip: Set<Pair<String, Pair<String, Int>>>): List<PictureJob> {
@@ -35,7 +37,12 @@ internal class NextPictures(private val stores: Stores) {
             if (graded.size >= limit) emptyList()
             else {
                 val todo = s.pictures.queue.itemsWithPending(encoder.id) - best.keys
-                val predictions = stores.typeOf(s.id).predictions.scores(s.id)
+                // As the index of the list keeps them
+                val predictions =
+                    indexes
+                        .of(s.type)
+                        .searching { ListPredictions.ofEvery(it.indexReader, s.id) }
+                        .mapValues { it.value.score }
                 val order = todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
                 s.pictures.queue.pendingOf(order, encoder.id, emptySet(), limit - graded.size)
             }

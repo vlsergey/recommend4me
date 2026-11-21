@@ -1,12 +1,18 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
-import org.springframework.context.ApplicationEventPublisher
+import io.github.vlsergey.recommend4me.worklist.ListDocuments
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
+import java.time.Instant
 import org.springframework.stereotype.Component
 
 /**
@@ -20,47 +26,26 @@ class Scoring(
     private val works: Works,
     private val likenesses: Likenesses,
     private val kept: KeptModels,
-    private val events: ApplicationEventPublisher,
+    private val indexes: ListIndexes,
+    private val tasks: Tasks,
 ) {
-
-    /**
-     * The works of the [catalogue] — a portion of every work ([EveryWork.portions]) — scored by the [model] and the
-     * model of [interest], each work's prediction written to every item of it where it changed
-     * ([PredictionRepository.write]) and told: their vectors read a chunk at a time and let go after it. Answers how
-     * many items were scored, and of how many the prediction changed.
-     */
-    fun score(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?): PortionScored {
-        val predicted = scored(catalogue, model, interest)
-        val written = catalogue.type.predictions.write(predicted)
-        if (written.isNotEmpty()) events.publishEvent(WorkPredictionChangeEvent(catalogue.type.id, written))
-        // The highest a work stands as kept: a score close to the one kept leaves that one
-        // ([PredictionRepository.STEP])
-        val highest = predicted.maxOfOrNull { it.second.score }?.plus(PredictionRepository.STEP)
-        return PortionScored(predicted.size, written.size, highest)
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        tasks.resumption.resumes(WRITE) { left, reason -> left.work.item?.let { planWrite(ItemKey.parse(it), reason) } }
     }
 
     /**
-     * The predictions of the items no longer of the [type] removed — of a source gone, of an item gone from its source:
-     * the predictions looked over a [PAGE] at a time, each page's ids asked of their source. Answers how many.
+     * The works of the [catalogue] — a portion of every work ([EveryWork.portions]) — scored by the [model] and the
+     * model of [interest], each work's prediction written to every item of it in the index of the list where it changed
+     * as the index keeps it ([ListPredictions.write]), not committed: their vectors read a chunk at a time and let go
+     * after it. Answers how many items were scored, and of how many the prediction changed.
      */
-    fun forgetGone(type: TypeStore): Int {
-        var gone = 0
-        type.predictions.sources().forEach { source ->
-            val s = type.source(source)
-            var after: String? = null
-            do {
-                val ids = type.predictions.idsAfter(source, after, PAGE)
-                after = ids.lastOrNull()
-                val left = s?.items?.keysOf(ids)?.mapTo(HashSet()) { it.id }.orEmpty()
-                val removed = ids.filter { it !in left }
-                if (removed.isNotEmpty()) {
-                    type.predictions.remove(source, removed)
-                    events.publishEvent(WorkPredictionChangeEvent(type.id, removed.map { ItemKey(source, it) }))
-                    gone += removed.size
-                }
-            } while (ids.size == PAGE)
-        }
-        return gone
+    fun score(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?): PortionScored {
+        val predicted = scored(catalogue, model, interest)
+        val written = ListPredictions.write(indexes.of(catalogue.type.id), catalogue.type, predicted)
+        // The highest a work stands as the index keeps it: every one of the portion kept so, written or not
+        val highest = predicted.maxOfOrNull { ListDocuments.kept(it.second.score)!! }
+        return PortionScored(predicted.size, written.size, highest)
     }
 
     /** The prediction of every item of the works of the [catalogue], a chunk of them at a time side by side. */
@@ -93,18 +78,40 @@ class Scoring(
     }
 
     /**
-     * Re-scores the work of one item by the models kept, after its data changed outside a training — of a work the user
-     * opens, as its page is read ([read]: its items and chances read already): the models untouched, the prediction
-     * written where it changed.
+     * The work of one item scored by the models kept, after its data changed outside a training — of a work the user
+     * opens, as its page is read ([read]: its items and chances read already): the models untouched; its prediction, of
+     * every item of the work — what its screen shows now —, written to the index of the list by the queue after
+     * ([planWrite]): a request writes no index. None of no model.
      */
-    fun scoreItem(key: ItemKey, read: ReadWork? = null) {
+    fun scoreItem(key: ItemKey, read: ReadWork? = null): Map<ItemKey, Predicted> {
+        val made = predictionOf(key, read) ?: return emptyMap()
+        planWrite(key, "predicted")
+        return made
+    }
+
+    /** The work of one item scored by the models kept: of every item of it, its prediction; none of no model. */
+    private fun predictionOf(key: ItemKey, read: ReadWork?): Map<ItemKey, Predicted>? {
         val type = stores.typeOf(key.source)
-        val model = kept.load(type) ?: return
-        val input = inputOf(type, key, likenesses.stored(type), read) ?: return
+        val (model, input) =
+            kept.load(type)?.let { m -> inputOf(type, key, likenesses.stored(type), read)?.let { m to it } }
+                ?: return null
         val prediction = Predicted(model.score(input), kept.loadInterest(type)?.chances(listOf(input))?.single())
         val members = read?.members ?: works.ofKeys(type, listOf(key)).members(key)
-        val written = type.predictions.write(members.map { it to prediction })
-        if (written.isNotEmpty()) events.publishEvent(WorkPredictionChangeEvent(type.id, written))
+        return members.associateWith { prediction }
+    }
+
+    /**
+     * The prediction of the work of [key] made again and written to the index of the list, in the queue — the work the
+     * user opened, its prediction shown at once —, for the [reason].
+     */
+    private fun planWrite(key: ItemKey, reason: String) {
+        val type = stores.typeOf(key.source)
+        tasks.plan(Task(WRITE, type = type.id, item = key.toString()), Instant.now(), reason) {
+            val made = predictionOf(key, null) ?: return@plan
+            val index = indexes.of(type.id)
+            ListPredictions.write(index, type, made.toList())
+            index.commit()
+        }
     }
 
     /** The input of the work of one item as the model reads it now; [stored]: the type's likeness to the marks. */
@@ -133,8 +140,8 @@ class Scoring(
     private companion object {
         const val SCORE_CHUNK = 1024
 
-        /** The predictions looked over at a time for the items gone: the size of a query, not meaning. */
-        const val PAGE = 1000
+        /** The task of the queue writing the prediction of a work the user opened. */
+        val WRITE = TaskKind.WRITE_WORK_VALUES
     }
 }
 

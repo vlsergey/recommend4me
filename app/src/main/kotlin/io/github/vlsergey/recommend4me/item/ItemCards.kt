@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.laps.Laps
+import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.search.SearchFit
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -27,6 +28,7 @@ import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import java.time.ZoneOffset
 import org.springframework.stereotype.Component
 
@@ -52,6 +54,10 @@ class ItemCards(
     private val suggestions: FacetSuggestions,
     private val indexes: ListIndexes,
 ) {
+
+    /** The predictions of the items [ids] of the [source] as the index of the list of the [type] keeps them. */
+    fun predictions(type: TypeStore, source: String, ids: Collection<String>): Map<String, Predicted> =
+        indexes.of(type.id).searching { ListPredictions.of(it.indexReader, source, ids) }
 
     /** The grades of the items [ids] of a source at their [versions]. */
     fun graded(ratings: List<Rating>, versions: Map<String, String>): Map<String, Graded> =
@@ -238,6 +244,11 @@ class ItemCards(
          * the values the list keeps of them ([listRead]).
          */
         members: MembersRead? = null,
+        /**
+         * The predictions made now of the works of [keys] — of a work the user opens
+         * ([io.github.vlsergey.recommend4me.model.Scoring.scoreItem]).
+         */
+        predicted: Map<ItemKey, Predicted> = emptyMap(),
     ): List<ItemSummary> {
         val out = HashMap<ItemKey, ItemSummary>()
         val all = keys.flatMap { clusters.members(it) }.distinct()
@@ -255,6 +266,7 @@ class ItemCards(
                 headsOf(all),
                 picturesOf(all),
                 members ?: listRead(type, all),
+                predicted,
                 matches,
                 places,
                 judged,
@@ -307,6 +319,8 @@ class ItemCards(
         val pictures: Map<ItemKey, Pair<Int, Boolean>>,
         /** Every item of the works shown: its site's values and its chances of the facets on a card. */
         val members: MembersRead,
+        /** The predictions made now of the works shown, over those the index of the list keeps. */
+        val predicted: Map<ItemKey, Predicted>,
         val matches: Map<ItemKey, io.github.vlsergey.recommend4me.search.SearchMatch>,
         val places: Map<ItemKey, TextPlace>,
         val judged: Map<ItemKey, SearchFit>,
@@ -350,7 +364,9 @@ class ItemCards(
         private val versions =
             ids.mapNotNull { id -> read.heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
         private val graded = graded(ratings, versions)
-        private val predicted = type.predictions.predicted(source, ids)
+        // As the index of the list keeps them, but those made now of the work opened
+        private val predicted =
+            predictions(type, source, ids) + read.predicted.filterKeys { it.source == source }.mapKeys { it.key.id }
         private val heldOut = type.heldOut.scores(source, ids)
         private val interest = store.interest.ofItems(ids)
         private val signals = store.signals.all()

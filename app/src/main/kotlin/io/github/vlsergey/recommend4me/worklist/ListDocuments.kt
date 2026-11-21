@@ -32,6 +32,9 @@ object ListDocuments {
     const val GRADED = "graded"
     const val PREDICTION = "prediction"
     const val INTEREST = "interest"
+
+    /** The chance of interest by the model of interest, the user's mark aside ([RowValues.modelInterest]). */
+    const val MODEL_INTEREST = "modelInterest"
     const val EXPECTED = "expected"
 
     /** Whether the user marked the item's work ([RowValues.marked]): 1 or 0, updated in place. */
@@ -119,13 +122,14 @@ object ListDocuments {
             NumericDocValuesField(MARKED, if (values.marked) 1L else 0L),
             DoubleDocValuesField(PREDICTION, kept(values.prediction) ?: Double.NEGATIVE_INFINITY),
             DoubleDocValuesField(INTEREST, kept(values.interest) ?: Double.NEGATIVE_INFINITY),
+            DoubleDocValuesField(MODEL_INTEREST, kept(values.modelInterest) ?: Double.NEGATIVE_INFINITY),
             DoubleDocValuesField(EXPECTED, kept(values.expected) ?: Double.NEGATIVE_INFINITY),
         )
 
     /**
      * A prediction, a chance, an expectation as the index keeps it: to its first [DIGITS] (owner, 2026-11-21: "the
      * grade and the interest are three digits") — a change beyond them is none of the list's, its document not written
-     * for it ([io.github.vlsergey.recommend4me.model.PredictionRepository.write]).
+     * for it ([ListPredictions.write]).
      */
     fun kept(value: Double?): Double? =
         if (value == null || value == 0.0 || !value.isFinite()) value

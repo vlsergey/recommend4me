@@ -421,7 +421,7 @@ class SiteTest : SiteTestBase() {
         // Of a model of the grades kept, its expectation made by it, the model untouched
         val type = stores.typeOf(site)
         type.models.trainedAt()?.let { trained ->
-            assertTrue(type.predictions.predicted(site, listOf("n1")).containsKey("n1"))
+            assertTrue(details.body!!.summary.prediction != null, "the work's expectation made as it is opened")
             assertEquals(trained, type.models.trainedAt())
         }
     }

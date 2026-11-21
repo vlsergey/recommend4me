@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.AverageWork
 import io.github.vlsergey.recommend4me.model.Averages
 import io.github.vlsergey.recommend4me.model.NumberSpread
-import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.model.SweepState
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.task.Task
@@ -15,6 +14,7 @@ import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListDocuments
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import io.github.vlsergey.recommend4me.worklist.RowValues
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import kotlin.math.abs
@@ -23,6 +23,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.apache.lucene.document.DoubleDocValuesField
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 
@@ -57,11 +58,9 @@ class SiteWorkPredictionsTest : SiteTestBase() {
         inBackground { recommendations.retrain("books") }
         val after = type.averageWork.load(basis)
         if (kept == null) assertNull(after) else assertAlike(kept, assertNotNull(after))
-        // The pass in one go: every work scored, a prediction of an item gone removed, the average work counted along
-        // kept
-        type.predictions.write(listOf(ItemKey("site", "zz-gone") to Predicted(5.0, null)))
+        // The pass in one go: every work scored, the average work counted along kept
         inBackground { tasks.run(Task(TaskKind.PREDICT_WORKS)) { inOneGo() } }
-        val inOneGo = type.predictions.predicted("site")
+        val inOneGo = predicted()
         assertEquals(stores.source("site")!!.items.keys().map { it.id }.toSet(), inOneGo.keys)
         val swept = assertNotNull(type.averageWork.load(basis))
 
@@ -90,7 +89,7 @@ class SiteWorkPredictionsTest : SiteTestBase() {
             workPredictions.turn("books", WorkScope.OTHER, TaskCursor(Double.NEGATIVE_INFINITY, key.toString()))
         }
         // Scored, it stands higher: the documents of the search go on from no lower than it
-        val score = type.predictions.predicted("site", listOf("lh1")).getValue("lh1").score
+        val score = predicted().getValue("lh1").score
         val from =
             tasks.planned().single { it.work.what == TaskKind.INDEX_WORK_TEXTS && it.work.works == WorkScope.OTHER }
         assertTrue(from.cursor!!.grade!! >= score, "from ${from.cursor} of a work scored $score")
@@ -132,7 +131,7 @@ class SiteWorkPredictionsTest : SiteTestBase() {
         var before: SweepState? = null
         inBackground {
             tasks.run(Task(TaskKind.PREDICT_WORKS)) {
-                type.predictions.remove("site", items)
+                forget(items)
                 workPredictions.begin(type, "asked")
                 val model = type.models.trainedAt()!!
                 allOf(WorkScope.MARKED)
@@ -157,7 +156,7 @@ class SiteWorkPredictionsTest : SiteTestBase() {
         assertTrue(restarted!!.began > before!!.began, "a pass anew")
         assertTrue(restarted!!.scored in 1..scoredSoFar.first(), "scored ${restarted!!.scored}")
         // Of the new model every work scored, the average work as the pass in one go counts it
-        assertEquals(items, type.predictions.predicted("site").keys)
+        assertEquals(items, predicted().keys)
         assertAlike(full, type.averageWork.load(basis)!!)
         // The same model in turns as in one go
         val (again, turned) =
@@ -166,17 +165,29 @@ class SiteWorkPredictionsTest : SiteTestBase() {
                     inOneGo()
                     // Of the works compared: the graded are the training's
                     val graded = stores.source("site")!!.ratings.all().map { it.itemId }.toSet()
-                    val again = type.predictions.predicted("site").filterKeys { it !in graded }
-                    type.predictions.remove("site", again.keys)
+                    val again = predicted().filterKeys { it !in graded }
+                    forget(again.keys)
                     workPredictions.begin(type, "asked")
                     WorkScope.entries.forEach(::allOf)
-                    again to type.predictions.predicted("site").filterKeys { it !in graded }
+                    again to predicted().filterKeys { it !in graded }
                 }
             }
         assertEquals(again.keys, turned.keys)
         again.forEach { (id, p) ->
             assertTrue(abs(p.score - turned.getValue(id).score) < CLOSE, "$id: ${p.score} ${turned.getValue(id).score}")
         }
+    }
+
+    /** The predictions of the site's works as the index of the list holds them, written so far. */
+    private fun predicted() = lists.of("books").written { ListPredictions.ofEvery(it, "site") }
+
+    /** The predictions of the site's works [ids] gone from the index of the list, as of works never predicted. */
+    private fun forget(ids: Collection<String>) {
+        val none =
+            listOf(ListDocuments.PREDICTION, ListDocuments.MODEL_INTEREST, ListDocuments.EXPECTED)
+                .map { DoubleDocValuesField(it, Double.NEGATIVE_INFINITY) }
+                .toTypedArray()
+        lists.of("books").update(ids.associate { ItemKey("site", it) to none })
     }
 
     /** Every work of the [scope] whose expectation is to be made made, a few at a time. */

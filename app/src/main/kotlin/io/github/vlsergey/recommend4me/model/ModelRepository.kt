@@ -3,7 +3,6 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.database.model.tables.references.HELD_OUT
 import io.github.vlsergey.recommend4me.database.model.tables.references.HELD_OUT_EXPLAINED
 import io.github.vlsergey.recommend4me.database.model.tables.references.MODEL
-import io.github.vlsergey.recommend4me.database.model.tables.references.PREDICTION
 import io.github.vlsergey.recommend4me.item.ItemKey
 import java.time.Instant
 import org.jooq.DSLContext
@@ -14,7 +13,8 @@ class StoredModel(val scorer: String, val meta: String, val weights: ByteArray)
 
 /**
  * The current models of a content type — of the grades and of interest — in its model database; what they said of an
- * item ([PredictionRepository], [HeldOutRepository]) forgotten with them.
+ * item that had not seen it ([HeldOutRepository]) forgotten with them; its predictions are of the index of the list
+ * ([io.github.vlsergey.recommend4me.worklist.ListPredictions]).
  */
 class ModelRepository(private val db: DSLContext) {
 
@@ -65,20 +65,18 @@ class ModelRepository(private val db: DSLContext) {
             StoredModel(it.value1()!!, it.value2()!!, it.value3()!!)
         }
 
-    /** Both models and every prediction. */
+    /** Both models, and what the models that had not seen the graded works said of them. */
     fun forget() {
         db.transaction { c ->
             DSL.using(c).deleteFrom(MODEL).execute()
-            DSL.using(c).deleteFrom(PREDICTION).execute()
             DSL.using(c).deleteFrom(HELD_OUT).execute()
             DSL.using(c).deleteFrom(HELD_OUT_EXPLAINED).execute()
         }
     }
 
-    /** The predictions of the item removed from the library: the model's, and the one that had not seen it. */
+    /** What the model that had not seen the item removed from the library said of it. */
     fun forget(key: ItemKey) = db.transaction { c ->
         val tx = DSL.using(c)
-        tx.deleteFrom(PREDICTION).where(PREDICTION.SOURCE.eq(key.source), PREDICTION.ITEM_ID.eq(key.id)).execute()
         tx.deleteFrom(HELD_OUT).where(HELD_OUT.SOURCE.eq(key.source), HELD_OUT.ITEM_ID.eq(key.id)).execute()
         tx.deleteFrom(HELD_OUT_EXPLAINED)
             .where(HELD_OUT_EXPLAINED.SOURCE.eq(key.source), HELD_OUT_EXPLAINED.ITEM_ID.eq(key.id))

@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
-import io.github.vlsergey.recommend4me.model.WorkPredictionChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
@@ -17,20 +16,19 @@ import org.springframework.stereotype.Component
 
 /**
  * WHAT CHANGED THAT THE INDEX OF THE LIST HOLDS ([ListIndexing]), each change a reason the interface words: an item's
- * data, the values the model gives it, an answer — its document made anew —; a grade, a mark of interest, the
- * predictions — its work's values alone ([WorkValues]) —; a regrouping of the works; an index of another format, of
- * every item.
+ * data, the values the model gives it, an answer, a grade, a mark of interest — its date set, its work's documents made
+ * anew —; a regrouping of the works; an index of another format, of every item. The predictions are written into the
+ * index by what makes them ([ListPredictions]).
  */
 @Component
 internal class ListIndexEvents(
     private val stores: Stores,
     private val indexing: ListIndexing,
-    private val values: WorkValues,
 ) {
     /**
      * Of every type whose index is of another format, or none, every item written anew — the tasks over the works
-     * following it ([WorkFields]); of every other, what changed since its index and its values were last written. What
-     * the data say, nothing for the start itself.
+     * following it ([WorkFields]); of every other, what changed since its index was last written. What the data say,
+     * nothing for the start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
     fun start() =
@@ -39,7 +37,6 @@ internal class ListIndexEvents(
                 !indexing.current(type.id) -> indexing.plan(type.id, ListIndexing.FORMAT)
                 indexing.pending(type) -> indexing.plan(type.id, "changes")
             }
-            if (values.pending(type)) values.plan(type.id, "models")
         }
 
     @EventListener
@@ -83,8 +80,6 @@ internal class ListIndexEvents(
             listOf(ItemKey(event.source, event.itemId)),
             if (event.merged) "regrouped" else "interest",
         )
-
-    @EventListener fun predictionsChanged(event: WorkPredictionChangeEvent) = values.plan(event.type, "models")
 
     /**
      * Works put together or apart: two works merged or an item taken out dated by it

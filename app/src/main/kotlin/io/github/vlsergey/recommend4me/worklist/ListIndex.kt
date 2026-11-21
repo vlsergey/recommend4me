@@ -13,7 +13,6 @@ import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
-import org.apache.lucene.search.TermQuery
 import org.apache.lucene.store.FSDirectory
 
 /**
@@ -70,9 +69,6 @@ class ListIndex(dir: Path) : AutoCloseable {
         return gone.size
     }
 
-    /** How many documents of the [source] there are, as written so far. */
-    fun documentsOf(source: String): Int = written { IndexSearcher(it).count(TermQuery(Term(SOURCE, source))) }
-
     /** The [block] of a reading of the index as written so far, committed or not. */
     fun <T> written(block: (DirectoryReader) -> T): T = DirectoryReader.open(writer).use(block)
 
@@ -104,6 +100,11 @@ class ListIndex(dir: Path) : AutoCloseable {
      */
     fun update(fields: Map<ItemKey, Array<out Field>>) {
         fields.forEach { (key, of) -> writer.updateDocValues(Term(KEY, key.toString()), *of) }
+    }
+
+    /** Of every document of the [source], the doc values [fields] written in place. */
+    fun updateEvery(source: String, fields: Array<out Field>) {
+        writer.updateDocValues(Term(SOURCE, source), *fields)
     }
 
     /** What was written made what the requests read, and kept. */

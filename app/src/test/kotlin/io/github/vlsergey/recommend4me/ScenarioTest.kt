@@ -36,7 +36,6 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListIndexing
-import io.github.vlsergey.recommend4me.worklist.WorkValues
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -86,7 +85,6 @@ class ScenarioTest : BaseTest() {
 
     @Autowired lateinit var items: ItemsController
     @Autowired lateinit var listIndexing: ListIndexing
-    @Autowired lateinit var workValues: WorkValues
     @Autowired lateinit var searchController: SearchController
     @Autowired lateinit var filtersController: FiltersController
     @Autowired lateinit var explanationController: ExplanationController
@@ -112,7 +110,6 @@ class ScenarioTest : BaseTest() {
         // The index of the list written of what changed, as the background does a second after
         inBackground {
             listIndexing.writeWaiting("books")
-            workValues.writeWaiting("books")
         }
         return items
             .listItems(

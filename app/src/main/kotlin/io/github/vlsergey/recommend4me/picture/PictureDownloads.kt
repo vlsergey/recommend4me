@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.retry.Backoff
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import jakarta.annotation.PreDestroy
 import java.time.Duration
 import java.time.Instant
@@ -37,10 +38,11 @@ class PictureDownloads(
     contexts: SourceContexts,
     private val background: Background,
     private val events: ApplicationEventPublisher,
+    indexes: ListIndexes,
 ) {
     private val pool =
         Executors.newFixedThreadPool(PARALLEL) { r -> Thread(r, "picture-download").apply { isDaemon = true } }
-    private val next = NextPictures(stores)
+    private val next = NextPictures(stores, indexes)
     private val fetching = PictureFetching(contexts)
     private val guard = Any()
 

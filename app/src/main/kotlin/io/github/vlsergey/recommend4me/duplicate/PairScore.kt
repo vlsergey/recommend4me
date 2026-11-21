@@ -5,6 +5,8 @@ import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.worklist.ListIndex
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import kotlin.math.abs
 import kotlin.math.ln
 
@@ -42,10 +44,11 @@ class PairScore(
          * The scores of the [pairs] of a search by the models of one work [same] and of one series [series], the user's
          * words [said], what their works have alike — read of every work of their sources ([WholeMatch]) —, and what
          * every sort says of them as things stand: the sizes the search compared, where the user's answers change, the
-         * works' predictions and the user's marks of interest.
+         * works' predictions as the [index] of the list keeps them and the user's marks of interest.
          */
         internal fun of(
             type: TypeStore,
+            index: ListIndex,
             pairs: Collection<DuplicateCandidate>,
             said: Said,
             same: FittedPairModel,
@@ -54,7 +57,7 @@ class PairScore(
             val ofSources = pairs.asSequence().flatMap { sequenceOf(it.first, it.second) }.distinctBy { it.source }
             val match = WholeMatch(type, ofSources.toList(), authors = true, titles = true)
             val doubt = PairDoubt.of(pairs, said, { same.chance(it.layers) }, { series?.chance(it.layers) })
-            val worth = PairWorth.of(type)
+            val worth = PairWorth.of(type, index)
             return { c ->
                 val chance = same.chance(c.layers)
                 val ofSeries = series?.chance(c.layers)
@@ -161,10 +164,15 @@ internal class PairWorth(
     }
 
     companion object {
-        /** Of every source of the [type] its predictions and the user's marks of interest: a search's reading. */
-        fun of(type: TypeStore) =
+        /**
+         * Of every source of the [type] its predictions as the index of the list keeps them ([index]) and the user's
+         * marks of interest: a search's reading.
+         */
+        fun of(type: TypeStore, index: ListIndex) =
             PairWorth(
-                type.sources.associate { it.id to type.predictions.predicted(it.id) },
+                type.sources.associate { s ->
+                    s.id to index.searching { ListPredictions.ofEvery(it.indexReader, s.id) }
+                },
                 type.sources.associate { s -> s.id to s.interest.all().mapValues { it.value.interesting } },
             )
     }

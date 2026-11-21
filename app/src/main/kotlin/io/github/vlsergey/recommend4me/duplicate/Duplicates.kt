@@ -136,7 +136,7 @@ class Duplicates(
         val now = Instant.now()
         type.duplicates.replace(
             likely,
-            PairScore.of(type, likely, said, fitted.same ?: model.prior(), fitted.series),
+            PairScore.of(type, indexes.of(type.id), likely, said, fitted.same ?: model.prior(), fitted.series),
             DuplicateSearch(
                 now,
                 encoder,

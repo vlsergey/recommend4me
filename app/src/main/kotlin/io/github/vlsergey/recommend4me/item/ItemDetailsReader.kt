@@ -139,10 +139,13 @@ class ItemDetailsReader(
                 // none, its chances, its expectation of them (owner, 2026-11-19)
                 texts.encodeOwn(clusters.members(key))
                 val members = cards.membersRead(type, clusters.members(key), null)
-                scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
-                cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
-                    details(store, type, key, summary, clusters, members)
-                }
+                val predicted = scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
+                cards
+                    .cards(type, listOf(key), clusters = clusters, members = members, predicted = predicted)
+                    .firstOrNull()
+                    ?.let { summary ->
+                        details(store, type, key, summary, clusters, members)
+                    }
             }
         }
 

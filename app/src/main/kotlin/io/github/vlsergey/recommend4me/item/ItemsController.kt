@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.api.model.ItemDetails
 import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.PartText
-import io.github.vlsergey.recommend4me.model.Scoring
 import io.github.vlsergey.recommend4me.picture.PictureService
 import io.github.vlsergey.recommend4me.picture.Served
 import io.github.vlsergey.recommend4me.refusal.Refusal
@@ -51,7 +50,6 @@ class ItemsController(
     private val details: ItemDetailsReader,
     private val pictures: PictureService,
     private val contexts: SourceContexts,
-    private val scoring: Scoring,
     private val removal: ItemRemoval,
 ) : ItemsApi {
 
@@ -102,8 +100,8 @@ class ItemsController(
     override fun refreshItem(source: String, item: String): ResponseEntity<ItemDetails> =
         stores.answerOn(source, item) { store, _ ->
             refresh(store, item)
-            // Its texts encoded in the queue of the computations, as every written work's: not waited for here
-            scoring.scoreItem(ItemKey(source, item))
+            // Its texts encoded in the queue of the computations, as every written work's: not waited for here; its
+            // expectation made as its screen is read
             getItem(source, item)
         }
 

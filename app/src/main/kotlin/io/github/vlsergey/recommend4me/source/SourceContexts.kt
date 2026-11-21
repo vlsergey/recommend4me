@@ -6,6 +6,8 @@ import io.github.vlsergey.recommend4me.item.ItemRemoval
 import io.github.vlsergey.recommend4me.picture.SiteItemPictureListEvent
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.tag.KeptOutWorks
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.concurrent.withLock
@@ -28,6 +30,8 @@ class SourceContexts(
     private val keptOut: ObjectProvider<KeptOutWorks>,
     /** The places on the web the authors' pages list: got when asked for, it reads the sources too. */
     private val authorPlaces: ObjectProvider<AuthorPlaces>,
+    /** The index of the list: the predictions the items are read in the order of. */
+    private val indexes: ListIndexes,
 ) {
 
     fun of(sourceId: String): SourceContext {
@@ -71,7 +75,11 @@ class SourceContexts(
 
         override fun itemsInOrder(): List<String> {
             val graded = store.ratings.gradedItems()
-            val predictions = stores.typeOf(store.id).predictions.scores(store.id)
+            val predictions =
+                indexes
+                    .of(store.type)
+                    .searching { ListPredictions.ofEvery(it.indexReader, store.id) }
+                    .mapValues { it.value.score }
             return store.items
                 .keys()
                 .sortedWith(

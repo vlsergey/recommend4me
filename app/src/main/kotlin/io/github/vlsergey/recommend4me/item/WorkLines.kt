@@ -20,7 +20,7 @@ class WorkLines(private val cards: ItemCards) {
         val heads = store.items.heads(ids)
         val fields = store.corrections.fieldsOf(ids)
         val graded = cards.graded(store.ratings.ofItems(ids), heads.mapValues { it.value.version })
-        val predicted = type.predictions.predicted(store.id, ids)
+        val predicted = cards.predictions(type, store.id, ids)
         return ids.mapNotNull { id ->
                 heads[id]?.let { head ->
                     id to

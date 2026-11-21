@@ -14,7 +14,6 @@ import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import java.time.Instant
 
@@ -22,7 +21,8 @@ import java.time.Instant
  * WHAT CHANGES OF A ROW OF THE LIST WITHOUT ITS ITEM CHANGING — of its work: whether it is graded, its prediction, its
  * chance of interest and the two multiplied, the order of the list by the formula ([Interest.expected]); null of none.
  * And whether the user [marked] the work — graded it, marked it of interest, answered on a value of it: the tasks over
- * the works go over the marked apart from the rest (docs/computations.md, 9).
+ * the works go over the marked apart from the rest (docs/computations.md, 9). Of the chance of interest, the model's
+ * own too ([modelInterest]): what stands when the user's mark is taken back.
  */
 class RowValues(
     val graded: Boolean,
@@ -30,6 +30,7 @@ class RowValues(
     val interest: Double?,
     val expected: Double?,
     val marked: Boolean = graded,
+    val modelInterest: Double? = null,
 ) {
     companion object {
         /**
@@ -50,6 +51,7 @@ class RowValues(
                 interest = chance,
                 expected = predicted?.let { Interest.expected(it.score, chance) },
                 marked = !ratings.isNullOrEmpty() || mark != null || answered,
+                modelInterest = predicted?.interest,
             )
         }
     }
@@ -88,15 +90,16 @@ internal object ListRows {
     /**
      * The rows of the items [ids] of the source [s] — every item when null —, of the works [clusters] tells; [model]:
      * of every item, by the facet's key, the values the models give it beyond the site's own — made now of a few, kept
-     * by the index of a whole source ([ListModelValues]); none of a source not filled yet. The [stages] of every item —
-     * when the tasks over the works did it —, none of an item not told.
+     * by the index of a whole source ([ListModelValues]); none of a source not filled yet; [predicted]: of every item,
+     * its prediction as the index kept it ([ListPredictions]). The [stages] of every item — when the tasks over the
+     * works did it —, none of an item not told.
      */
     fun read(
-        type: TypeStore,
         s: SourceStore,
         ids: Collection<String>?,
         clusters: WorkClusters,
         model: Map<String, Map<String, List<String>>>,
+        predicted: Map<String, Predicted>,
         stages: (String) -> WorkStages = { WorkStages.NONE },
     ): List<ListRow> {
         val heads =
@@ -104,7 +107,6 @@ internal object ListRows {
             else s.items.heads(ids).values.map { ItemKeys(it.id, it.version, it.updatedAt, it.firstSeenAt) }
         if (heads.isEmpty()) return emptyList()
         val ratings = (if (ids == null) s.ratings.all() else s.ratings.ofItems(ids)).groupBy { it.itemId }
-        val predicted = if (ids == null) type.predictions.predicted(s.id) else type.predictions.predicted(s.id, ids)
         val marks = if (ids == null) s.interest.all() else s.interest.ofItems(ids)
         val corrections =
             if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
@@ -138,8 +140,12 @@ internal object ListRows {
         }
     }
 
-    /** The values of the items [ids] of the source that change without the item: the grade, prediction and interest. */
-    fun valuesOf(type: TypeStore, s: SourceStore, ids: Collection<String>): Map<String, RowValues> {
+    /**
+     * The values of the items of the source that change without the item — the grade, prediction and interest —, of
+     * each of them [predicted] so.
+     */
+    fun valuesOf(s: SourceStore, predicted: Map<String, Predicted>): Map<String, RowValues> {
+        val ids = predicted.keys
         // Of many — the predictions of a training — every item's version read in one pass, not a thousand at a time
         val versions =
             if (ids.size > MANY)
@@ -148,7 +154,6 @@ internal object ListRows {
                     .associate { it.id to it.version }
             else s.items.heads(ids).mapValues { it.value.version }
         val ratings = s.ratings.ofItems(ids).groupBy { it.itemId }
-        val predicted = type.predictions.predicted(s.id, ids)
         val marks = s.interest.ofItems(ids)
         val answered = s.corrections.facetsOf(ids).filterValues { it.isNotEmpty() }.keys
         return versions.mapValues { (id, version) ->
