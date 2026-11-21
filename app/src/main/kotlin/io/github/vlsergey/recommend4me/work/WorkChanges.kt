@@ -38,6 +38,25 @@ class WorkChanges(private val db: DSLContext) {
             .where(NORMALIZED_WORK.CHANGED_AT.ge(since), SITE_WORK.SOURCE.`in`(sources))
             .fetch { ItemKey(it.value1()!!, it.value2()!!) }
 
+    /**
+     * Of the items [ids] of the [source] — of every item of it when null — the date the user's word on its work, or its
+     * items, last changed; an item of a work never dated left out.
+     */
+    fun ofItems(source: String, ids: Collection<String>?): Map<String, Instant> {
+        fun read(condition: org.jooq.Condition): Map<String, Instant> =
+            db.select(SITE_WORK.ITEM, NORMALIZED_WORK.CHANGED_AT)
+                .from(SITE_WORK)
+                .join(NORMALIZED_WORK)
+                .on(NORMALIZED_WORK.ID.eq(SITE_WORK.NORMALIZED))
+                .where(condition, NORMALIZED_WORK.CHANGED_AT.isNotNull)
+                .fetchMap({ it.value1()!! }, { it.value2()!! })
+        return if (ids == null) read(SITE_WORK.SOURCE.eq(source))
+        else
+            ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
+                out.apply { putAll(read(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))) }
+            }
+    }
+
     /** Whether a work of an item of the [sources] changed at [since] or after. */
     fun anySince(sources: Collection<String>, since: Instant): Boolean =
         db.fetchExists(

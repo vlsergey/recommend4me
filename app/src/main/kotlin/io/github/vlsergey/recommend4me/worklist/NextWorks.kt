@@ -72,8 +72,19 @@ object NextWorks {
     fun among(keys: Collection<ItemKey>): Query =
         TermInSetQuery(ListDocuments.KEY, keys.map { BytesRef(it.toString()) })
 
-    /** The documents of the [stage] done before [since]: of every one when it never was. */
+    /**
+     * The documents of the [stage] done before [since] — of every one when it never was — or before their work last
+     * changed ([StageBehind]).
+     */
     fun before(stage: WorkStage, since: Long): Query =
+        BooleanQuery.Builder()
+            .add(doneBefore(stage, since), BooleanClause.Occur.SHOULD)
+            .add(StageBehind(stage), BooleanClause.Occur.SHOULD)
+            .setMinimumNumberShouldMatch(1)
+            .build()
+
+    /** The documents of the [stage] done before [since], by the stage's time alone. */
+    private fun doneBefore(stage: WorkStage, since: Long): Query =
         NumericDocValuesField.newSlowRangeQuery(stage.field, 0, since - 1)
 
     /** Of the sources [since] tells, the documents of each done before its time ([before]); none of no source. */

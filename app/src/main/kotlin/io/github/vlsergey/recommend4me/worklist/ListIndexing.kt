@@ -34,13 +34,15 @@ data class WorkDocumentWriteEvent(val type: String, val from: Map<WorkScope, Tas
  * every content type, after a quiet, of every change since its last writing at once, by the dates the databases keep
  * (owner, 2026-11-21: "why name them and keep the names at all? the index has the date it was last built, a work the
  * date it was last changed"; the date of the writing kept with the index's commit, [WRITTEN]):
- * - the documents of the items changed since made anew ([io.github.vlsergey.recommend4me.item.ItemChanges]), and of the
- *   items of the works the user's word changed ([io.github.vlsergey.recommend4me.work.WorkChanges]: an answer, a grade,
- *   a mark of interest, two works merged or taken apart), of every item of their works: their data, the user's answers
- *   and corrections, the values the models gave them as the index kept them;
- * - of a source changed whole, every item; an index of another format made anew whole; the documents of the items gone
- *   from their source removed. Of every document made anew every stage of the tasks over the works is to be done again,
- *   the vectors of the site's text fields first: told ([WorkDocumentWriteEvent]).
+ * - the items changed since ([io.github.vlsergey.recommend4me.item.ItemChanges]) and the items of the works the user's
+ *   word changed ([io.github.vlsergey.recommend4me.work.WorkChanges]: an answer, a grade, a mark of interest, two works
+ *   merged or taken apart), with every item of their works, read and compared with their documents as written: those
+ *   not alike made anew ([sameAs]) — their data, the user's answers and corrections, when the work last changed — with
+ *   their stages as written: a stage done before its work changed is done again of itself ([StageBehind]);
+ * - of a source changed whole — a dictionary its values are drafted by —, every item read and compared, those not alike
+ *   made anew with every stage to be done again; an index of another format made anew whole; the documents of the items
+ *   gone from their source removed. The passes over the works told from the first written on
+ *   ([WorkDocumentWriteEvent]).
  *
  * Nothing is named in the queue: what changed is read of the databases when the work runs, and a stop loses nothing.
  */
@@ -159,9 +161,10 @@ class ListIndexing(
     }
 
     /**
-     * The documents of the items [ids] of the source [s] made anew, those of the items gone removed: the values the
-     * models gave them and their predictions as the index kept them, every stage to be done again — of each scope from
-     * the first of them on, kept in [from]. How many were written.
+     * The documents of the items [ids] of the source [s] made anew where they are not alike as written ([sameAs]), with
+     * the stages of the tasks over their works as written — a stage done before its work last changed is to be done
+     * again of itself ([StageBehind]) —, those of the items gone removed: the values the models gave them and their
+     * predictions as the index kept them; the first of each scope written kept in [from]. How many were written.
      */
     private fun writeNamed(
         s: SourceStore,
@@ -170,12 +173,16 @@ class ListIndexing(
         clusters: WorkClusters,
         from: MutableMap<WorkScope, TaskCursor>,
     ): Int {
-        val predicted = index.written { ListPredictions.of(it, s.id, ids) }
+        val (predicted, written) = index.written { ListPredictions.of(it, s.id, ids) to ListKeptRows.of(it, s.id, ids) }
         val rows = ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted)
         val found = rows.mapTo(HashSet()) { it.key.id }
-        index.replace(rows, ids.filter { it !in found }.map { ItemKey(s.id, it) })
-        rows.forEach { r -> from(r, from) }
-        return rows.size
+        val other = rows.mapNotNull { r ->
+            val kept = written[r.key.id]
+            if (kept != null && r.sameAs(kept)) null else kept?.let { r.with(it.stages) } ?: r
+        }
+        index.replace(other, ids.filter { it !in found }.map { ItemKey(s.id, it) })
+        other.forEach { r -> from(r, from) }
+        return other.size
     }
 
     /**

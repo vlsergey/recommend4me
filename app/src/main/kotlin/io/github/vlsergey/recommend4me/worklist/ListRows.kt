@@ -63,8 +63,9 @@ class RowValues(
  * its dates, its [values], the values of every filter facet of its source as the user sees them ([facets], by the
  * facet's filter id — the site's, the model's kept, the user's word on top), every number with the user's word on top
  * ([numbers], by the number's id), its [title] as the user corrected it, of every facet the source works out the values
- * the models give it beyond the site's own ([model], by the facet's key): kept in the index alone; and when the tasks
- * over the works last did it ([stages]).
+ * the models give it beyond the site's own ([model], by the facet's key): kept in the index alone; when the tasks over
+ * the works last did it ([stages]); and when the work last changed ([changedAt]) — its item, or the user's word on it:
+ * a stage done before it is to be done again ([StageBehind]).
  */
 class ListRow(
     val key: ItemKey,
@@ -79,7 +80,26 @@ class ListRow(
     val title: String,
     val model: Map<String, List<String>> = emptyMap(),
     val stages: WorkStages = WorkStages.NONE,
-)
+    val changedAt: Instant? = null,
+) {
+    /** The row with the [stages] of the tasks over its work: as its document kept them. */
+    fun with(stages: WorkStages) =
+        ListRow(
+            key,
+            work,
+            rank,
+            linked,
+            updatedAt,
+            firstSeenAt,
+            values,
+            facets,
+            numbers,
+            title,
+            model,
+            stages,
+            changedAt,
+        )
+}
 
 /**
  * THE ROWS OF THE LIST READ OF THE DATABASES, of one source: of every item in one pass over each table, or of the items
@@ -113,6 +133,9 @@ internal object ListRows {
         val facets = facetsOf(s, ids, model, corrections)
         val numbers = numbersOf(s, ids)
         val titles = titlesOf(s, ids)
+        // When each changed last: its item, or the user's word on its work, whichever later
+        val itemChanged = s.changes.of(ids)
+        val workChanged = s.works.changes.ofItems(s.id, ids)
         return heads.map { h ->
             val key = ItemKey(s.id, h.id)
             val members = clusters.fullestFirst(key)
@@ -136,6 +159,7 @@ internal object ListRows {
                 title = titles[h.id].orEmpty(),
                 model = model[h.id].orEmpty(),
                 stages = stages(h.id),
+                changedAt = listOfNotNull(itemChanged[h.id], workChanged[h.id]).maxOrNull(),
             )
         }
     }

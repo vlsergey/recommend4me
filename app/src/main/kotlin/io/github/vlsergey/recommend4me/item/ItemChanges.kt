@@ -34,6 +34,25 @@ class ItemChanges(private val db: DSLContext) {
     /** Whether an item changed at [since] or after. */
     fun anySince(since: Instant): Boolean = db.fetchExists(ITEM, ITEM.CHANGED_AT.ge(since))
 
+    /** Of the items [ids] — of every item when null — the date each last changed; an item never dated left out. */
+    fun of(ids: Collection<String>?): Map<String, Instant> =
+        if (ids == null)
+            db.select(ITEM.ITEM_ID, ITEM.CHANGED_AT)
+                .from(ITEM)
+                .where(ITEM.CHANGED_AT.isNotNull)
+                .fetchMap(
+                    { it.value1()!! },
+                    { it.value2()!! },
+                )
+        else
+            ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
+                db.select(ITEM.ITEM_ID, ITEM.CHANGED_AT)
+                    .from(ITEM)
+                    .where(ITEM.ITEM_ID.`in`(chunk), ITEM.CHANGED_AT.isNotNull)
+                    .fetch { out[it.value1()!!] = it.value2()!! }
+                out
+            }
+
     /** The items changed at [since] or after, by the index of the dates: the few since a writing. */
     fun since(since: Instant): List<String> =
         db.select(ITEM.ITEM_ID).from(ITEM).where(ITEM.CHANGED_AT.ge(since)).fetch { it.value1()!! }

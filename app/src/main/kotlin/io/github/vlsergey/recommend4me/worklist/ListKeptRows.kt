@@ -30,6 +30,10 @@ class KeptRow(
     val title: String,
     val facets: Map<String, List<String>>,
     val numbers: Map<String, Double>,
+    /** When the work last changed, as written; -1 of none. */
+    val changed: Long,
+    /** The stages of the tasks over its work, as written: not compared, kept of a document made anew. */
+    val stages: WorkStages,
 )
 
 /** Whether the document [kept] is this row's as the databases make it now: of the same row, nothing to write. */
@@ -43,7 +47,8 @@ fun ListRow.sameAs(kept: KeptRow): Boolean =
         (if (values.marked) 1L else 0L) == kept.marked &&
         title == kept.title &&
         facets.filterValues { it.isNotEmpty() } == kept.facets &&
-        numbers == kept.numbers
+        numbers == kept.numbers &&
+        (changedAt?.toEpochMilli() ?: -1L) == kept.changed
 
 /** THE DOCUMENTS OF THE INDEX OF THE LIST AS WRITTEN, of the items asked for by their keys ([KeptRow]). */
 object ListKeptRows {
@@ -78,6 +83,8 @@ object ListKeptRows {
         private val graded = DocValues.getNumeric(r, ListDocuments.GRADED)
         private val marked = DocValues.getNumeric(r, ListDocuments.MARKED)
         private val title = DocValues.getBinary(r, ListDocuments.TITLE)
+        private val changed = DocValues.getNumeric(r, ListDocuments.CHANGED_AT)
+        private val stages = WorkStage.entries.map { DocValues.getNumeric(r, it.field) }
         private val stored = r.storedFields()
 
         /** The documents of works of several items. */
@@ -115,6 +122,13 @@ object ListKeptRows {
                     numbers
                         .filterValues { it.advanceExact(doc) }
                         .mapValues { (_, v) -> NumericUtils.sortableLongToDouble(v.nextValue()) },
+                changed = if (changed.advanceExact(doc)) changed.longValue() else -1,
+                // The stages in the order of their fields
+                stages =
+                    stages
+                        .map { if (it.advanceExact(doc)) it.longValue() else 0L }
+                        .iterator()
+                        .let { at -> WorkStages(at.next(), at.next(), at.next(), at.next()) },
             )
         }
     }

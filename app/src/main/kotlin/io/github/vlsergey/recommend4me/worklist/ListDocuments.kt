@@ -50,6 +50,12 @@ object ListDocuments {
     const val PREDICTED_AT = "predictedAt"
     const val TEXTS_AT = "textsAt"
 
+    /**
+     * When the work last changed — its item, or the user's word on it ([ListRow.changedAt]), milliseconds: a stage of
+     * the tasks over the works done before it is to be done again ([StageBehind]). None of a work never dated.
+     */
+    const val CHANGED_AT = "changedAt"
+
     /** The item's title as the user corrected it: of the doc values, what the search of duplicates reads. */
     const val TITLE = "title"
 
@@ -97,6 +103,7 @@ object ListDocuments {
         doc.add(NumericDocValuesField(UPDATED, row.updatedAt.toEpochMilli()))
         doc.add(NumericDocValuesField(ADDED, row.firstSeenAt.toEpochMilli()))
         row.stages.fields().forEach(doc::add)
+        row.changedAt?.let { doc.add(NumericDocValuesField(CHANGED_AT, it.toEpochMilli())) }
         valueFields(row.values).forEach(doc::add)
         row.facets.forEach { (facetId, keys) ->
             val field = facetField(facetId)

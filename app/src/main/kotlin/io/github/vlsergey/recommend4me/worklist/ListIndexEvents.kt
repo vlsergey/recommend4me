@@ -43,8 +43,8 @@ internal class ListIndexEvents(
     fun itemsChanged(event: WorkChangeEvent) = indexing.itemsChanged(source(event.source), event.ids, "items")
 
     /**
-     * The windows of the works' chapters encoded: what the models and the search read of them changed — their documents
-     * made anew, every stage of them to be done again.
+     * The windows of the works' chapters encoded: what the models and the search read of them changed — the items
+     * dated, every stage of their works done before it to be done again ([StageBehind]).
      */
     @EventListener
     fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) =
