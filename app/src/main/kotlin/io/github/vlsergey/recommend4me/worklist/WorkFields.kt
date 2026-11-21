@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.cast.WorkCastNameFillEvent
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
+import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.setvector.WorkSetVectorFillEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -55,6 +56,7 @@ class WorkFields(
     private val modelValues: WorkModelValues,
     private val sweeps: StageSweeps,
     private val events: ApplicationEventPublisher,
+    private val plugins: Plugins,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start, from where it
     // was to go on
@@ -170,7 +172,7 @@ class WorkFields(
             val (predicted, written) =
                 index.written { ListPredictions.of(it, s.id, other) to ListKeptRows.of(it, s.id, other) }
             index.replace(
-                ListRows.read(s, other, clusters, fresh, predicted).map { r ->
+                ListRows.read(s, other, clusters, fresh, predicted, plugins.textEncoder()?.id).map { r ->
                     r.over(written[r.key.id]).dated(WorkDatum.FIELDS, sweeps.dateOf(STAGE, s.type, scope, r.key))
                 }
             )

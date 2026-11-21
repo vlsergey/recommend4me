@@ -1,12 +1,17 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.ByteMatrix
 import io.github.vlsergey.recommend4me.matrix.Rows
+import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.worklist.ListDocuments
+import io.github.vlsergey.recommend4me.worklist.ListFacetValues
+import io.github.vlsergey.recommend4me.worklist.ListIndex
+import io.github.vlsergey.recommend4me.worklist.ListTexts
+import org.apache.lucene.util.BytesRef
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(TextsCompared::class.java)
@@ -31,51 +36,57 @@ internal class TextsCompared(
 ) {
     companion object {
         /**
-         * Of the works [ids] of the source [s], ascending: the vectors of their titles and their descriptions by the
-         * [encoder] — of every work of a site in one pass of the table of the vectors, each decoded into one buffer
-         * (2026-11-20: two passes and two arrays of every vector took 46 of the 57 seconds of reading ficbook) —, the
-         * letters.
+         * Of the works [ids] of the source [s], ascending, as the [index] of the list holds them (owner, 2026-11-22:
+         * "everything the search of the duplicates needs taken from the index"): the vectors of their titles and their
+         * descriptions by the [encoder], their description and their line of the characters as the user corrected them,
+         * the names the site gives their fandoms — of every work of a site in one pass of the index, of a few by their
+         * keys —, the letters.
          */
-        fun read(s: SourceStore, encoder: String, ids: List<String>): TextsCompared {
+        fun read(s: SourceStore, encoder: String, ids: List<String>, index: ListIndex): TextsCompared {
             val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val description = ListTexts.descriptionOf(s.schema)
             val titles = UnitRows(ids.size)
             val descriptions = UnitRows(ids.size)
-            fun rowsOf(key: String) = if (key == TextVectors.TITLE) titles else descriptions
-            val keys = listOfNotNull(TextVectors.TITLE, description)
-            // Of every work of a site, every vector streamed as kept; of a few, theirs by their ids. The time of the
-            // vectors made apart from the stream's: what of the reading is the database's
+            val texts = LetteredText.entries.associateWith { arrayOfNulls<String>(ids.size) }
+            // Every doc value read, by its place: the vectors' rows, the texts' arrays
+            val read: List<Pair<String, (Int, BytesRef) -> Unit>> =
+                listOfNotNull(
+                    ListDocuments.vectorField(encoder, TextVectors.TITLE) to titles::put,
+                    description?.let { ListDocuments.vectorField(encoder, it) to descriptions::put },
+                    description?.let {
+                        ListDocuments.textField(it) to texts.getValue(LetteredText.DESCRIPTION).putter()
+                    },
+                    s.schema.universeLine?.let {
+                        ListDocuments.textField(it) to texts.getValue(LetteredText.CHARACTERS).putter()
+                    },
+                )
+            val fields = read.map { it.first }
             val started = System.nanoTime()
-            var making = 0L
-            if (ids.size > FEW) {
-                s.textVectors.forEachHalves(encoder, keys) { id, key, halves ->
-                    val made = System.nanoTime()
-                    at[id]?.let { rowsOf(key).putHalves(it, halves) }
-                    making += System.nanoTime() - made
-                }
-            } else
-                s.textVectors.ofMany(ids, encoder, keys).forEach { (id, texts) ->
-                    texts.forEach { (key, v) -> at[id]?.let { rowsOf(key).put(it, v) } }
+            if (ids.size > FEW)
+                ListTexts.forEvery(index, s.id, fields) { id, k, bytes -> at[id]?.let { read[k].second(it, bytes) } }
+            else
+                ListTexts.of(index, ids.map { ItemKey(s.id, it) }, fields).forEach { (key, own) ->
+                    val i = at[key.id] ?: return@forEach
+                    own.forEach { (field, bytes) -> read[fields.indexOf(field)].second(i, BytesRef(bytes)) }
                 }
             val streamed = System.nanoTime()
-            val texts = textsOf(s, ids, at)
-            val read = System.nanoTime()
+            fandomsOf(s, ids, at, index)?.copyInto(texts.getValue(LetteredText.FANDOMS))
+            val named = System.nanoTime()
             // The description long, every row whole; the names of the fandoms and the line of the characters short
             val rows =
                 LetteredText.entries.map {
-                    if (it == LetteredText.DESCRIPTION) Letters.wholeRows(texts.getValue(it))
-                    else Letters.rows(texts.getValue(it))
+                    val own = texts.getValue(it).asList()
+                    if (it == LetteredText.DESCRIPTION) Letters.wholeRows(own) else Letters.rows(own)
                 }
             if (ids.size > FEW)
                 log.info(
-                    "{}: the texts compared both ways in {} ms: the vectors {} ({} of them made), the texts {}, " +
-                        "their letters {}",
+                    "{}: the texts compared both ways read of the index in {} ms: the vectors and the texts {}, the " +
+                        "fandoms {}, their letters {}",
                     s.id,
                     (System.nanoTime() - started) / NANOS_IN_MILLI,
                     (streamed - started) / NANOS_IN_MILLI,
-                    making / NANOS_IN_MILLI,
-                    (read - streamed) / NANOS_IN_MILLI,
-                    (System.nanoTime() - read) / NANOS_IN_MILLI,
+                    (named - streamed) / NANOS_IN_MILLI,
+                    (System.nanoTime() - named) / NANOS_IN_MILLI,
                 )
             return TextsCompared(
                 titles.rows(),
@@ -87,55 +98,37 @@ internal class TextsCompared(
             )
         }
 
-        /**
-         * The texts of the works [ids] compared letter by letter, by their places [at]: the description and the line of
-         * the characters as the user corrected them, the names of the fandoms; none of a work of none.
-         */
-        private fun textsOf(s: SourceStore, ids: List<String>, at: Map<String, Int>): Map<LetteredText, List<String?>> {
-            val out = LetteredText.entries.associateWith { arrayOfNulls<String>(ids.size) }
-            written(s, ids, at, out)
-            fandomsOf(s, ids, at)?.copyInto(out.getValue(LetteredText.FANDOMS))
-            return out.mapValues { it.value.asList() }
+        /** The texts of the works by their places as a doc value of the index holds them: its UTF-8, a blank none. */
+        private fun Array<String?>.putter(): (Int, BytesRef) -> Unit = { i, b ->
+            this[i] = b.utf8ToString().takeIf { it.isNotBlank() }
         }
 
-        /** The description and the line of the characters of the works [ids] as the user corrected them, [into]. */
-        private fun written(
+        /**
+         * The names the site gives the fandoms of the works [ids] as the [index] of the list holds them, one after
+         * another; none of a work of none, and of a site of no fandoms. The names read by their keys.
+         */
+        private fun fandomsOf(
             s: SourceStore,
             ids: List<String>,
             at: Map<String, Int>,
-            into: Map<LetteredText, Array<String?>>,
-        ) {
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val keys =
-                listOfNotNull(
-                    description?.let { LetteredText.DESCRIPTION to it },
-                    s.schema.universeLine?.let { LetteredText.CHARACTERS to it },
-                )
-            if (keys.isEmpty()) return
-            val fields = if (ids.size > FEW) s.corrections.allFields() else s.corrections.fieldsOf(ids)
-            fun put(id: String, texts: Map<String, String>) {
-                val i = at[id] ?: return
-                val corrected = Corrected.texts(texts, fields[id].orEmpty())
-                keys.forEach { (text, key) -> into.getValue(text)[i] = corrected[key]?.takeIf { it.isNotBlank() } }
-            }
-            val wanted = keys.map { it.second }
-            if (ids.size > FEW) s.items.forEachTexts(wanted, ::put)
-            else s.items.textsOf(ids, wanted).forEach { (id, texts) -> put(id, texts) }
-        }
-
-        /**
-         * The names the site gives the fandoms of the works [ids], one after another as it gives them; none of a work
-         * of none, and of a site of no fandoms.
-         */
-        private fun fandomsOf(s: SourceStore, ids: List<String>, at: Map<String, Int>): Array<String?>? {
-            val facet = UniverseFacet.fandomFacet(s.schema) ?: return null
+            index: ListIndex,
+        ): Array<String?>? {
+            val key = UniverseFacet.fandomFacet(s.schema) ?: return null
+            val def = s.schema.facets.first { it.key == key }
+            val facetId = FeatureNames.facetId(s.source, def)
             val fandoms = arrayOfNulls<List<String>>(ids.size)
-            if (ids.size > FEW) s.items.forEachFacet(facet) { id, keys -> at[id]?.let { fandoms[it] = keys } }
-            else
-                s.items.facetsOf(ids).forEach { (id, facets) ->
-                    facets[facet]?.let { keys -> at[id]?.let { fandoms[it] = keys } }
+            if (ids.size > FEW) {
+                val every = ListFacetValues.everyItem(index, s.id, listOf(facetId), emptyList())
+                val keyOf = every.names.map { it.removePrefix("$facetId:") }
+                every.ids.forEachIndexed { k, id ->
+                    val own = every.values[k]
+                    if (own.isNotEmpty()) at[id]?.let { i -> fandoms[i] = own.map(keyOf::get) }
                 }
-            val names = s.names(facet, fandoms.flatMap { it.orEmpty() }.distinct())
+            } else
+                ListFacetValues.of(index, ids.map { ItemKey(s.id, it) }).forEach { (item, facets) ->
+                    facets[facetId]?.let { keys -> at[item.id]?.let { fandoms[it] = keys } }
+                }
+            val names = s.names(key, fandoms.flatMap { it.orEmpty() }.distinct())
             return Array(ids.size) { i ->
                 fandoms[i]?.takeIf { it.isNotEmpty() }?.joinToString(", ") { names[it] ?: it }
             }
@@ -149,42 +142,20 @@ internal class TextsCompared(
 }
 
 /**
- * The vectors of one text of [count] works as they come, a unit row a byte a number ([ByteMatrix]) of the numbers of
- * the first one; which have one ([had]). A vector of another number of numbers passed over. Decoded into one buffer: no
- * array a vector.
+ * The vectors of one text of [count] works as they come, a unit row a byte a number ([ByteMatrix]) as the index of the
+ * list holds them ([ListTexts.packed]), of the numbers of the first one; which have one ([had]). A vector of another
+ * number of numbers passed over.
  */
 private class UnitRows(private val count: Int) {
     private var matrix: ByteMatrix? = null
-    private var buffer = FloatArray(0)
     val had = BooleanArray(count)
 
-    /** The vector of the [i]-th work of [halves]: half-precision numbers, little-endian, as kept. */
-    fun putHalves(i: Int, halves: ByteArray) {
-        val n = halves.size / 2
-        if (buffer.size != n) buffer = FloatArray(n)
-        for (q in 0 until n) {
-            val bits = (halves[2 * q].toInt() and BYTE) or ((halves[2 * q + 1].toInt() and BYTE) shl Byte.SIZE_BITS)
-            buffer[q] = java.lang.Float.float16ToFloat(bits.toShort())
-        }
-        put(i, buffer)
-    }
-
-    /** The vector [v] of the [i]-th work, made of unit length in place. */
-    fun put(i: Int, v: FloatArray) {
-        val into = matrix ?: ByteMatrix(count, v.size).also { matrix = it }
-        if (v.size != into.cols) return
-        var norm = 0.0
-        for (x in v) norm += x.toDouble() * x
-        val length = kotlin.math.sqrt(norm).toFloat()
-        if (length > 0f) for (q in v.indices) v[q] /= length
-        into.put(i, v)
-        had[i] = true
+    /** The vector of the [i]-th work as the index holds it. */
+    fun put(i: Int, packed: BytesRef) {
+        val into = matrix ?: ByteMatrix(count, ByteMatrix.packedCols(packed.length)).also { matrix = it }
+        if (into.putPacked(i, packed.bytes, packed.offset, packed.length)) had[i] = true
     }
 
     /** The rows read; of none, rows of no column. */
     fun rows(): ByteMatrix = matrix ?: ByteMatrix(count, 0)
-
-    private companion object {
-        const val BYTE = 0xff
-    }
 }

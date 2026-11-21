@@ -2,7 +2,12 @@ package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.InterestRequest
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.worklist.ListDocuments
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListTexts
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import io.github.vlsergey.recommend4me.worklist.WorkStages
 import kotlin.test.Test
@@ -17,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired
  */
 class WorkStagesTest : SiteTestBase() {
     @Autowired lateinit var lists: ListIndexes
+    @Autowired lateinit var plugins: Plugins
 
     private fun stages(vararg ids: String): Map<String, WorkStages> =
         WorkStages.of(lists.of("books"), site, ids.toList())
@@ -49,5 +55,24 @@ class WorkStagesTest : SiteTestBase() {
         // the fields, whose works are all done again after them, and the search of the tests keeps nothing — made anew
         // whole every time
         assertEquals(marked.getValue("ws1")[WorkStage.VECTORS], answered.getValue("ws1")[WorkStage.VECTORS])
+    }
+
+    @Test
+    fun `a work's document holds its texts and the vector of its title, and the vectors made anew of a text changed`() {
+        capture("wt1|The third lantern|space|A lantern lit on a high cliff||")
+        background.run()
+        val key = ItemKey(site, "wt1")
+        val title = ListDocuments.vectorField(plugins.textEncoder()!!.id, TextVectors.TITLE)
+        val text = ListDocuments.textField("annotation")
+        fun held() = ListTexts.of(lists.of("books"), listOf(key), listOf(title, text))[key].orEmpty()
+        val first = held()
+        assertTrue(title in first, "the vector of the title")
+        assertEquals("A lantern lit on a high cliff", String(first.getValue(text)))
+
+        // The title changed: the document holds the vector made of the new one
+        capture("wt1|The lantern of the far north|space|A lantern lit on a high cliff||")
+        background.run()
+        val second = held()
+        assertTrue(!first.getValue(title).contentEquals(second.getValue(title)), "the vector of the new title")
     }
 }

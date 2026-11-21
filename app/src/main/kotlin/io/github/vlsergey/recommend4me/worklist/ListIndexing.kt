@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.worklist
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -51,6 +52,7 @@ class ListIndexing(
     private val indexes: ListIndexes,
     private val sweeps: StageSweeps,
     private val events: ApplicationEventPublisher,
+    private val plugins: Plugins,
 ) {
     /**
      * The [datum] of the items [ids] of the source [s] changed — of none, every item of it: dated
@@ -179,7 +181,8 @@ class ListIndexing(
         changed: MutableSet<WorkDatum>,
     ): Int {
         val (predicted, written) = index.written { ListPredictions.of(it, s.id, ids) to ListKeptRows.of(it, s.id, ids) }
-        val rows = ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted)
+        val rows =
+            ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted, plugins.textEncoder()?.id)
         val found = rows.mapTo(HashSet()) { it.key.id }
         val other = rows.mapNotNull { r ->
             written[r.key.id].let { if (it != null && r.sameAs(it)) null else r.over(it) }
@@ -209,7 +212,7 @@ class ListIndexing(
         val s = type.source(sourceId) ?: return 0
         val kept = ListModelValues.ofEvery(index, sourceId)
         val predicted = index.written { ListPredictions.ofEvery(it, sourceId) }
-        val rows = ListRows.read(s, null, clusters, kept, predicted)
+        val rows = ListRows.read(s, null, clusters, kept, predicted, plugins.textEncoder()?.id)
         // Compared a portion at a time with the documents as written before any is: one reading of the index
         val undated = ArrayList<ListRow>()
         val other = index.written { reader ->
@@ -233,7 +236,9 @@ class ListIndexing(
             changed += WorkDatum.DATA
         }
         val drafted = undated.mapTo(HashSet()) { it.key }
-        index.replace(other.map { if (it.key in drafted) it.dated(WorkDatum.DATA, now.toEpochMilli()) else it })
+        val dated = other.map { if (it.key in drafted) it.dated(WorkDatum.DATA, now.toEpochMilli()) else it }
+        // The vectors of the texts of those written alone, read now
+        ListRows.withVectors(s, dated, plugins.textEncoder()?.id) { index.replace(it) }
         index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
         return other.size
     }
@@ -252,7 +257,7 @@ class ListIndexing(
         private const val PORTION = 10_000
 
         /** Since when the documents of the [index] hold every change; of an index never so written, of every date. */
-        private fun writtenOf(index: ListIndex): Instant =
+        internal fun writtenOf(index: ListIndex): Instant =
             index.stages.since(WRITTEN)?.let(Instant::ofEpochMilli) ?: Instant.EPOCH
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */

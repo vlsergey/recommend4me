@@ -42,9 +42,9 @@ class PairScore(
 
         /**
          * The scores of the [pairs] of a search by the models of one work [same] and of one series [series], the user's
-         * words [said], what their works have alike — read of every work of their sources ([WholeMatch]) —, and what
-         * every sort says of them as things stand: the sizes the search compared, where the user's answers change, the
-         * works' predictions as the [index] of the list keeps them and the user's marks of interest.
+         * words [said], what their works have alike ([match]: of the works as the search read them), and what every
+         * sort says of them as things stand: the sizes the search compared, where the user's answers change, the works'
+         * predictions as the [index] of the list keeps them and the user's marks of interest.
          */
         internal fun of(
             type: TypeStore,
@@ -53,9 +53,8 @@ class PairScore(
             said: Said,
             same: FittedPairModel,
             series: FittedPairModel?,
+            match: WholeMatch,
         ): (DuplicateCandidate) -> PairScore {
-            val ofSources = pairs.asSequence().flatMap { sequenceOf(it.first, it.second) }.distinctBy { it.source }
-            val match = WholeMatch(type, ofSources.toList(), authors = true, titles = true)
             val doubt = PairDoubt.of(pairs, said, { same.chance(it.layers) }, { series?.chance(it.layers) })
             val worth = PairWorth.of(type, index)
             return { c ->

@@ -117,15 +117,7 @@ class Duplicates(
         val read = System.currentTimeMillis() - started
         tasks.progress(READ)
         val kept = models.of(type)
-        val found =
-            search.found(
-                said,
-                model,
-                listOfNotNull(kept?.same ?: model.prior(), kept?.series),
-                cards.getIfAvailable()?.cublas(),
-            ) { share ->
-                tasks.progress(READ + share * (COMPARED - READ))
-            }
+        val found = found(search, said, model, kept)
         val compared = System.currentTimeMillis() - started
         tasks.progress(COMPARED)
         ChanceSpread.of(found.values, kept)?.let { log.info("{}: {}", type.id, it) }
@@ -134,9 +126,12 @@ class Duplicates(
         model.fitted(search.search, listOfNotNull(fitted.same ?: model.prior(), fitted.series))
         val fit = System.currentTimeMillis() - started
         val now = Instant.now()
+        val same = fitted.same ?: model.prior()
+        val scores =
+            PairScore.of(type, indexes.of(type.id), likely, said, same, fitted.series, WholeMatch(search.sides))
         type.duplicates.replace(
             likely,
-            PairScore.of(type, indexes.of(type.id), likely, said, fitted.same ?: model.prior(), fitted.series),
+            scores,
             DuplicateSearch(
                 now,
                 encoder,
@@ -168,6 +163,25 @@ class Duplicates(
             fitted.series != null,
         )
     }
+
+    /**
+     * The pairs the [search] finds by the [model]'s models as the last fitting left them ([kept]) — of none yet, its
+     * prior —, on the card when there is one, and every pair answered on ([said]); its share told as it goes.
+     */
+    private fun found(
+        search: TypeSearch,
+        said: Said,
+        model: PairModel,
+        kept: PairChances?,
+    ) =
+        search.found(
+            said,
+            model,
+            listOfNotNull(kept?.same ?: model.prior(), kept?.series),
+            cards.getIfAvailable()?.cublas(),
+        ) { share ->
+            tasks.progress(READ + share * (COMPARED - READ))
+        }
 
     /**
      * Of the likeliest pair of every work [found], those a model of the answers gives a chance of 1 % at least — its

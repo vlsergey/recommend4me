@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import java.time.Instant
 
@@ -64,9 +65,10 @@ class RowValues(
  * facet's filter id — the site's, the model's kept, the user's word on top), every number with the user's word on top
  * ([numbers], by the number's id), its [title] as the user corrected it, of every facet the source works out the values
  * the models give it beyond the site's own ([model], by the facet's key): kept in the index alone; the sweeps of the
- * tasks over the works that last did it ([stages]); and when every kind of data of its work last changed ([dates],
+ * tasks over the works that last did it ([stages]); when every kind of data of its work last changed ([dates],
  * [WorkDatum]) — of the outer ones as the databases date them, of the others as the stages that make them did: what the
- * stages take it by ([StageSweeps]).
+ * stages take it by ([StageSweeps]); its texts held whole as the user corrected them ([texts], by their keys) and the
+ * vectors of its texts ([vectors]: [ListTexts]).
  */
 class ListRow(
     val key: ItemKey,
@@ -82,6 +84,8 @@ class ListRow(
     val model: Map<String, List<String>> = emptyMap(),
     val stages: WorkStages = WorkStages.NONE,
     val dates: Map<WorkDatum, Long> = emptyMap(),
+    val texts: Map<String, String> = emptyMap(),
+    val vectors: RowVectors? = null,
 ) {
     /**
      * The row with the [stages] of the tasks over its work and the dates of what they made of it ([kept], of the data
@@ -92,8 +96,36 @@ class ListRow(
     /** The row with the [datum] dated [at]. */
     fun dated(datum: WorkDatum, at: Long) = of(stages, dates + (datum to at))
 
-    private fun of(stages: WorkStages, dates: Map<WorkDatum, Long>) =
-        ListRow(key, work, rank, linked, updatedAt, firstSeenAt, values, facets, numbers, title, model, stages, dates)
+    /** The row with the [vectors] of its texts. */
+    fun withVectors(vectors: RowVectors?) = of(stages, dates, vectors)
+
+    private fun of(stages: WorkStages, dates: Map<WorkDatum, Long>, vectors: RowVectors? = this.vectors) =
+        ListRow(
+            key,
+            work,
+            rank,
+            linked,
+            updatedAt,
+            firstSeenAt,
+            values,
+            facets,
+            numbers,
+            title,
+            model,
+            stages,
+            dates,
+            texts,
+            vectors,
+        )
+}
+
+/**
+ * The vectors of an item's texts by the [encoder], as its document holds them ([ListTexts.packed]), by the texts' keys:
+ * [packed] made as the document is — of every item of a source held off the heap till then ([EveryVector]).
+ */
+class RowVectors(val encoder: String, private val made: () -> Map<String, ByteArray>) {
+    val packed: Map<String, ByteArray>
+        get() = made()
 }
 
 /**
@@ -107,7 +139,9 @@ internal object ListRows {
      * of every item, by the facet's key, the values the models give it beyond the site's own — made now of a few, kept
      * by the index of a whole source ([ListModelValues]); none of a source not filled yet; [predicted]: of every item,
      * its prediction as the index kept it ([ListPredictions]). The [stages] of every item — when the tasks over the
-     * works did it —, none of an item not told.
+     * works did it —, none of an item not told. The vectors of their texts by the [encoder] — none without one — of the
+     * items [ids] read by their keys; of every item none: the writing of a source whole reads those it writes
+     * ([withVectors]).
      */
     fun read(
         s: SourceStore,
@@ -115,6 +149,7 @@ internal object ListRows {
         clusters: WorkClusters,
         model: Map<String, Map<String, List<String>>>,
         predicted: Map<String, Predicted>,
+        encoder: String?,
         stages: (String) -> WorkStages = { WorkStages.NONE },
     ): List<ListRow> {
         val heads =
@@ -126,8 +161,11 @@ internal object ListRows {
         val corrections =
             if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
         val facets = facetsOf(s, ids, model, corrections)
-        val numbers = numbersOf(s, ids)
-        val titles = titlesOf(s, ids)
+        val fields = if (ids == null) s.corrections.allFields() else s.corrections.fieldsOf(ids)
+        val numbers = numbersOf(s, ids, fields)
+        val titles = titlesOf(s, ids, fields)
+        val texts = textsOf(s, ids, fields)
+        val vectors = if (encoder == null || ids == null) emptyMap() else vectorsOf(s, ids, encoder)
         // When every outer kind of data of each changed last: of its item, and of the user's word on its work
         val itemDates = s.changes.of(ids)
         val workDates = s.works.changes.ofItems(s.id, ids)
@@ -155,9 +193,65 @@ internal object ListRows {
                 model = model[h.id].orEmpty(),
                 stages = stages(h.id),
                 dates = itemDates[h.id].orEmpty() + workDates[h.id].orEmpty(),
+                texts = texts[h.id].orEmpty(),
+                vectors = vectors[h.id],
             )
         }
     }
+
+    /**
+     * The texts held whole ([ListTexts.textKeys]) of the items [ids] — of every item when null, in one pass of the
+     * table — as the user corrected them ([fields]).
+     */
+    private fun textsOf(
+        s: SourceStore,
+        ids: Collection<String>?,
+        fields: Map<String, Map<String, String>>,
+    ): Map<String, Map<String, String>> {
+        val keys = ListTexts.textKeys(s.schema)
+        if (keys.isEmpty()) return emptyMap()
+        val site: Map<String, Map<String, String>> =
+            if (ids != null) s.items.textsOf(ids, keys)
+            else
+                HashMap<String, HashMap<String, String>>().also { out ->
+                    s.items.forEachText(keys) { id, key, text -> out.getOrPut(id) { HashMap(2) }[key] = text }
+                }
+        val wanted = keys.toSet()
+        val out = HashMap<String, Map<String, String>>()
+        (site.keys + fields.keys).forEach { id ->
+            val own = fields[id].orEmpty()
+            val corrected =
+                Corrected.texts(site[id].orEmpty(), own).filterKeys { it in wanted }.filterValues { it.isNotBlank() }
+            if (corrected.isNotEmpty()) out[id] = corrected
+        }
+        return out
+    }
+
+    /**
+     * The [rows] of the source [s] with the vectors of their texts by the [encoder]: of many read in one pass of the
+     * source's vectors, held off the heap till the [block] is done with them; of a few by their keys.
+     */
+    fun <T> withVectors(s: SourceStore, rows: List<ListRow>, encoder: String?, block: (List<ListRow>) -> T): T {
+        val ids = rows.map { it.key.id }
+        return when {
+            encoder == null || rows.isEmpty() -> block(rows)
+            rows.size <= MANY ->
+                vectorsOf(s, ids, encoder).let { byId -> block(rows.map { it.withVectors(byId[it.key.id]) }) }
+            else ->
+                EveryVector.read(s, encoder, ids).use { every ->
+                    block(rows.map { it.withVectors(every.of(it.key.id)) })
+                }
+        }
+    }
+
+    /**
+     * The vectors of the texts of the items [ids] by the [encoder] as their documents hold them, read by their keys.
+     */
+    private fun vectorsOf(s: SourceStore, ids: Collection<String>, encoder: String): Map<String, RowVectors> =
+        s.textVectors.halvesOf(ids, encoder, ListTexts.vectorKeys(s.schema)).mapValues { (_, own) ->
+            val packed = own.mapValues { ListTexts.packedHalves(it.value) }
+            RowVectors(encoder) { packed }
+        }
 
     /**
      * The values of the items of the source that change without the item — the grade, prediction and interest —, of
@@ -184,8 +278,8 @@ internal object ListRows {
      * Of every filter facet of the source, and of its authors, by its filter id, every item's values as the user sees
      * them: the site's, the drafts of the layer, the models' of a facet it works out ([model]: of every item, by the
      * facet's key, beyond the site's own), the user's corrections on top — what the index keeps of them: of the items
-     * [ids], what a screen shows of a few. The authors no filter, kept for the search of duplicates to read of the
-     * index, not of the database (user, 2026-11-18).
+     * [ids], what a screen shows of a few. The authors and the site's fandoms no filter, kept for the search of
+     * duplicates to read of the index, not of the database (user, 2026-11-18; owner, 2026-11-22).
      */
     fun facetsOf(
         s: SourceStore,
@@ -194,7 +288,8 @@ internal object ListRows {
         /** The user's answers on the facets of the items, read by the caller already; read now when not. */
         answers: Map<String, List<FacetCorrection>>? = null,
     ): Map<String, Map<String, List<String>>> {
-        val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR }
+        val fandoms = UniverseFacet.fandomFacet(s.schema)
+        val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR || it.key == fandoms }
         if (defs.isEmpty()) return emptyMap()
         // The site's facets the tags are drafted of read with them (TagDrafts)
         val draftedOf = s.schema.facets.mapNotNull { it.examplesFrom }.toSet()
@@ -233,10 +328,13 @@ internal object ListRows {
         return Corrected.facets(mapOf(def.key to given.distinct()), mine, single)[def.key].orEmpty()
     }
 
-    /** The titles of the items [ids] — of every item when null — as the user corrected them. */
-    private fun titlesOf(s: SourceStore, ids: Collection<String>?): Map<String, String> {
+    /** The titles of the items [ids] — of every item when null — as the user corrected them ([fields]). */
+    private fun titlesOf(
+        s: SourceStore,
+        ids: Collection<String>?,
+        fields: Map<String, Map<String, String>>,
+    ): Map<String, String> {
         val titles = if (ids == null) s.items.titles() else s.items.heads(ids).mapValues { it.value.title }
-        val fields = if (ids == null) s.corrections.allFields() else s.corrections.fieldsOf(ids)
         return titles.mapValues { (id, title) -> Corrected.title(title, fields[id].orEmpty()) }
     }
 
@@ -251,9 +349,14 @@ internal object ListRows {
 
     /**
      * Every number of the items [ids] — of every item when null — by the number's id, the user's word on top; and the
-     * words and the characters of an item's kept texts ([PartCounts.WORDS_ID], [PartCounts.CHARS_ID]), as they lie.
+     * words and the characters of an item's kept texts ([PartCounts.WORDS_ID], [PartCounts.CHARS_ID]), as they lie. The
+     * user's word of the [fields] read of the items alone.
      */
-    private fun numbersOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, Double>> {
+    private fun numbersOf(
+        s: SourceStore,
+        ids: Collection<String>?,
+        fields: Map<String, Map<String, String>>,
+    ): Map<String, Map<String, Double>> {
         val defs = s.schema.numbers.associateBy { it.key }
         val out = textSizesOf(s, ids)
         if (defs.isEmpty()) return out
@@ -263,10 +366,8 @@ internal object ListRows {
         }
         if (ids == null) s.items.forEachNumber(::put)
         else s.items.numbersOf(ids).forEach { (id, numbers) -> numbers.forEach { (key, value) -> put(id, key, value) } }
-        val wanted = ids?.toHashSet()
-        s.corrections.allFields().forEach { (id, fields) ->
-            if (wanted != null && id !in wanted) return@forEach
-            defs.keys.forEach { key -> fields[Corrected.numberField(key)]?.toDoubleOrNull()?.let { put(id, key, it) } }
+        fields.forEach { (id, own) ->
+            defs.keys.forEach { key -> own[Corrected.numberField(key)]?.toDoubleOrNull()?.let { put(id, key, it) } }
         }
         return out
     }

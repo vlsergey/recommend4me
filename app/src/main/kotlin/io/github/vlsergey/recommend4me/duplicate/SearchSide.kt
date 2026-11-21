@@ -5,6 +5,8 @@ import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.model.FeatureNames
+import io.github.vlsergey.recommend4me.part.CharClasses
+import io.github.vlsergey.recommend4me.part.PartCounts
 import io.github.vlsergey.recommend4me.size.KeptRatios
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
@@ -48,6 +50,8 @@ internal class SearchSide(
     val sizes: Map<String, DoubleArray>,
     val authors: Array<LongArray>,
     val texts: TextsCompared,
+    /** Every work's title as the user corrected it, by its place. */
+    val titleTexts: List<String>,
 ) {
     /**
      * The works as the model of pairs reads them ([SiteWorks]): of every work the weight of each of its [values] — the
@@ -93,6 +97,33 @@ internal class SearchSide(
     }
 
     companion object {
+        /**
+         * The ids the index of the list keeps the counts of an item's kept texts by: its words, its characters, its
+         * characters by their classes ([PartCounts]) — what the model of the sizes weighs a work by, read of the index.
+         */
+        private val COUNTS =
+            listOf(PartCounts.WORDS_ID, PartCounts.CHARS_ID) + CharClasses.NAMES.indices.map(PartCounts::classId)
+
+        /** Of the works [c] read, the words and the characters of those whose texts are counted. */
+        private fun countedOf(c: ComparedValues.Compared): Map<String, Pair<Double, Double>> {
+            val words = c.numbers[PartCounts.WORDS_ID]
+            val chars = c.numbers[PartCounts.CHARS_ID] ?: return emptyMap()
+            val out = HashMap<String, Pair<Double, Double>>()
+            c.ids.forEachIndexed { i, id -> if (chars[i] > 0) out[id] = (words?.get(i) ?: 0.0) to chars[i] }
+            return out
+        }
+
+        /** Of the works [c] read, the counts of the classes of the characters of those whose texts are counted. */
+        private fun classesOf(c: ComparedValues.Compared): Map<String, IntArray> {
+            val columns = CharClasses.NAMES.indices.map { c.numbers[PartCounts.classId(it)] }
+            val out = HashMap<String, IntArray>()
+            c.ids.forEachIndexed { i, id ->
+                val own = IntArray(columns.size) { k -> columns[k]?.get(i)?.toInt() ?: 0 }
+                if (own.any { it > 0 }) out[id] = own
+            }
+            return out
+        }
+
         /** The roles of the numbers of how a site's readers met a work — its likes, its views —: not the work's own. */
         private val SITE_ROLES = setOf(NumberRole.APPROVAL, NumberRole.REACH)
 
@@ -107,7 +138,7 @@ internal class SearchSide(
             // of
             // the list, not of the databases (user, 2026-11-18)
             val numbers = sizeNumbers(s)
-            val compared = ComparedValues(s, index).every(numbers.keys)
+            val compared = ComparedValues(s, index).every(numbers.keys + COUNTS)
             val ids = compared.ids
             if (ids.isEmpty()) return null
             val read = System.currentTimeMillis()
@@ -115,14 +146,10 @@ internal class SearchSide(
             val (titles, titleLengths) = Letters.rows(compared.titles)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val lettered = System.currentTimeMillis()
-            val texts = TextsCompared.read(s, encoder, ids)
+            val texts = TextsCompared.read(s, encoder, ids, index)
             val vectors = System.currentTimeMillis()
             val sizes =
-                sizesOf(
-                    ids,
-                    model.of(s.id, compared, { s.parts.counts.counted() }) { s.parts.counts.classes(null) },
-                    numbers,
-                ) {
+                sizesOf(ids, model.of(s.id, compared, { countedOf(compared) }) { classesOf(compared) }, numbers) {
                     compared.numbers[it]
                 }
             log.info(
@@ -149,6 +176,7 @@ internal class SearchSide(
                     sizes,
                     compared.authors,
                     texts,
+                    compared.titles,
                 )
             }
         }
@@ -168,8 +196,8 @@ internal class SearchSide(
             val own = ids.filter { it in heads }.distinct().sorted()
             if (own.isEmpty()) return null
             val fields = s.corrections.fieldsOf(own)
-            val (titles, titleLengths) =
-                Letters.rows(own.map { Corrected.title(heads.getValue(it).title, fields[it].orEmpty()) })
+            val titled = own.map { Corrected.title(heads.getValue(it).title, fields[it].orEmpty()) }
+            val (titles, titleLengths) = Letters.rows(titled)
             val numbers = sizeNumbers(s)
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
@@ -181,7 +209,7 @@ internal class SearchSide(
                 ) {
                     compared.numbers[it]
                 }
-            val texts = TextsCompared.read(s, encoder, own)
+            val texts = TextsCompared.read(s, encoder, own, index)
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(
                     s,
@@ -196,6 +224,7 @@ internal class SearchSide(
                     sizes,
                     compared.authors,
                     texts,
+                    titled,
                 )
             }
         }

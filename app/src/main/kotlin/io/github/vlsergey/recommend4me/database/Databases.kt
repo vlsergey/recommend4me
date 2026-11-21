@@ -88,7 +88,18 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
 
     private val types: Map<String, TypeDatabases> =
         plugins.types.associate { t ->
-            t.id to TypeDatabases(model = Database("${t.id}/model", folder.type(t.id).resolve("model"), "model"))
+            // The pages of the model's file H2 keeps: the candidates of the duplicates' search, written whole and
+            // indexed by every sort after — ten passes over them
+            t.id to
+                TypeDatabases(
+                    model =
+                        Database(
+                            "${t.id}/model",
+                            folder.type(t.id).resolve("model"),
+                            "model",
+                            cacheMegabytes = MODEL_CACHE_MB,
+                        )
+                )
         }
 
     fun of(sourceId: String): SourceDatabases = sources[sourceId] ?: error("No such source: $sourceId")
@@ -129,5 +140,12 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
          * vectors of its texts alone are 416 MB; used only as pages are read.
          */
         const val SOURCE_CACHE_MB = 1024
+
+        /**
+         * The pages of a content type's model file H2 keeps read, in megabytes: the ten indexes of the 2.6 million
+         * candidates of the duplicates made after them took 85 s with H2's own cache, 48 s with a gigabyte (2026-11-22,
+         * a file of 1 GB on an SSD).
+         */
+        const val MODEL_CACHE_MB = 1024
     }
 }

@@ -15,6 +15,7 @@ import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListVectors
 import io.github.vlsergey.recommend4me.worklist.NextWorks
 import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
@@ -45,7 +46,9 @@ data class WorkTextVectorFillEvent(val type: String, val scope: WorkScope)
  * data or answers changed past its mark, of every work by an encoder of the index never seen ([start]); a task of the
  * marked and rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) — the
  * highest expected first, from where the last turn left —: the texts new or changed encoded, those gone dropped, every
- * one marked done, the works whose vectors changed dated so: the stages reading them see them.
+ * one marked done, the works whose vectors changed dated so: the stages reading them see them; the documents of the
+ * list holding other vectors than kept written anew with them ([ListVectors]) — what the search of the duplicates reads
+ * of the index alone.
  *
  * A WORK THE USER OPENS — its card or its page — has its texts encoded on the spot ([encodeOwn]).
  */
@@ -58,6 +61,7 @@ class TextVectors(
     private val windows: TextWindows,
     private val lists: ListIndexes,
     private val sweeps: StageSweeps,
+    private val documents: ListVectors,
 ) {
     /** Whether texts are being encoded now. */
     val running: Boolean
@@ -149,8 +153,9 @@ class TextVectors(
 
     /**
      * Of the items [keys] of the [scope] of the [type], the texts new or changed encoded by the [encoder], those gone
-     * dropped, every item marked done, those whose vectors changed dated so ([StageSweeps.made]); committed. False,
-     * nothing marked done, of a turn that gave way to a work the user asked for ([Tasks.outranked]).
+     * dropped, their documents brought in step with them ([ListVectors]), every item marked done, those whose vectors
+     * changed dated so ([StageSweeps.made]); committed. False, nothing marked done, of a turn that gave way to a work
+     * the user asked for ([Tasks.outranked]).
      */
     private fun done(type: TypeStore, scope: WorkScope, encoder: TextEncoder, keys: List<ItemKey>): Boolean {
         val started = System.currentTimeMillis()
@@ -166,14 +171,17 @@ class TextVectors(
         // Of a turn that gave way, the works not marked done — met again, their texts found encoded — but those encoded
         // anew dated all the same: the next turn finds them unchanged
         val gaveWay = tasks.outranked
+        // The documents written anew before they are marked: the marks are written in place, over them
+        val brought = documents.bring(type, keys)
         if (!gaveWay) sweeps.done(STAGE, type.id, scope, keys)
         sweeps.made(STAGE, type.id, scope, changed)
         lists.of(type.id).commit()
         log.info(
-            "{}: the texts of {} works held, of {} encoded anew, in {} ms{}",
+            "{}: the texts of {} works held, of {} encoded anew, {} documents given their vectors, in {} ms{}",
             type.id,
             keys.size,
             changed.size,
+            brought,
             System.currentTimeMillis() - started,
             if (gaveWay) ", given way to a work asked for" else "",
         )
