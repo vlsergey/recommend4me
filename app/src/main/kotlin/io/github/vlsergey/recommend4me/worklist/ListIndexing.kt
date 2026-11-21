@@ -113,9 +113,11 @@ class ListIndexing(
         val type = stores.type(typeId) ?: return
         val started = Instant.now()
         val index = indexes.of(typeId)
-        // An index of another format made anew whole
+        // An index of another format made anew whole, over its documents of before: their models' values and
+        // predictions
+        // read of them as every source is written
         val anew = !index.current()
-        if (anew) index.clear()
+        if (anew) index.madeAnew(type.sources.mapTo(HashSet()) { it.id })
         val since = writtenOf(index)
         val whole = if (anew) type.sources.map { it.id }.toSet() else ListChanges.whole(type, since)
         val clusters = works.of(type)
@@ -202,8 +204,8 @@ class ListIndexing(
         from: MutableMap<WorkScope, TaskCursor>,
     ): Int {
         val s = type.source(sourceId) ?: return 0
-        val kept = if (anew) emptyMap() else ListModelValues.ofEvery(index, sourceId)
-        val predicted = if (anew) emptyMap() else index.written { ListPredictions.ofEvery(it, sourceId) }
+        val kept = ListModelValues.ofEvery(index, sourceId)
+        val predicted = index.written { ListPredictions.ofEvery(it, sourceId) }
         val rows = ListRows.read(s, null, clusters, kept, predicted)
         // Compared a portion at a time with the documents as written before any is: one reading of the index
         val other =

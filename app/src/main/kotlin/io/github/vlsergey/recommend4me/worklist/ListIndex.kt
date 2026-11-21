@@ -9,11 +9,16 @@ import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.index.Term
+import org.apache.lucene.search.BooleanClause
+import org.apache.lucene.search.BooleanQuery
 import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
+import org.apache.lucene.search.MatchAllDocsQuery
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
+import org.apache.lucene.search.TermInSetQuery
 import org.apache.lucene.store.FSDirectory
+import org.apache.lucene.util.BytesRef
 
 /**
  * THE INDEX OF THE LIST OF WORKS OF ONE CONTENT TYPE (user, 2026-11-17): what the screen of the list is filtered,
@@ -50,9 +55,18 @@ class ListIndex(dir: Path) : AutoCloseable {
      */
     @Volatile private var format: String? = writer.liveCommitData?.firstOrNull { it.key == FORMAT_KEY }?.value
 
-    /** Every document removed: the index made anew after, of this [FORMAT]. */
-    fun clear() {
-        writer.deleteAll()
+    /**
+     * The index to be made anew of this [FORMAT], its documents of the [sources] written again whole over those of the
+     * format before — whose values of the models and predictions they are made with, read of them first — those of any
+     * other source removed: kept with the next commit.
+     */
+    fun madeAnew(sources: Set<String>) {
+        writer.deleteDocuments(
+            BooleanQuery.Builder()
+                .add(MatchAllDocsQuery(), BooleanClause.Occur.MUST)
+                .add(TermInSetQuery(SOURCE, sources.map { BytesRef(it) }), BooleanClause.Occur.MUST_NOT)
+                .build()
+        )
         format = FORMAT.toString()
     }
 
