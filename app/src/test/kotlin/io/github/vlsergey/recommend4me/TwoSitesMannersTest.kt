@@ -78,7 +78,7 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
         val annId = type.authors.of(SiteAuthorRef("alpha", "mn-ann"))!!
         val bobId = type.authors.of(SiteAuthorRef("alpha", "mn-bob"))!!
         assertTrue(type.groupManners.made(MannerGroup.AUTHOR).keys.containsAll(setOf("$annId", "$bobId")))
-        assertNear(ann, type.groupManners.all(MannerGroup.AUTHOR, words.id)["$annId"])
+        assertNear(ann, type.groupManners.of(MannerGroup.AUTHOR, listOf("$annId"), words.id)["$annId"])
         val none = all.blocks(ItemKey("alpha", "mn3"))
         assertNull(none[TypeManners.WORK], "a work of no text has no manner of its own")
         assertNear(ann, none[TypeManners.AUTHOR])

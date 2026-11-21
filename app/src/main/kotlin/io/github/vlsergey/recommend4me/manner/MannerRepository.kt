@@ -44,14 +44,6 @@ class MannerRepository(private val db: DSLContext) {
         }
     }
 
-    /** The manner of every item measured by the words [wordsId]: item to vector. */
-    fun all(wordsId: Long): Map<String, FloatArray> =
-        db.select(ITEM_MANNER.ITEM_ID, ITEM_MANNER.VEC)
-            .from(ITEM_MANNER)
-            .where(ITEM_MANNER.WORDS_ID.eq(wordsId))
-            .fetch()
-            .associate { it.value1()!! to Vectors.fromHalf(it.value2()!!) }
-
     /** The manners of the items [ids] measured by the words [wordsId]: item to vector. */
     fun ofMany(ids: Collection<String>, wordsId: Long): Map<String, FloatArray> {
         val out = HashMap<String, FloatArray>()

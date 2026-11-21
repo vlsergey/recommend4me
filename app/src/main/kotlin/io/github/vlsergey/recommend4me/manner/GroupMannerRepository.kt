@@ -56,14 +56,6 @@ class GroupMannerRepository(private val db: DSLContext) {
         }
     }
 
-    /** The manner of every group of the [kind] measured by the words [wordsId]: key to vector. */
-    fun all(kind: MannerGroup, wordsId: Long): Map<String, FloatArray> =
-        db.select(GROUP_MANNER.GROUP_KEY, GROUP_MANNER.VEC)
-            .from(GROUP_MANNER)
-            .where(GROUP_MANNER.KIND.eq(kind.name), GROUP_MANNER.WORDS_ID.eq(wordsId))
-            .fetch()
-            .associate { it.value1()!! to Vectors.fromHalf(it.value2()!!) }
-
     /** The manners of the groups [keys] of the [kind] measured by the words [wordsId]: key to vector. */
     fun of(kind: MannerGroup, keys: Collection<String>, wordsId: Long): Map<String, FloatArray> {
         val out = HashMap<String, FloatArray>()
