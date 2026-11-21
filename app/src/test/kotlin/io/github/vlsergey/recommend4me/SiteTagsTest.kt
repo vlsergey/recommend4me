@@ -89,6 +89,19 @@ class SiteTagsTest : SiteTestBase() {
         assertEquals("Driftwood", stores.type("books")!!.tags.stats.shown(listOf(drift))[drift])
     }
 
+    @Test
+    fun `a tag whose site's tags moved to another is no tag of their site at once, the counts not made again`() {
+        capture("t21|Hull afloat|flotsam,jetsam|A hull afloat in deep space|")
+        val flotsam = tag("flotsam")
+        val jetsam = tag("jetsam")
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
+        // The site's tag bound to the other tag: the tag it left has no site's tag of the site
+        tagsApi.bindSiteTag(TagBindingRequest("site", "flotsam", jetsam))
+        val ofSite = tagsApi.listTags(null, listOf("site"), null, null, 0, 1000).body!!.tags.map { it.key }
+        assertTrue(jetsam in ofSite, "$ofSite")
+        assertTrue(flotsam !in ofSite, "$ofSite")
+    }
+
     /**
      * Offered alike, nothing merged by itself; merged, the site's tags of the other bound to [hulls], named by the
      * liked work, then by the user, the answer on the other the tag's now.

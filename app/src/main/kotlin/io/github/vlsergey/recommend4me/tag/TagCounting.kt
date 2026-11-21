@@ -31,11 +31,7 @@ class TagCounting(
         // A tag of no work yet — one the user made above others — is a tag all the same
         scope.tags.ids().forEach { id -> out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) } }
         rejections.forEach { (key, items) -> out[key]?.rejected?.addAll(items) }
-        val sourcesOf = bindings.entries.groupBy({ TagRepository.key(it.value) }, { it.key.source })
-        out.values.forEach { t ->
-            t.counts = Counts(t.items.size, t.graded.size, t.liked.size)
-            t.sources = sourcesOf[t.key].orEmpty().distinct().sorted()
-        }
+        out.values.forEach { t -> t.counts = Counts(t.items.size, t.graded.size, t.liked.size) }
         return out
     }
 

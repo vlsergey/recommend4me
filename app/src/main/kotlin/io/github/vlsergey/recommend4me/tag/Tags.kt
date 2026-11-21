@@ -41,8 +41,9 @@ class TagStats(val key: String) {
      */
     var counts = Counts(0, 0, 0)
 
-    /** The sources whose site's tags are bound to it. */
-    var sources: List<String> = emptyList()
+    /** The sources whose site's tags are bound to it, of works or of none: of its [variants]. */
+    val sources: List<String>
+        get() = variants.keys.map { it.source }.distinct()
 
     val id: Long
         get() = TagRepository.idOf(key)!!
@@ -134,8 +135,8 @@ class Tags(
     fun scope(): TagScope? = normalization.scope()
 
     /**
-     * Every normalized tag as kept in the dictionaries: its sites' tags with their names and works, its works and its
-     * sources as last counted ([TagRenaming], in the background) — no work read now, no sets of works.
+     * Every normalized tag as kept in the dictionaries: its sites' tags with their names and works, its works as last
+     * counted ([TagRenaming], in the background) — no work read now, no sets of works.
      */
     fun stats(scope: TagScope): Map<String, TagStats> {
         val out = HashMap<String, TagStats>()
@@ -158,16 +159,9 @@ class Tags(
                 )
         }
         scope.tags.stats.counts().forEach { (id, c) ->
-            out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) }
-                .apply {
-                    counts = c.counts
-                    sources = c.sources
-                }
+            out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) }.counts = c
         }
         scope.tags.ids().forEach { id -> out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) } }
-        // The sites of every site's tag bound to it, of works or of none: whether a work has a tag tells nothing of
-        // which sites name it (user, 2026-11-13)
-        out.values.forEach { t -> t.sources = (t.sources + t.variants.keys.map { it.source }).distinct() }
         return out
     }
 

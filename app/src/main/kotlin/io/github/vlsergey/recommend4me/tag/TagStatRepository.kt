@@ -32,9 +32,6 @@ data class Counts(val works: Int, val graded: Int, val liked: Int)
  */
 data class SiteTagCount(val site: SiteTagRef, val normalized: Long, val name: String?, val counts: Counts)
 
-/** A tag's works as last counted, and the sources whose site's tags are bound to it. */
-data class TagCount(val counts: Counts, val sources: List<String>)
-
 /**
  * WHAT IS SHOWN OF THE TAGS, in the user's dictionaries ([db]): the names the user gave them and the names the
  * application worked out of the sites', and the works of every tag and of every site's tag as last counted — made again
@@ -135,21 +132,17 @@ class TagStatRepository(private val db: DSLContext) {
                 )
             }
 
-    /** Every tag's works and the sources of its sites' tags, as last counted ([keepStats]). */
-    fun counts(): Map<Long, TagCount> =
-        db.select(TAG_STAT.TAG, TAG_STAT.WORKS, TAG_STAT.GRADED, TAG_STAT.LIKED, TAG_STAT.SOURCES)
+    /** Every tag's works, as last counted ([keepStats]). */
+    fun counts(): Map<Long, Counts> =
+        db.select(TAG_STAT.TAG, TAG_STAT.WORKS, TAG_STAT.GRADED, TAG_STAT.LIKED)
             .from(TAG_STAT)
-            .fetchMap(
-                { it.value1()!! },
-                { TagCount(Counts(it.value2()!!, it.value3()!!, it.value4()!!), it.value5()!!.filterNotNull()) },
-            )
+            .fetchMap({ it.value1()!! }, { Counts(it.value2()!!, it.value3()!!, it.value4()!!) })
 
     /**
      * The statistics counted now in place of those kept, the rows that changed alone: of every site's tag counted its
-     * name and works — of one not counted, no name and none — and of every tag its works and the sources of its sites'
-     * tags.
+     * name and works — of one not counted, no name and none — and of every tag its works.
      */
-    fun keepStats(sites: Map<SiteTagRef, Pair<String, Counts>>, tags: Map<Long, TagCount>) = againIfGone {
+    fun keepStats(sites: Map<SiteTagRef, Pair<String, Counts>>, tags: Map<Long, Counts>) = againIfGone {
         db.transaction { c ->
             val tx = DSL.using(c)
             val st = SITE_TAG
@@ -170,18 +163,15 @@ class TagStatRepository(private val db: DSLContext) {
             val ts = TAG_STAT
             tags.forEach { (tag, count) ->
                 if (tag !in alive || kept[tag] == count) return@forEach
-                val sources = count.sources.toTypedArray<String?>()
                 tx.insertInto(ts)
                     .set(ts.TAG, tag)
-                    .set(ts.WORKS, count.counts.works)
-                    .set(ts.GRADED, count.counts.graded)
-                    .set(ts.LIKED, count.counts.liked)
-                    .set(ts.SOURCES, sources)
+                    .set(ts.WORKS, count.works)
+                    .set(ts.GRADED, count.graded)
+                    .set(ts.LIKED, count.liked)
                     .onDuplicateKeyUpdate()
-                    .set(ts.WORKS, count.counts.works)
-                    .set(ts.GRADED, count.counts.graded)
-                    .set(ts.LIKED, count.counts.liked)
-                    .set(ts.SOURCES, sources)
+                    .set(ts.WORKS, count.works)
+                    .set(ts.GRADED, count.graded)
+                    .set(ts.LIKED, count.liked)
                     .execute()
             }
         }

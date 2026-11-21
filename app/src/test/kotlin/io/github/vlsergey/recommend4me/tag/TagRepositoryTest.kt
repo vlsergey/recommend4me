@@ -27,12 +27,12 @@ class TagRepositoryTest {
             tags.stats.keepStats(
                 emptyMap(),
                 mapOf(
-                    kept to TagCount(Counts(3, 2, 1), listOf("site")),
-                    gone to TagCount(Counts(5, 0, 0), listOf("site")),
+                    kept to Counts(3, 2, 1),
+                    gone to Counts(5, 0, 0),
                 ),
             )
             assertEquals(listOf(kept), db.dsl.select(TAG_STAT.TAG).from(TAG_STAT).fetch(TAG_STAT.TAG))
-            assertEquals(mapOf(kept to TagCount(Counts(3, 2, 1), listOf("site"))), tags.stats.counts())
+            assertEquals(mapOf(kept to Counts(3, 2, 1)), tags.stats.counts())
             assertEquals(
                 "Hulls",
                 db.dsl.select(TAG_STAT.CALCULATED_NAME).from(TAG_STAT).fetchOne(TAG_STAT.CALCULATED_NAME),

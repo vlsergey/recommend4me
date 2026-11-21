@@ -21,8 +21,8 @@ private val log = LoggerFactory.getLogger(TagRenaming::class.java)
 
 /**
  * THE NAMES WORKED OUT, IN THE BACKGROUND: every tag counted — every work of every source — and what is shown of it
- * kept: the names worked out, the works of every tag and of every site's tag, the sources of its sites' tags, and the
- * offers of the tags' graph. The screen of the tags reads them ([Tags.stats], [HierarchyOffers]), not the works.
+ * kept: the names worked out, the works of every tag and of every site's tag, and the offers of the tags' graph. The
+ * screen of the tags reads them ([Tags.stats], [HierarchyOffers]), not the works.
  *
  * Worked out after the works and their grades change and after the user's word on the tags, once the changes have
  * paused: the marking waits for nothing that computes (user, 2026-10-16).
@@ -55,7 +55,7 @@ class TagRenaming(
                 stats.values
                     .flatMap { t -> t.variants.values }
                     .associate { v -> v.site to (v.name to Counts(v.uses.works, v.uses.graded, v.uses.liked)) },
-            tags = stats.values.associate { t -> t.id to TagCount(t.counts, t.sources) },
+            tags = stats.values.associate { t -> t.id to t.counts },
         )
         val offers = HierarchyOffersWorkedOut(scope, n, languages).all()
         scope.tags.relations.keepOffers(json.writeValueAsString(offers), Instant.now())
