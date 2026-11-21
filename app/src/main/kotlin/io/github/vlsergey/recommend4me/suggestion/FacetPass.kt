@@ -6,7 +6,6 @@ import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.universe.CharactersRead
 
 /**
  * ONE FACET OF A PASS OVER EVERY WORK OF A SOURCE, THE [k]-TH OF ITS CHAIN, A PORTION AT A TIME (user, 2026-11-17: no
@@ -22,11 +21,17 @@ internal class FacetPass(
     val facet: FacetDef,
     private val k: Int,
     private val encoder: TextEncoder,
-    private val characters: CharactersRead,
+    /** What the pass over the facets of the source read once: the dictionary's characters, the user's word. */
+    private val once: SourcePassRead,
     private val reading: FacetReading,
     /** Asked before every portion: throws once the pass is to be given up. */
     private val checkpoint: () -> Unit,
 ) {
+    private val characters = once.characters
+
+    /** What the user said of the works of the source, read once for the pass over its facets. */
+    val said: UserWord = once.said
+
     /** Whether the site gives values of the facet, told of every work of the source as the model was fitted. */
     private val siteGives = reading.chain.siteGives(store, facet)
 
@@ -97,7 +102,7 @@ internal class FacetPass(
      * side and of every answer of the source ([answers]).
      */
     fun side(counted: ValueCount, answers: List<FacetCorrection>): ValueSide {
-        val vocabulary = reading.vocabularies.valueSide(store, facet, characters, counted.pairings)
+        val vocabulary = once.type.valueSide(store, facet, counted.pairings)
         return ValueSide.of(store, facet, encoder, counted, vocabulary, answers, store.hierarchies()[facet.key])
     }
 

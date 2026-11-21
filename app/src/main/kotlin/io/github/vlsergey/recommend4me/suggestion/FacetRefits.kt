@@ -39,7 +39,7 @@ internal class FacetRefits(
     private val events: ApplicationEventPublisher,
     private val tasks: Tasks,
     private val chain: FacetChain,
-    vocabularies: FacetVocabularies,
+    private val vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
     private val settings: Settings,
 ) {
@@ -71,8 +71,11 @@ internal class FacetRefits(
         tasks.plan(refreshing(type), due, reason) {
             val work = refreshing(type)
             val taken = tasks.keys.wanted(work)
-            val sources = stores.type(type)?.sources.orEmpty().filter { it.id in taken }
-            sources.forEachIndexed { i, s -> refreshed(s, i, sources.size) }
+            val of = stores.type(type)
+            val sources = of?.sources.orEmpty().filter { it.id in taken }
+            // The type's dictionaries read once for every source of it
+            val once = of?.let { TypePassRead.of(it, vocabularies) }
+            sources.forEachIndexed { i, s -> refreshed(s, once!!, i, sources.size) }
             tasks.keys.done(work, taken)
         }
 
@@ -109,7 +112,9 @@ internal class FacetRefits(
      * its own, never joined to the background's alike.
      */
     fun refresh(store: SourceStore) =
-        tasks.run(refreshing(store.type), mapOf("asked" to 1), joinAlike = false) { refreshed(store, 0, 1) }
+        tasks.run(refreshing(store.type), mapOf("asked" to 1), joinAlike = false) {
+            refreshed(store, TypePassRead.of(stores.typeOf(store.id), vocabularies), 0, 1)
+        }
 
     /**
      * The model of every facet of the [store] fitted again, down the chain; given up only as the application stops
@@ -122,7 +127,7 @@ internal class FacetRefits(
      * into the index of the list after them, last of the queue ([FieldModelFitEvent]; user, 2026-11-18: "split every
      * such work in two: making new models and filling the works with the new computed data").
      */
-    private fun refreshed(store: SourceStore, of: Int, sources: Int) {
+    private fun refreshed(store: SourceStore, type: TypePassRead, of: Int, sources: Int) {
         val encoder = plugins.textEncoder() ?: return
         val stop = { tasks.stopping }
         val facets = chain.facetsOf(store)
@@ -130,7 +135,7 @@ internal class FacetRefits(
         // What is done, told to the queue: every facet a step (user, 2026-11-18: "a progress indicator is needed")
         val steps = facets.size.coerceAtLeast(1).toDouble()
         tasks.progress(of.toDouble() / sources, TaskStep.READ_CHARACTERS)
-        val characters = passes.charactersRead(store)
+        val once = SourcePassRead(type, UserWord.of(store))
         val read = System.currentTimeMillis()
         val took =
             facets.indices.map { k ->
@@ -140,11 +145,11 @@ internal class FacetRefits(
                     I18nKeys.facetLabel(store.id, facets[k]),
                 )
                 val began = System.currentTimeMillis()
-                fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
+                fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, once, stop)
                 "${facets[k].key} ${System.currentTimeMillis() - began}"
             }
         log.info(
-            "{}: the models of every facet fitted in {} ms: the dictionary's characters read {}, the facets {}",
+            "{}: the models of every facet fitted in {} ms: the user's word read {}, the facets {}",
             store.id,
             System.currentTimeMillis() - started,
             read - started,
@@ -181,8 +186,8 @@ internal class FacetRefits(
     private fun fittedAnew(store: SourceStore, facets: List<FacetDef>, k: Int, encoder: TextEncoder) {
         // The suggester named when it runs: one chosen meanwhile is the one fitted
         val suggester = plugins.suggester(store.id, facets[k].key) ?: return
-        val characters = passes.charactersRead(store)
-        fitting.fit(store, facets, k, suggester, encoder, characters, { tasks.stopping }, anew = true)
+        val once = SourcePassRead(TypePassRead.of(stores.typeOf(store.id), vocabularies), UserWord.of(store))
+        fitting.fit(store, facets, k, suggester, encoder, once, { tasks.stopping }, anew = true)
     }
 
     /** Whether the facet's suggester is to be fitted anew, or being fitted anew ([searchAnew]). */

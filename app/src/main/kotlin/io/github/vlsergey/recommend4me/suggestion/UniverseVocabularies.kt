@@ -52,6 +52,9 @@ internal class UniverseVocabularies(private val stores: Stores) {
         }
     }
 
+    /** Whether the value side of the [facet] is made of the works read: of the pairings, their pairs of characters. */
+    fun ofWorks(facet: FacetDef): Boolean = facet.key == UniverseFacets.PAIRINGS
+
     /**
      * The value side of the dictionary of a facet of the universes, of a pass over every work ([ValueSide]): every
      * value it knows with the text of its name, the names it goes by, its groups — nothing of a work. [pairings]: of

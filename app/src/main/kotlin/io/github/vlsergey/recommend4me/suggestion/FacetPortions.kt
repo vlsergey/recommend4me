@@ -1,7 +1,5 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.source.SourceStore
-
 /**
  * THE WORKS OF A FACET'S PASS AS ITS SUGGESTER FITS ON THEM ([TaskPortions]): the [side] of its values alike for every
  * portion, every portion read anew of the database at every walk ([FacetPass.forEach]) — its works, their inputs on the
@@ -67,16 +65,4 @@ internal class FacetPortions(
             val v = held.values[k]
             said[held.items[k]]?.of(v)?.let { yes -> Answered(side.values[v], held.scores[k], yes) }
         }
-
-    companion object {
-        /**
-         * The works of the [store] the user answered on of the facet [facet] — a value said it has or has not, or its
-         * values said all named: what its model learns of.
-         */
-        fun answered(store: SourceStore, facet: String): Set<String> {
-            val said = store.corrections.allFacets().filter { it.facet == facet }.mapTo(HashSet()) { it.itemId }
-            store.corrections.allComplete().forEach { (id, facets) -> if (facet in facets) said += id }
-            return said
-        }
-    }
 }

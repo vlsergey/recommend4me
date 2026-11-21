@@ -27,10 +27,19 @@ internal class OneFacetModel(
         val encoder = plugins.textEncoder()
         if (k < 0 || encoder == null) return null
         val reading = FacetReading(passes, chain, vocabularies)
-        val pass = FacetPass(store, facets[k], k, encoder, passes.charactersRead(store), reading) {}
-        val works = FacetPortions.answered(store, facetKey)
+        val said = UserWord.of(store)
+        val pass =
+            FacetPass(
+                store,
+                facets[k],
+                k,
+                encoder,
+                SourcePassRead(TypePassRead(vocabularies, passes.charactersRead(store)), said),
+                reading,
+            ) {}
+        val works = said.answered(facetKey)
         val counted = pass.counted(works)
-        return FacetPortions(pass, pass.side(counted, store.corrections.allFacets()), works)
+        return FacetPortions(pass, pass.side(counted, said.answers.all), works)
     }
 
     /**

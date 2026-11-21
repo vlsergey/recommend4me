@@ -3,7 +3,6 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.universe.CharactersRead
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -30,8 +29,8 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
      * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and of a calibrated one its cutoff made of every
      * work's chances ([FacetScoring]); the values it gives the works filled after ([FieldModelFitEvent]). [stop] is
      * asked between the portions and the stages, and by the fitting between its steps: the application stops, and the
-     * work is given up with a [CancellationException] before anything half made is kept. [characters]: the dictionary's
-     * characters, read once for the pass.
+     * work is given up with a [CancellationException] before anything half made is kept. [once]: what the pass over the
+     * source's facets read once — the dictionary's characters, the user's word on the works.
      */
     fun fit(
         store: SourceStore,
@@ -39,7 +38,7 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
         k: Int,
         suggester: FacetSuggester?,
         encoder: TextEncoder,
-        characters: CharactersRead,
+        once: SourcePassRead,
         stop: () -> Boolean,
         anew: Boolean = false,
     ) {
@@ -50,7 +49,7 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
                 val checkpoint = {
                     if (stop()) throw CancellationException("${store.id}: ${facet.key} given up: the application stops")
                 }
-                val pass = FacetPass(store, facet, k, encoder, characters, reading, checkpoint)
+                val pass = FacetPass(store, facet, k, encoder, once, reading, checkpoint)
                 // Of no suggester, the drafts and the models of their own alone
                 scoring.walk(pass, suggester?.let { modelled(pass, it, stop, anew, checkpoint) })
             }
@@ -71,12 +70,12 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
         val store = pass.store
         val facet = pass.facet
         val started = System.currentTimeMillis()
-        val works = FacetPortions.answered(store, facet.key)
+        val works = pass.said.answered(facet.key)
         // The values a model learns of are the dictionary's, and what the works it learns of have and were answered
         // of: no walk over every work to count them (owner, 2026-11-19). A value no work it learnt of had — a pairing
         // of a work's own characters — is scored by its features as the works are read ([KeptValues])
         val counted = pass.counted(works)
-        val side = pass.side(counted, store.corrections.allFacets())
+        val side = pass.side(counted, pass.said.answers.all)
         val read = System.currentTimeMillis() - started
         checkpoint()
         val portions = FacetPortions(pass, side, works)

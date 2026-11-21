@@ -50,6 +50,12 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
             ?: examplesFrom(store, facet)?.let { everyExample(store, it) }
 
     /**
+     * Whether the value side of the [facet] is made of the works a pass read — the pairings, of their pairs of
+     * characters — not of a dictionary of the type alone, alike for every source of it ([TypePassRead]).
+     */
+    fun ofWorks(facet: FacetDef): Boolean = universes.ofWorks(facet)
+
+    /**
      * The value side of the [values] alone, of what the operation read already: what the values a model was not made of
      * are scored by ([KeptValues]) — their names and groups, no dictionary read whole (owner, 2026-11-19: "an attempt
      * to load ALL the values of any dictionary while loading the card of one work must fail"). Null of a facet of no

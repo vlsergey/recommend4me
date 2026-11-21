@@ -53,9 +53,11 @@ class FacetPortionsTest : SiteTestBase() {
                 mapOf("asked" to 1),
                 joinAlike = false,
             ) {
+                // What a pass over the source reads once, as the background's pass reads it
+                val once = SourcePassRead(TypePassRead(vocabularies, passes.charactersRead(store)), UserWord.of(store))
                 facets.indices.forEach { k ->
                     val suggester = plugins.suggester(store.id, facets[k].key)
-                    fitting.fit(store, facets, k, suggester, encoder, passes.charactersRead(store), { false }, true)
+                    fitting.fit(store, facets, k, suggester, encoder, once, { false }, true)
                 }
             }
         }
