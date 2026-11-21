@@ -21,10 +21,10 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(ListIndexing::class.java)
 
 /**
- * The documents of works of the [type] written anew, of whom the kinds of [data] changed: the stages reading them look
- * again ([WorkStage.follows]); of an index made [anew] whole, every stage of every work.
+ * The documents of works of the [type] written anew: the [stages] of what changed, or behind, look again
+ * ([StageSweeps.written]); of an index made [anew] whole, every stage of every work.
  */
-data class WorkDocumentWriteEvent(val type: String, val data: Set<WorkDatum>, val anew: Boolean = false)
+data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>, val anew: Boolean = false)
 
 /**
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
@@ -131,11 +131,15 @@ class ListIndexing(
         val gone = type.sources.filter { it.id !in whole }.sumOf { removeGone(it, index) }
         val replaced = System.currentTimeMillis()
         index.stages.changed(WRITTEN, started.toEpochMilli())
+        val sourceIds = type.sources.map { it.id }
+        val due =
+            if (anew) WorkStage.entries.toSet()
+            else sweeps.written(typeId, sourceIds, changed, since.toEpochMilli(), started.toEpochMilli())
         index.commit()
         val committed = System.currentTimeMillis()
         // Of an index made anew, every stage of every work
-        if (anew) WorkStage.entries.forEach { sweeps.reset(it, typeId, type.sources.map { s -> s.id }) }
-        if (anew || changed.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, changed, anew))
+        if (anew) WorkStage.entries.forEach { sweeps.reset(it, typeId, sourceIds) }
+        if (due.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, due, anew))
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} gone — the changes " +
                 "read {}, read and replaced {}, committed {}",

@@ -80,7 +80,7 @@ class WorkFields(
     /** The documents of works written anew, of what the fields are made of changed: their fields computed. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (event.anew || STAGE.follows(event.data))
+        if (STAGE in event.stages)
             WorkScope.entries.forEach {
                 plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
             }

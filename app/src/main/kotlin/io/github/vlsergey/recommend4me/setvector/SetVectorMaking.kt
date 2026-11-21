@@ -68,7 +68,7 @@ class SetVectorMaking(
     /** The documents of works written anew, of what their sets are made of changed: their sets made. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (event.anew || STAGE.follows(event.data))
+        if (STAGE in event.stages)
             WorkScope.entries.forEach {
                 plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
             }

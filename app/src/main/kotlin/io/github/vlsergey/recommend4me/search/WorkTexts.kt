@@ -70,7 +70,7 @@ class WorkTexts(
     /** The documents of works written anew, of what the search reads changed: their documents of the search written. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (event.anew || STAGE.follows(event.data))
+        if (STAGE in event.stages)
             WorkScope.entries.forEach {
                 plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
             }
@@ -115,9 +115,10 @@ class WorkTexts(
         if (provider == null || type == null) return null
         val index = lists.of(typeId)
         if (!provider.current(typeId)) {
-            // Made anew empty: every work's document written again
-            provider.rebuild(typeId, emptySequence())
+            // Made anew empty: every work's document written again — the stage marked at nought first, so a stop
+            // between the two leaves it to be done of every work
             sweeps.reset(STAGE, typeId, type.sources.map { it.id })
+            provider.rebuild(typeId, emptySequence())
         }
         val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
         if (items.isNotEmpty()) written(provider, type, index, scope, items)

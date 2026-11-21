@@ -59,13 +59,14 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     private var building: IndexWriter? = null
 
     /**
-     * Whether the index is of this [FORMAT], holds documents, and its last commit is of an index brought to every item
-     * — a [rebuild] that ended: every item's document written since by [update].
+     * Whether the index is of this [FORMAT] and its last commit is of a [rebuild] that ended: every item's document
+     * written since by [update] — an index rebuilt empty is current, its documents written by the application's passes
+     * as they go.
      */
     fun current(): Boolean = lock.withLock {
         DirectoryReader.open(writer).use { reader ->
             val data = reader.indexCommit.userData
-            data[FORMAT_KEY] == FORMAT.toString() && data[WHOLE_KEY] == true.toString() && reader.numDocs() > 0
+            data[FORMAT_KEY] == FORMAT.toString() && data[WHOLE_KEY] == true.toString()
         }
     }
 

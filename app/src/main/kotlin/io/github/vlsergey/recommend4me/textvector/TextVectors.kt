@@ -89,7 +89,7 @@ class TextVectors(
     /** The documents of works written anew, of what the texts are made of changed: the works of it encoded. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (event.anew || STAGE.follows(event.data))
+        if (STAGE in event.stages)
             WorkScope.entries.forEach {
                 plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
             }

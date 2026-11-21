@@ -112,8 +112,23 @@ enum class WorkStage(
         "texts",
     );
 
-    /** Whether the stage is to look again of what [changed]: it reads it. */
-    fun follows(changed: Collection<WorkDatum>): Boolean = changed.any { it in reads }
+    companion object {
+        /**
+         * The stages what [changed] reaches: those reading it, and those reading what a stage reached makes — the
+         * windows of the chapters changed reach the sets, the sets the fields, the fields the expectations.
+         */
+        fun reached(changed: Collection<WorkDatum>): Set<WorkStage> {
+            val reached = HashSet<WorkStage>()
+            val data = changed.toHashSet()
+            var grown = true
+            while (grown) {
+                val more = entries.filter { it !in reached && it.reads.any { datum -> datum in data } }
+                more.forEach { stage -> stage.output?.let { data += it } }
+                grown = reached.addAll(more)
+            }
+            return reached
+        }
+    }
 }
 
 /**

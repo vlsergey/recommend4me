@@ -72,6 +72,34 @@ class StageSweeps(
         return NextWorks.next(index, scope, due, cursor, portion)
     }
 
+    /**
+     * The index of the [typeId] written up to [now], of the kinds of data [changed], having been written up to
+     * [before]: of every stage the change does not reach ([WorkStage.reached]) and every source of the [sources] it did
+     * everything of up to [before], the mark moved to [now] — nothing it reads changed between; to be committed with
+     * the writing. The stages to look again: those reached, and those behind of a source — of none of its works done
+     * yet, or waiting for a stage before them.
+     */
+    fun written(
+        typeId: String,
+        sources: Collection<String>,
+        changed: Collection<WorkDatum>,
+        before: Long,
+        now: Long,
+    ): Set<WorkStage> {
+        val index = lists.of(typeId)
+        val reached = WorkStage.reached(changed)
+        val behind =
+            (WorkStage.entries - reached).filterTo(HashSet()) { stage ->
+                WorkScope.entries.any { scope ->
+                    sources
+                        .filter { StageMarks.mark(index, stage, scope, it) >= before }
+                        .forEach { index.stages.changed(StageMarks.markKey(stage, scope, it), now) }
+                    sources.any { StageMarks.mark(index, stage, scope, it) < before }
+                }
+            }
+        return reached + behind
+    }
+
     /** The [keys] done of the [stage] by its sweep of the [scope] under way, in place: not taken by it again. */
     fun done(stage: WorkStage, typeId: String, scope: WorkScope, keys: Collection<ItemKey>) {
         val index = lists.of(typeId)
@@ -104,10 +132,11 @@ class StageSweeps(
         val index = lists.of(typeId)
         StageMarks.began(index, stage, scope) ?: return false
         val horizons = StageMarks.horizons(index, stage, scope)
+        // A mark never goes back: a writing that reached nothing of the stage may have moved it past the horizon
         val moved = horizons.filter { (source, horizon) ->
             val before = StageMarks.mark(index, stage, scope, source)
-            index.stages.changed(StageMarks.markKey(stage, scope, source), horizon)
-            horizon != before
+            if (horizon > before) index.stages.changed(StageMarks.markKey(stage, scope, source), horizon)
+            horizon > before
         }
         StageMarks.forgetSweep(index, stage, scope)
         // Of a sweep that moved no mark, nothing kept: the next commit forgets it

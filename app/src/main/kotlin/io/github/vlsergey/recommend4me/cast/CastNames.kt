@@ -63,7 +63,7 @@ class CastNames(
     /** The documents of works written anew, of their data changed: the texts of their casts encoded. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (event.anew || STAGE.follows(event.data))
+        if (STAGE in event.stages)
             WorkScope.entries.forEach {
                 plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
             }
