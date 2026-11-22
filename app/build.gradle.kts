@@ -18,6 +18,9 @@ dependencies {
     implementation(libs.hikari)
     // Its own classes too: a file is compacted while open through them (Database.compact)
     implementation(libs.h2)
+    // The store of the search of duplicates of a content type: a table of millions of candidates written whole by every
+    // search and read by a page's filter and sort, of no index (DuplicateStore)
+    implementation(libs.duckdb.jdbc)
     // The texts of the works' parts and their vectors, outside the database: a store of keys and values, the texts
     // compressed by zstd with a dictionary of their own (PartStore)
     implementation(libs.rocksdbjni)
@@ -72,14 +75,26 @@ fun h2Of(kind: String): String {
     return "jdbc:h2:mem:jooq_$kind;INIT=$scripts"
 }
 
+/**
+ * The store of the search of duplicates (DuplicateStore), a DuckDB file made by its one script: H2 reads the script for
+ * the generator alike, as DuckDB runs it in the application.
+ */
+val duplicateStore = layout.projectDirectory.file("src/main/resources/duplicate/store.sql")
+
+/** Of every schema jOOQ's classes are made of, the database in memory the generator reads. */
+val generated: Map<String, String> =
+    schemas.associateWith(::h2Of) +
+        ("duplicates" to
+            "jdbc:h2:mem:jooq_duplicates;INIT=RUNSCRIPT FROM '${duplicateStore.asFile.absolutePath.replace('\\', '/')}' CHARSET 'UTF-8'")
+
 jooq {
     executions {
-        schemas.forEach { kind ->
+        generated.forEach { (kind, h2) ->
             create(kind) {
                 configuration {
                     jdbc {
                         driver = "org.h2.Driver"
-                        url = h2Of(kind)
+                        url = h2
                     }
                     generator {
                         name = "org.jooq.codegen.KotlinGenerator"
@@ -114,7 +129,12 @@ jooq {
     }
 }
 
-tasks.matching { it.name.startsWith("jooqCodegen") }.configureEach { inputs.dir(migrations) }
+tasks
+    .matching { it.name.startsWith("jooqCodegen") }
+    .configureEach {
+        inputs.dir(migrations)
+        inputs.file(duplicateStore)
+    }
 
 // --- OpenAPI: the contract in api/openapi.yaml is the single source of truth ---
 

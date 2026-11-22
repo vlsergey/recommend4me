@@ -25,6 +25,7 @@ it; then it moves to the owner's list with the date. A new requirement is added 
 | 15 | The order of a facet's values (`position`) matters neither to the index nor to the search: authors, tags, pairings, anything. | 2026-11-18: "for the index and the search of duplicates the position of a facet does not matter at all" |
 | 16 | A guide, not a hard requirement: the whole search within about 10 s — the speed after which it is "fine". | 2026-11-18: "rather the goal after which one can say 'well, a normal speed'; a guide, though not a hard requirement" |
 | 17 | A pair is kept only when some model gives it 1% or more (`PairSearch.least`): a constant, no setting. | 2026-11-18: "yes, take it as an agreed constant; it could go to the settings later, but there is little sense" |
+| 18 | The candidates of a search, the last search and how rare every value is are kept in a DuckDB file of the type of their own (`types/<type>/duplicates.duckdb`, `DuckDatabase`, docs/database/duplicates.md): appended whole in the order of their key by every search, no index of them kept — a page is a pass of the columns of its filter and its sort, a pair found by the blocks of rows of its first work. In H2 the rows of 2.6 million candidates took 46 s of a search and their ten indexes 123 s; in DuckDB the rows 11 s, a page 10–20 ms, a count 3 ms (2026-11-22, of synthetic rows). | 2026-11-22: "let us move to DuckDB" |
 
 ## Ours, not agreed
 

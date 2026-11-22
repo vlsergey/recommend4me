@@ -345,7 +345,7 @@ class TypeStore(
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))
     val searchShift = QueryShiftRepository(databases.model(type.id))
-    val duplicates = DuplicateRepository(databases.model(type.id))
+    val duplicates = DuplicateRepository(databases.type(type.id).duplicates)
 
     /** The pairs of authors the last search of the authors' duplicates found. */
     val authorCandidates = AuthorCandidateRepository(databases.model(type.id))

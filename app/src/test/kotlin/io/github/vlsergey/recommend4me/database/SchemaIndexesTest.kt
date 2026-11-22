@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.database
 import io.github.vlsergey.recommend4me.database.app.Public as AppSchema
 import io.github.vlsergey.recommend4me.database.corrections.Public as CorrectionsSchema
 import io.github.vlsergey.recommend4me.database.dictionaries.Public as DictionariesSchema
+import io.github.vlsergey.recommend4me.database.duplicates.Public as DuplicatesSchema
 import io.github.vlsergey.recommend4me.database.model.Public as ModelSchema
 import io.github.vlsergey.recommend4me.database.preferences.Public as PreferencesSchema
 import io.github.vlsergey.recommend4me.database.ratings.Public as RatingsSchema
@@ -25,6 +26,7 @@ class SchemaIndexesTest {
             AppSchema.PUBLIC,
             CorrectionsSchema.PUBLIC,
             DictionariesSchema.PUBLIC,
+            DuplicatesSchema.PUBLIC,
             ModelSchema.PUBLIC,
             PreferencesSchema.PUBLIC,
             RatingsSchema.PUBLIC,

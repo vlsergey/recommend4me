@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
-import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
+import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.laps.Laps
 import org.jooq.Condition

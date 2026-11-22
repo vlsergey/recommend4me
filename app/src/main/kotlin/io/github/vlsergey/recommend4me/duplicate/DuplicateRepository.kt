@@ -1,17 +1,24 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
-import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_SEARCH
+import io.github.vlsergey.recommend4me.database.DuckDatabase
+import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_CANDIDATE
+import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_SEARCH
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.laps.Laps
 import java.time.Instant
+import org.duckdb.DuckDBAppender
+import org.duckdb.DuckDBConnection
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(DuplicateRepository::class.java)
 
-/** The candidates of the last search of the content type, in its model database: made anew whole by every search. */
-class DuplicateRepository(private val db: DSLContext) {
+/**
+ * The candidates of the last search of the content type, in the store of its duplicates ([DuckDatabase]): made anew
+ * whole by every search.
+ */
+class DuplicateRepository(private val store: DuckDatabase) {
+    private val db: DSLContext = store.dsl
 
     /** How rare every value compared is, as the last search weighed it: what a pair it did not keep is compared by. */
     val rarity = ValueRarities(db)
@@ -23,12 +30,10 @@ class DuplicateRepository(private val db: DSLContext) {
     val reads = CandidateReads(db)
 
     /**
-     * The candidates of a search in place of those before, and when it was made. The last search's candidates are let
-     * go by a truncation, which the database does at once and commits by itself: deleting half a million rows in the
-     * transaction of the new ones took 12 s, and its commit 10 s more (H2 2.4, measured 2026-11-08); a truncation takes
-     * 20 ms. The search's row goes first and comes back once the new candidates are written and indexed. A search
-     * broken in between leaves no row, and the start looks again. A reading in between sees no search, as of a type
-     * never searched.
+     * The candidates of a search in place of those before, and when it was made, with how rare every value is: in one
+     * transaction, the rows of the candidates appended — no index of them kept, none made after (in H2 the ten indexes
+     * of 2.6 million rows took two minutes of every search, 2026-11-22) — a reading in between sees the last search
+     * whole.
      */
     fun replace(
         candidates: Collection<DuplicateCandidate>,
@@ -36,24 +41,17 @@ class DuplicateRepository(private val db: DSLContext) {
         search: DuplicateSearch,
         rarity: Map<String, Float>,
     ) {
-        // Where the time goes, told in the log: the tables emptied, the rarities, the candidates ordered and written,
+        // Where the time goes, told in the log: the tables emptied, the candidates ordered and written, the rarities,
         // the commit
         val laps = Laps()
-        db.deleteFrom(DUPLICATE_SEARCH).execute()
-        db.truncate(DUPLICATE_CANDIDATE).execute()
-        // The indexes made after the rows, each of a pass over them, not kept in step with every row written: with
-        // the index of every sort, the rows of 1.2 million pairs took 206 s and their one transaction's commit 402 s
-        // (2026-11-20); the rows written a batch a statement, each committed by itself — none sees the table before the
-        // search's row comes back
-        INDEXES.keys.forEach { db.execute("DROP INDEX IF EXISTS $it") }
-        laps.lap("emptied")
-        keep(db, candidates, scores, laps)
-        INDEXES.forEach { (name, columns) -> db.execute("CREATE INDEX $name ON duplicate_candidate ($columns)") }
-        laps.lap("indexed")
-        db.transaction { c ->
-            this.rarity.replace(c.dsl(), rarity)
+        store.transaction { connection, tx ->
+            tx.deleteFrom(DUPLICATE_SEARCH).execute()
+            tx.deleteFrom(DUPLICATE_CANDIDATE).execute()
+            laps.lap("emptied")
+            keep(connection, candidates, scores, laps)
+            this.rarity.replace(connection, tx, rarity)
             laps.lap("rarities of ${rarity.size} values")
-            fill(c.dsl(), search)
+            fill(tx, search)
         }
         laps.lap("committed")
         log.info("the {} candidates of a search written: {}", candidates.size, laps)
@@ -75,18 +73,15 @@ class DuplicateRepository(private val db: DSLContext) {
     }
 
     /**
-     * The [candidates] written by [tx], one statement prepared and bound a row each: half a million statements of their
-     * own, each parsed by the database apart, were most of a search's half a minute of keeping.
+     * The [candidates] appended by the [connection], in the order of their key: the blocks of rows of a work's pairs
+     * together, what a pair is found by without an index.
      */
     private fun keep(
-        tx: DSLContext,
+        connection: DuckDBConnection,
         candidates: Collection<DuplicateCandidate>,
         scores: (DuplicateCandidate) -> PairScore,
         laps: Laps,
     ) {
-        // In the order of the table's key: every row written after the last, not into the middle of its pages — half a
-        // million rows in the order found took 20 s of a search, most of it the database finding their places
-        // (2026-11-18)
         val ordered =
             candidates.sortedWith(
                 compareBy<DuplicateCandidate>(
@@ -97,44 +92,41 @@ class DuplicateRepository(private val db: DSLContext) {
                 )
             )
         laps.lap("ordered")
-        ordered.chunked(BATCH).forEach { chunk ->
-            val batch =
-                tx.batch(tx.insertInto(DUPLICATE_CANDIDATE).columns(COLUMNS).values(List(COLUMNS.size) { null }))
-            chunk.forEach { d ->
+        connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, DUPLICATE_CANDIDATE.name.lowercase()).use { a ->
+            ordered.forEach { d ->
                 val score = scores(d)
-                batch.bind(
-                    d.first.source,
-                    d.first.id,
-                    d.second.source,
-                    d.second.id,
-                    d.title,
-                    d.description,
-                    d.size,
-                    d.facets.takeIf { it.isNotEmpty() }?.let(::written),
-                    d.foundFor.toByte(),
-                    d.sameAuthor,
-                    d.titleWithin,
-                    d.titleHolding,
-                    d.authors?.alike,
-                    d.authors?.within,
-                    d.authors?.holding,
-                    d.titleVector,
-                    d.letters[LetteredText.DESCRIPTION],
-                    d.letters[LetteredText.FANDOMS],
-                    d.letters[LetteredText.CHARACTERS],
-                    d.partlySameAuthor,
-                    d.words,
-                    d.otherWords,
-                    score.same,
-                    score.series,
-                    score.answer?.name,
-                    score.derived,
-                    score.sameAuthors,
-                    score.sameTitle,
-                    *score.ranks,
-                )
+                a.beginRow()
+                a.append(d.first.source)
+                a.append(d.first.id)
+                a.append(d.second.source)
+                a.append(d.second.id)
+                a.append(d.title)
+                a.add(d.description)
+                a.add(d.facets.takeIf { it.isNotEmpty() }?.let(::written))
+                a.add(d.size)
+                a.append(d.foundFor.toByte())
+                a.append(d.sameAuthor)
+                a.append(d.titleWithin)
+                a.append(d.titleHolding)
+                a.add(d.authors?.alike)
+                a.add(d.authors?.within)
+                a.add(d.authors?.holding)
+                a.add(d.titleVector)
+                a.add(d.letters[LetteredText.DESCRIPTION])
+                a.add(d.letters[LetteredText.FANDOMS])
+                a.add(d.letters[LetteredText.CHARACTERS])
+                a.append(d.partlySameAuthor)
+                a.add(d.words)
+                a.add(d.otherWords)
+                a.append(score.same)
+                a.add(score.series)
+                a.add(score.answer?.name)
+                a.append(score.derived)
+                a.append(score.sameAuthors)
+                a.append(score.sameTitle)
+                score.ranks.forEach { a.add(it) }
+                a.endRow()
             }
-            batch.execute()
         }
         laps.lap("written")
     }
@@ -235,67 +227,12 @@ class DuplicateRepository(private val db: DSLContext) {
             .execute()
     }
 
-    companion object {
-        private const val BATCH = 1000
+    private companion object {
+        /** A number of none, or the number: what the appender takes a column of nulls by. */
+        fun DuckDBAppender.add(v: Float?) = if (v == null) appendNull() else append(v)
 
-        /**
-         * The indexes of the candidates by their second works and by the key of every sort beside the word on the pair
-         * ([DuplicateChoice]), by their columns: as the migrations make them (V51, V53, V54), made anew after the rows.
-         */
-        private val INDEXES =
-            mapOf(
-                "duplicate_candidate_other" to "other_source, other_item_id",
-                "duplicate_candidate_by_chance" to "answer, same_chance DESC",
-                "duplicate_candidate_by_series" to "answer, series_chance DESC",
-                "duplicate_candidate_by_size" to "answer, by_size DESC",
-                "duplicate_candidate_by_series_size" to "answer, by_series_size DESC",
-                "duplicate_candidate_by_doubt" to "answer, by_doubt DESC",
-                "duplicate_candidate_by_series_doubt" to "answer, by_series_doubt DESC",
-                "duplicate_candidate_by_formula" to "answer, by_formula DESC",
-                "duplicate_candidate_by_interest" to "answer, by_interest DESC",
-                "duplicate_candidate_by_grade" to "answer, by_grade DESC",
-            )
+        fun DuckDBAppender.add(v: Double?) = if (v == null) appendNull() else append(v)
 
-        private const val FETCH = 5000
-
-        /** The columns of a candidate written, in the order a row of them is bound. */
-        private val COLUMNS =
-            listOf(
-                DUPLICATE_CANDIDATE.SOURCE,
-                DUPLICATE_CANDIDATE.ITEM_ID,
-                DUPLICATE_CANDIDATE.OTHER_SOURCE,
-                DUPLICATE_CANDIDATE.OTHER_ITEM_ID,
-                DUPLICATE_CANDIDATE.TITLE,
-                DUPLICATE_CANDIDATE.DESCRIPTION,
-                DUPLICATE_CANDIDATE.SIZE,
-                DUPLICATE_CANDIDATE.FACETS,
-                DUPLICATE_CANDIDATE.FOUND_FOR,
-                DUPLICATE_CANDIDATE.SAME_AUTHOR,
-                DUPLICATE_CANDIDATE.TITLE_WITHIN,
-                DUPLICATE_CANDIDATE.TITLE_HOLDING,
-                DUPLICATE_CANDIDATE.AUTHORS_ALIKE,
-                DUPLICATE_CANDIDATE.AUTHORS_WITHIN,
-                DUPLICATE_CANDIDATE.AUTHORS_HOLDING,
-                DUPLICATE_CANDIDATE.TITLE_VECTOR,
-                DUPLICATE_CANDIDATE.DESCRIPTION_LETTERS,
-                DUPLICATE_CANDIDATE.FANDOM_LETTERS,
-                DUPLICATE_CANDIDATE.CHARACTER_LETTERS,
-                DUPLICATE_CANDIDATE.PARTLY_SAME_AUTHOR,
-                DUPLICATE_CANDIDATE.WORDS,
-                DUPLICATE_CANDIDATE.OTHER_WORDS,
-                DUPLICATE_CANDIDATE.SAME_CHANCE,
-                DUPLICATE_CANDIDATE.SERIES_CHANCE,
-                DUPLICATE_CANDIDATE.ANSWER,
-                DUPLICATE_CANDIDATE.ANSWER_DERIVED,
-                DUPLICATE_CANDIDATE.SAME_AUTHORS,
-                DUPLICATE_CANDIDATE.SAME_TITLE,
-                DUPLICATE_CANDIDATE.BY_SIZE,
-                DUPLICATE_CANDIDATE.BY_SERIES_SIZE,
-                DUPLICATE_CANDIDATE.BY_DOUBT,
-                DUPLICATE_CANDIDATE.BY_SERIES_DOUBT,
-                DUPLICATE_CANDIDATE.BY_FORMULA,
-                DUPLICATE_CANDIDATE.BY_INTEREST,
-                DUPLICATE_CANDIDATE.BY_GRADE,
-            )
+        fun DuckDBAppender.add(v: String?) = if (v == null) appendNull() else append(v)
     }
 }

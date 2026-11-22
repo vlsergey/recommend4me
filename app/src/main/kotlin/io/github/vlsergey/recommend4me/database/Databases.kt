@@ -21,8 +21,8 @@ import org.springframework.stereotype.Component
  */
 class SourceDatabases(val source: Database, val corrections: Database, val ratings: Database, val parts: PartStore)
 
-/** The file of a content type: what is learnt. */
-class TypeDatabases(val model: Database)
+/** The files of a content type: what is learnt, and the store of the search of its duplicates. */
+class TypeDatabases(val model: Database, val duplicates: DuckDatabase)
 
 /**
  * Every database file of every source and content type, opened and migrated on start and held open until the end: an
@@ -88,8 +88,6 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
 
     private val types: Map<String, TypeDatabases> =
         plugins.types.associate { t ->
-            // The pages of the model's file H2 keeps: the candidates of the duplicates' search, written whole and
-            // indexed by every sort after — ten passes over them
             t.id to
                 TypeDatabases(
                     model =
@@ -98,7 +96,14 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
                             folder.type(t.id).resolve("model"),
                             "model",
                             cacheMegabytes = MODEL_CACHE_MB,
-                        )
+                        ),
+                    duplicates =
+                        DuckDatabase(
+                            "${t.id}/duplicates",
+                            folder.type(t.id).resolve("duplicates.duckdb"),
+                            "duplicate/store.sql",
+                            DUPLICATES_MEMORY,
+                        ),
                 )
         }
 
@@ -126,7 +131,10 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
             listOf(it.source, it.corrections, it.ratings).forEach(Database::close)
             it.parts.close()
         }
-        types.values.forEach { it.model.close() }
+        types.values.forEach {
+            it.model.close()
+            it.duplicates.close()
+        }
         dictionaries.close()
         preferences.close()
     }
@@ -142,10 +150,13 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
         const val SOURCE_CACHE_MB = 1024
 
         /**
-         * The pages of a content type's model file H2 keeps read, in megabytes: the ten indexes of the 2.6 million
-         * candidates of the duplicates made after them took 85 s with H2's own cache, 48 s with a gigabyte (2026-11-22,
-         * a file of 1 GB on an SSD).
+         * The pages of a content type's model file H2 keeps read, in megabytes (owner, 2026-11-22: "make the database's
+         * cache a gigabyte"): the indexes of 2.6 million candidates of the duplicates, when they were kept there, made
+         * in 48 s with it, 85 s with H2's own.
          */
         const val MODEL_CACHE_MB = 1024
+
+        /** The memory the store of the duplicates of a content type takes at most, as DuckDB names it. */
+        const val DUPLICATES_MEMORY = "2GB"
     }
 }

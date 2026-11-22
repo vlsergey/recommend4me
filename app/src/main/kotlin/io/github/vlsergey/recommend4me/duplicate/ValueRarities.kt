@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_VALUE
+import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_VALUE
+import org.duckdb.DuckDBConnection
 import org.jooq.DSLContext
 
 /**
@@ -10,17 +11,16 @@ import org.jooq.DSLContext
  */
 class ValueRarities(private val db: DSLContext) {
 
-    /** Every value's rarity in place of those before, written by [tx]: the last search's let go by a truncation. */
-    fun replace(tx: DSLContext, rarity: Map<String, Float>) {
-        tx.truncate(DUPLICATE_VALUE).execute()
-        rarity.entries.chunked(BATCH).forEach { chunk ->
-            val batch =
-                tx.batch(
-                    tx.insertInto(DUPLICATE_VALUE, DUPLICATE_VALUE.NAME, DUPLICATE_VALUE.RARITY)
-                        .values(null as String?, null as Float?)
-                )
-            chunk.forEach { (value, r) -> batch.bind(value, r) }
-            batch.execute()
+    /** Every value's rarity in place of those before, in the transaction of [tx], appended by its [connection]. */
+    fun replace(connection: DuckDBConnection, tx: DSLContext, rarity: Map<String, Float>) {
+        tx.deleteFrom(DUPLICATE_VALUE).execute()
+        connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, DUPLICATE_VALUE.name.lowercase()).use { a ->
+            rarity.forEach { (value, r) ->
+                a.beginRow()
+                a.append(value)
+                a.append(r)
+                a.endRow()
+            }
         }
     }
 

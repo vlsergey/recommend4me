@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.database.SourceItems
-import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
+import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Condition
 import org.jooq.DSLContext
@@ -55,26 +54,23 @@ class CandidateReads internal constructor(private val db: DSLContext) {
 
     /**
      * The candidates of which either work is among the [items]: of one work's items, say. Those of them as the first
-     * work by the table's key, as the second by the index of the second works — a site's works in one list of its two
-     * columns ([SourceItems]).
+     * work, and as the second: of a site's works, a list of them a query.
      */
     fun ofItems(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
         val asSecond =
             items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                ids.chunked(BATCH).flatMap { read(SourceItems.of(c.OTHER_SOURCE, c.OTHER_ITEM_ID, source, it)) }
+                ids.chunked(BATCH).flatMap { read(c.OTHER_SOURCE.eq(source).and(c.OTHER_ITEM_ID.`in`(it))) }
             }
         return (firstOf(items) + asSecond).distinctBy { it.pair }
     }
 
-    /**
-     * The candidates the [items] are the first works of, by the table's key, a work a query: H2 finds a list of the
-     * first two of the key's four columns by walking every row of the site, one of a million for every list
-     * (2026-11-20: 6.8 s of the pairs of a page of 30 authors).
-     */
+    /** The candidates the [items] are the first works of: of a site's works, a list of them a query. */
     private fun firstOf(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        return items.distinct().flatMap { k -> read(c.SOURCE.eq(k.source).and(c.ITEM_ID.eq(k.id))) }
+        return items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
+            ids.chunked(BATCH).flatMap { read(c.SOURCE.eq(source).and(c.ITEM_ID.`in`(it))) }
+        }
     }
 
     /** The user's word on every pair of [pairs] as kept with it ([PairScore]): of a pair of none, none. */
