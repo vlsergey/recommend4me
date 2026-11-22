@@ -14,9 +14,6 @@ interface ItemNumbers {
     /** The numbers of the items [ids]: item to key to value. */
     fun numbersOf(ids: Collection<String>): Map<String, Map<String, Double>>
 
-    /** Every number of every item, streamed: (item, key, value). */
-    fun forEachNumber(action: (itemId: String, key: String, value: Double) -> Unit)
-
     /** One number of every item that has it. */
     fun number(key: String): Map<String, Double>
 }
@@ -58,14 +55,6 @@ internal class ItemNumberRepository(private val db: DSLContext) : ItemNumbers {
                 .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
         }
         return out
-    }
-
-    override fun forEachNumber(action: (itemId: String, key: String, value: Double) -> Unit) {
-        db.select(ITEM_NUMBER.ITEM_ID, ITEM_NUMBER.NUMBER_KEY, ITEM_NUMBER.CONTENT)
-            .from(ITEM_NUMBER)
-            .fetchSize(STREAMED_ROWS)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) } }
     }
 
     override fun number(key: String): Map<String, Double> =

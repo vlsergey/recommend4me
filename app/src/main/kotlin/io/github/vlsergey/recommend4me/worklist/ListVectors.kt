@@ -25,11 +25,12 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
     fun bring(type: TypeStore, keys: Collection<ItemKey>): Int {
         val encoder = plugins.textEncoder()?.id ?: return 0
         val index = indexes.of(type.id)
-        val since = ListIndexing.writtenOf(index)
+        val cursors = ListCursors(index)
         val clusters = lazy { works.of(type) }
         return keys.groupBy({ it.source }, { it.id }).entries.sumOf { (sourceId, ids) ->
             val s = type.source(sourceId)
-            if (s == null || s.changes.everySince(since)) 0 else bring(s, ids, encoder, index, clusters)
+            val every = s?.changes?.every()?.toEpochMilli() ?: 0L
+            if (s == null || every > cursors.written(s.id)) 0 else bring(s, ids, encoder, index, clusters)
         }
     }
 

@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.EVERY_ITEM_CHANGE
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
+import io.github.vlsergey.recommend4me.worklist.ItemCursor
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import org.jooq.Condition
@@ -34,11 +35,8 @@ class ItemChanges(private val db: DSLContext) {
         db.mergeInto(every).columns(every.ID, every.CHANGED_AT).key(every.ID).values(ONE, at).execute()
     }
 
-    /** Whether every item of the source changed at [since] or after. */
-    fun everySince(since: Instant): Boolean = db.fetchExists(every, every.CHANGED_AT.ge(since))
-
-    /** Whether an item changed at [since] or after. */
-    fun anySince(since: Instant): Boolean = db.fetchExists(ITEM, ITEM.CHANGED_AT.ge(since))
+    /** When every item of the source last changed at once — a dictionary its values are drafted by —; none of never. */
+    fun every(): Instant? = db.select(every.CHANGED_AT).from(every).fetchOne()?.value1()
 
     /**
      * Of the items [ids] — of every item when null — the date every outer kind of their data last changed,
@@ -61,9 +59,25 @@ class ItemChanges(private val db: DSLContext) {
         return out
     }
 
-    /** The items changed at [since] or after, by the index of the dates: the few since a writing. */
-    fun since(since: Instant): List<String> =
-        db.select(ITEM.ITEM_ID).from(ITEM).where(ITEM.CHANGED_AT.ge(since)).fetch { it.value1()!! }
+    /**
+     * The next [limit] items after the [cursor] — of none, from the first — in the order of their changes: by the date,
+     * the items of none first, then by the key; each as the cursor after it. By the index of the dates and the keys.
+     */
+    fun after(cursor: ItemCursor?, limit: Int): List<ItemCursor> {
+        val at = ITEM.CHANGED_AT
+        val after =
+            when {
+                cursor == null -> DSL.noCondition()
+                cursor.at == null -> at.isNull.and(ITEM.ITEM_ID.gt(cursor.id)).or(at.isNotNull)
+                else -> at.gt(cursor.at).or(at.eq(cursor.at).and(ITEM.ITEM_ID.gt(cursor.id)))
+            }
+        return db.select(ITEM.ITEM_ID, at)
+            .from(ITEM)
+            .where(after)
+            .orderBy(at.asc().nullsFirst(), ITEM.ITEM_ID.asc())
+            .limit(limit)
+            .fetch { ItemCursor(it.value2(), it.value1()!!) }
+    }
 
     private companion object {
         /** The items written by one statement: its length, not a meaning. */

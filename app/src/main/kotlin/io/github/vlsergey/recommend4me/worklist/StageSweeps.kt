@@ -42,12 +42,12 @@ class StageSweeps(
                 WorkStage.entries
                     .flatMap { stage ->
                         WorkScope.entries.flatMap { scope ->
-                            type.sources.map { StageMarks.markKey(stage, scope, it.id) }
+                            type.sources.map { it.id to StageMarks.markKey(stage, scope, it.id) }
                         }
                     }
-                    .filter { index.stages.since(it) == null }
+                    .filter { (_, key) -> index.stages.since(key) == null }
             if (unmarked.isEmpty()) return@forEach
-            unmarked.forEach { index.stages.changed(it, StageMarks.written(index)) }
+            unmarked.forEach { (source, key) -> index.stages.changed(key, StageMarks.written(index, source)) }
             index.commit()
         }
 
@@ -73,29 +73,31 @@ class StageSweeps(
     }
 
     /**
-     * The index of the [typeId] written up to [now], of the kinds of data [changed], having been written up to
-     * [before]: of every stage the change does not reach ([WorkStage.reached]) and every source of the [sources] it did
-     * everything of up to [before], the mark moved to [now] — nothing it reads changed between; to be committed with
-     * the writing. Of a writing after none ([before] nought: an index never written, or marked current as of nought) no
-     * mark moves and every stage is behind — none did anything up to it. The stages to look again: those reached, and
-     * those behind of a source — of none of its works done yet, or waiting for a stage before them.
+     * The index of the [typeId] written, of the kinds of data [changed], its documents of every source holding every
+     * change up to [after] where they held it up to [before]: of every stage the change does not reach
+     * ([WorkStage.reached]) and every source it did everything of up to [before], the mark moved to [after] — nothing
+     * it reads changed between; to be committed with the writing. Of a source written after none ([before] nought: an
+     * index never written, or current as of nought) no mark moves and every stage is behind — none did anything up to
+     * it. The stages to look again: those reached, and those behind of a source — of none of its works done yet, or
+     * waiting for a stage before them.
      */
     fun written(
         typeId: String,
-        sources: Collection<String>,
+        before: Map<String, Long>,
+        after: Map<String, Long>,
         changed: Collection<WorkDatum>,
-        before: Long,
-        now: Long,
     ): Set<WorkStage> {
         val index = lists.of(typeId)
         val reached = WorkStage.reached(changed)
         val behind =
             (WorkStage.entries - reached).filterTo(HashSet()) { stage ->
                 WorkScope.entries.any { scope ->
-                    sources
-                        .filter { before > 0 && StageMarks.mark(index, stage, scope, it) >= before }
-                        .forEach { index.stages.changed(StageMarks.markKey(stage, scope, it), now) }
-                    sources.any { before == 0L || StageMarks.mark(index, stage, scope, it) < before }
+                    before.forEach { (source, was) ->
+                        val now = after[source] ?: was
+                        if (was in 1..StageMarks.mark(index, stage, scope, source) && now > was)
+                            index.stages.changed(StageMarks.markKey(stage, scope, source), now)
+                    }
+                    before.any { (source, was) -> was == 0L || StageMarks.mark(index, stage, scope, source) < was }
                 }
             }
         return reached + behind
@@ -122,7 +124,7 @@ class StageSweeps(
     /** The date what the [stage] makes of the item [key] in its sweep of the [scope] is given: the sweep's horizon. */
     fun dateOf(stage: WorkStage, typeId: String, scope: WorkScope, key: ItemKey): Long {
         val index = lists.of(typeId)
-        return StageMarks.horizon(index, stage, scope, key.source) ?: StageMarks.written(index)
+        return StageMarks.horizon(index, stage, scope, key.source) ?: StageMarks.written(index, key.source)
     }
 
     /**
@@ -171,7 +173,8 @@ class StageSweeps(
      * documents hold of the databases — and the marks of the stages it waits for.
      */
     private fun horizon(index: ListIndex, stage: WorkStage, scope: WorkScope, source: String): Long =
-        (listOf(StageMarks.written(index)) + stage.after.map { StageMarks.mark(index, it, scope, source) }).min()
+        (listOf(StageMarks.written(index, source)) + stage.after.map { StageMarks.mark(index, it, scope, source) })
+            .min()
 
     private companion object {
         /** Among the listeners of the start: before the index of the list or any stage is planned. */

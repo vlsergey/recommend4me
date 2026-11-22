@@ -9,8 +9,8 @@ import io.github.vlsergey.recommend4me.api.model.WorkScope
  */
 internal object StageMarks {
 
-    /** Since when the documents of the [index] hold every change of the databases ([ListIndexing.WRITTEN]). */
-    fun written(index: ListIndex): Long = index.stages.since(ListIndexing.WRITTEN) ?: 0L
+    /** Up to when the documents of the [source] in the [index] hold every change of the databases ([ListCursors]). */
+    fun written(index: ListIndex, source: String): Long = ListCursors(index).held(source)
 
     /**
      * Up to when the [stage] did every change of the [source] ([StageSweeps.start]); nought of a source come since —

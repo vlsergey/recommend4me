@@ -49,10 +49,6 @@ internal object WorkDrafts {
         site: Map<String, Map<String, List<String>>> = store.items.facetsOf(ids),
     ): Map<String, List<LayerDraft>> = merged(store.drafts.ofItems(ids), TagDrafts.of(store, site))
 
-    /** Of every work of the [store], whose site's values are [site], every draft. */
-    fun ofEvery(store: SourceStore, site: Map<String, Map<String, List<String>>>): Map<String, List<LayerDraft>> =
-        merged(store.drafts.all(), TagDrafts.of(store, site))
-
     private fun merged(
         kept: Map<String, List<LayerDraft>>,
         tags: Map<String, List<LayerDraft>>,

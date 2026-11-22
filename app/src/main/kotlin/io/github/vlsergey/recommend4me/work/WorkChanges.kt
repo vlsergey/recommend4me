@@ -4,11 +4,13 @@ import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.worklist.WorkCursor
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
+import org.jooq.impl.DSL
 
 /**
  * WHEN THE USER'S WORD ON A NORMALIZED WORK LAST CHANGED, the work's own dates in the dictionaries (owner, 2026-11-21:
@@ -31,14 +33,29 @@ class WorkChanges(private val db: DSLContext) {
             }
         }
 
-    /** The items of the [sources] whose works changed at [since] or after, by the index of the dates. */
-    fun itemsSince(sources: Collection<String>, since: Instant): List<ItemKey> =
-        db.select(SITE_WORK.SOURCE, SITE_WORK.ITEM)
+    /**
+     * The next [limit] normalized works of items of the [sources] the user's word changed, after the [cursor] — of
+     * none, from the first — in the order of their changes: by the date, then by the id; each as the cursor after it.
+     */
+    fun after(sources: Collection<String>, cursor: WorkCursor?, limit: Int): List<WorkCursor> {
+        val at = NORMALIZED_WORK.CHANGED_AT
+        val after =
+            if (cursor == null) at.isNotNull
+            else at.gt(cursor.at).or(at.eq(cursor.at).and(NORMALIZED_WORK.ID.gt(cursor.id)))
+        return db.select(NORMALIZED_WORK.ID, at)
             .from(NORMALIZED_WORK)
-            .join(SITE_WORK)
-            .on(SITE_WORK.NORMALIZED.eq(NORMALIZED_WORK.ID))
-            .where(NORMALIZED_WORK.CHANGED_AT.ge(since), SITE_WORK.SOURCE.`in`(sources))
-            .fetch { ItemKey(it.value1()!!, it.value2()!!) }
+            .where(
+                after,
+                DSL.exists(
+                    DSL.selectOne()
+                        .from(SITE_WORK)
+                        .where(SITE_WORK.NORMALIZED.eq(NORMALIZED_WORK.ID), SITE_WORK.SOURCE.`in`(sources))
+                ),
+            )
+            .orderBy(at.asc(), NORMALIZED_WORK.ID.asc())
+            .limit(limit)
+            .fetch { WorkCursor(it.value2()!!, it.value1()!!) }
+    }
 
     /**
      * Of the items [ids] of the [source] — of every item of it when null — the date every kind of the user's word on
@@ -63,16 +80,6 @@ class WorkChanges(private val db: DSLContext) {
             ids.distinct().chunked(BATCH).forEach { read(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, it)) }
         return out
     }
-
-    /** Whether a work of an item of the [sources] changed at [since] or after. */
-    fun anySince(sources: Collection<String>, since: Instant): Boolean =
-        db.fetchExists(
-            db.selectOne()
-                .from(NORMALIZED_WORK)
-                .join(SITE_WORK)
-                .on(SITE_WORK.NORMALIZED.eq(NORMALIZED_WORK.ID))
-                .where(NORMALIZED_WORK.CHANGED_AT.ge(since), SITE_WORK.SOURCE.`in`(sources))
-        )
 
     companion object {
         /** The items asked of by one statement: its length, not a meaning. */

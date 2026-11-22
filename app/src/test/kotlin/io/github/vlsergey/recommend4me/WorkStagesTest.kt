@@ -6,8 +6,8 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.worklist.HeldTexts
+import io.github.vlsergey.recommend4me.worklist.ListCursors
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
-import io.github.vlsergey.recommend4me.worklist.ListIndexing
 import io.github.vlsergey.recommend4me.worklist.ListTexts
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import io.github.vlsergey.recommend4me.worklist.WorkStages
@@ -83,7 +83,7 @@ class WorkStagesTest : SiteTestBase() {
         background.run()
         val before = stages("wz1").getValue("wz1")
         val index = lists.of("books")
-        index.stages.changed(ListIndexing.WRITTEN, 0)
+        ListCursors.nought(index)
         index.commit()
         listIndexing.plan("books", "start")
         background.run()
@@ -93,6 +93,6 @@ class WorkStagesTest : SiteTestBase() {
         listOf(WorkStage.VECTORS, WorkStage.WINDOWS, WorkStage.CAST, WorkStage.SETS).forEach {
             assertEquals(before[it], after[it], "$it of a work its document holds alike")
         }
-        assertTrue((index.stages.since(ListIndexing.WRITTEN) ?: 0) > 0, "the index written again")
+        assertTrue(ListCursors(index).written(site) > 0, "the index written again")
     }
 }

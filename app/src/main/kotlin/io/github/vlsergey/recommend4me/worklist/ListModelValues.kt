@@ -32,11 +32,6 @@ object ListModelValues {
             out
         }
 
-    /** Of every item of the [source]: item to facet to values, in one pass of its documents. */
-    fun ofEvery(index: ListIndex, source: String): Map<String, Map<String, List<String>>> = index.written { reader ->
-        every(reader, source)
-    }
-
     private fun every(reader: DirectoryReader, source: String): Map<String, Map<String, List<String>>> {
         val out = HashMap<String, Map<String, List<String>>>()
         reader.leaves().forEach { leaf ->

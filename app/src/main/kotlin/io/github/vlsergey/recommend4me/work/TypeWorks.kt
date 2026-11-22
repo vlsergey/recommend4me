@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository.Companion.DIFFERENT
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.worklist.WorkCursor
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 
@@ -13,11 +14,8 @@ class TypeWorks(private val works: WorkRepository, private val sources: Collecti
     /** The [datum] of the works of the [items] changed by the user's word [at] ([WorkChanges]). */
     fun changed(items: Collection<ItemKey>, datum: WorkDatum, at: Instant) = works.changes.changed(items, datum, at)
 
-    /** The items of the type whose works changed at [since] or after. */
-    fun changedSince(since: Instant): List<ItemKey> = works.changes.itemsSince(sources, since)
-
-    /** Whether a work of the type changed at [since] or after. */
-    fun anySince(since: Instant): Boolean = works.changes.anySince(sources, since)
+    /** The next [limit] works of the type the user's word changed after the [cursor], in the order of their changes. */
+    fun after(cursor: WorkCursor?, limit: Int): List<WorkCursor> = works.changes.after(sources, cursor, limit)
 
     /** The items of the [works] among the type's sources: work to its items. */
     fun itemsOf(works: Collection<Long>): Map<Long, List<ItemKey>> = this.works.itemsOf(works, sources)
