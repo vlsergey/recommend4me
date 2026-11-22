@@ -128,19 +128,11 @@ private constructor(
         val next = from.copyOf()
         val order = IntArray(pairs.size)
         firstOf.forEachIndexed { k, w -> order[next[w]++] = k }
-        // The pairs of one first work, by the second: a few at most
-        for (w in 0 until works) {
-            for (p in from[w] + 1 until from[w + 1]) {
-                val k = order[p]
-                var q = p
-                while (q > from[w] && secondOf[order[q - 1]] > secondOf[k]) {
-                    order[q] = order[q - 1]
-                    q--
-                }
-                order[q] = k
-            }
-        }
-        return List(pairs.size) { pairs[order[it]] }
+        // The pairs of one first work, by the second: a work may be the likeliest of thousands — a title many works
+        // bear —, so sorted as numbers, the second's place above the pair's
+        val keyed = LongArray(pairs.size) { (secondOf[order[it]].toLong() shl Int.SIZE_BITS) or order[it].toLong() }
+        for (w in 0 until works) if (from[w + 1] - from[w] > 1) keyed.sort(from[w], from[w + 1])
+        return List(pairs.size) { pairs[keyed[it].toInt()] }
     }
 
     private fun key(site: Int, item: Int) = ItemKey(sides[site].store.id, sides[site].ids[item])
