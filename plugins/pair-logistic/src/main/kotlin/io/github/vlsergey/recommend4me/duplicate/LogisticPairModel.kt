@@ -31,7 +31,7 @@ class LogisticPairModel : PairModel {
         // What a pair needs to be kept, of the models as they are: told to the log, the search not yet led by it
         SearchPlan.of(search, logistic)
         val laid = logistic.map { it.laid(search.families) }
-        return card?.let { onCard(search, logistic, laid, it, progress) }
+        return card?.let { onCard(search, laid, it, progress) }
             ?: ProcessorSearch.search(search, laid, Compared(search, progress))
     }
 
@@ -41,18 +41,13 @@ class LogisticPairModel : PairModel {
      */
     private fun onCard(
         search: PairSearch,
-        logistic: List<Logistic>,
         laid: List<Logistic.Laid>,
         card: Cublas,
         progress: (Double) -> Unit,
     ): List<FoundPair>? {
         val started = System.currentTimeMillis()
         return runCatching {
-            graph(search, laid, card)?.let { likeliest ->
-                // How much of what a search of every pair keeps it found, and whether the card scored as the
-                // processor does
-                likeliest.found().also { found -> GraphCheck.tell(search, logistic, likeliest, found) }
-            }
+            graph(search, laid, card)?.found()
                 ?: Compared(search, progress).let { compared ->
                     CardSearch.search(search, laid, card, compared = compared).also {
                         compared.told()

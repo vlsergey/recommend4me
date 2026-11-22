@@ -11,9 +11,6 @@ internal class Likeliest(private val search: PairSearch, private val models: Int
     private val site = search.sites.map { s -> IntArray(s.count * models) { -1 } }
     private val work = search.sites.map { s -> IntArray(s.count * models) { -1 } }
 
-    /** The score of the [a]-th site's [i]-th work's pair kept by the [k]-th model, as the search made it. */
-    fun score(a: Int, i: Int, k: Int): Double = score[a][i * models + k]
-
     /** Of the [a]-th site's [i]-th work, by the [k]-th model, the [b]-th site's [j]-th of the score [s]; -1: none. */
     fun offer(a: Int, i: Int, k: Int, s: Double, b: Int, j: Int) {
         val at = i * models + k
