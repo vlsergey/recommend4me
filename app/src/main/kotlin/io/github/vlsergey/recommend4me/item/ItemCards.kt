@@ -57,7 +57,7 @@ class ItemCards(
 
     /** The predictions of the items [ids] of the [source] as the index of the list of the [type] keeps them. */
     fun predictions(type: TypeStore, source: String, ids: Collection<String>): Map<String, Predicted> =
-        indexes.of(type.id).searching { ListPredictions.of(it.indexReader, source, ids) }
+        indexes.of(type.id).searching { ListPredictions.of(it, source, ids) }
 
     /** The grades of the items [ids] of a source at their [versions]. */
     fun graded(ratings: List<Rating>, versions: Map<String, String>): Map<String, Graded> =

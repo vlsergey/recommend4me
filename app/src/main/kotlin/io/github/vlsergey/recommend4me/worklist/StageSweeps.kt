@@ -4,8 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.TaskCursor
-import org.apache.lucene.document.NumericDocValuesField
-import org.apache.lucene.search.Query
+import org.jooq.Condition
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -63,7 +62,7 @@ class StageSweeps(
         scope: WorkScope,
         cursor: TaskCursor,
         portion: Int,
-        pending: Query? = null,
+        pending: Condition? = null,
     ): List<TakenWork> {
         val index = lists.of(typeId)
         val began = StageMarks.began(index, stage, scope) ?: begin(index, stage, scope, sources)
@@ -116,9 +115,7 @@ class StageSweeps(
     fun made(stage: WorkStage, typeId: String, scope: WorkScope, keys: Collection<ItemKey>) {
         val output = stage.output ?: return
         val index = lists.of(typeId)
-        index.update(
-            keys.associateWith { arrayOf(NumericDocValuesField(output.field, dateOf(stage, typeId, scope, it))) }
-        )
+        index.set(output.column, keys.associateWith { dateOf(stage, typeId, scope, it) })
     }
 
     /** The date what the [stage] makes of the item [key] in its sweep of the [scope] is given: the sweep's horizon. */

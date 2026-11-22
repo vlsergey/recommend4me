@@ -1,17 +1,12 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_NUMBER
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_TEXT
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VALUE
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VECTOR
 import io.github.vlsergey.recommend4me.item.ItemKey
-import java.util.BitSet
-import org.apache.lucene.index.DocValues
-import org.apache.lucene.index.DocValuesType
-import org.apache.lucene.index.FieldInfo
-import org.apache.lucene.index.IndexReader
-import org.apache.lucene.index.LeafReader
-import org.apache.lucene.index.StoredFieldVisitor
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
-import org.apache.lucene.util.BytesRef
-import org.apache.lucene.util.NumericUtils
+import org.jooq.DSLContext
 
 /**
  * A DOCUMENT OF THE INDEX OF THE LIST AS IT IS WRITTEN, what a writing of a source whole compares the row read of the
@@ -103,118 +98,90 @@ fun ListRow.datedOtherThan(kept: KeptRow): Boolean = dates.filterKeys { it.outer
 fun ListRow.changedOf(kept: KeptRow?): Set<WorkDatum> =
     WorkDatum.entries.filterTo(HashSet()) { it.outer && dates[it] != null && dates[it] != kept?.dates?.get(it) }
 
-/** THE DOCUMENTS OF THE INDEX OF THE LIST AS WRITTEN, of the items asked for by their keys ([KeptRow]). */
+/** THE ROWS OF THE INDEX OF THE LIST AS WRITTEN, of the items asked for by their keys ([KeptRow]). */
 object ListKeptRows {
 
-    /** Of the items [ids] of the [source], their documents as the [reader] holds them; an item of none left out. */
-    fun of(reader: IndexReader, source: String, ids: Collection<String>): Map<String, KeptRow> {
+    /** Of the items [ids] of the [source], their rows as the [db] holds them; an item of none left out. */
+    fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, KeptRow> {
         val out = HashMap<String, KeptRow>()
-        reader.leaves().forEach { leaf ->
-            val r = leaf.reader()
-            // Of every key its live document, read in the order of the documents: the values are read forward alone
-            val found = sortedMapOf<Int, String>()
-            ids.forEach { id ->
-                val docs = r.postings(Term(ListDocuments.KEY, ItemKey(source, id).toString())) ?: return@forEach
-                var doc = docs.nextDoc()
-                while (doc != DocIdSetIterator.NO_MORE_DOCS && r.liveDocs?.get(doc) == false) doc = docs.nextDoc()
-                if (doc != DocIdSetIterator.NO_MORE_DOCS) found[doc] = id
-            }
-            if (found.isNotEmpty()) {
-                val segment = Segment(r)
-                found.forEach { (doc, id) -> out[id] = segment.of(doc) }
+        ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+            val keys = chunk.map { ItemKey(source, it).toString() }
+            val facets = facetsOf(db, keys)
+            val numbers = numbersOf(db, keys)
+            val texts = textsOf(db, keys)
+            val vectors = vectorsOf(db, keys)
+            db.select(COLUMNS).from(ITEM).where(ITEM.ITEM_KEY.`in`(keys)).fetch { r ->
+                val key = r.get(ITEM.ITEM_KEY)!!
+                out[ItemKey.parse(key).id] =
+                    KeptRow(
+                        work = r.get(ITEM.WORK)!!,
+                        rank = r.get(ITEM.WORK_RANK)!!.toLong(),
+                        linked = r.get(ITEM.LINKED)!!,
+                        updated = r.get(ITEM.UPDATED)!!,
+                        added = r.get(ITEM.ADDED)!!,
+                        graded = if (r.get(ITEM.GRADED)!!) 1L else 0L,
+                        marked = if (r.get(ITEM.MARKED)!!) 1L else 0L,
+                        title = r.get(ITEM.TITLE)!!,
+                        facets = facets[key].orEmpty(),
+                        numbers = numbers[key].orEmpty(),
+                        dates = WorkDatum.entries.mapNotNull { d -> r.get(d.column)?.let { d to it } }.toMap(),
+                        stages = WorkStages(WorkStage.entries.associateWith { st -> r.get(st.column) ?: 0L }),
+                        texts = texts[key].orEmpty(),
+                        vectors = vectors[key].orEmpty(),
+                    )
             }
         }
         return out
     }
 
-    /** The documents of one segment, read forward. */
-    private class Segment(private val r: LeafReader) {
-        private val work = DocValues.getSorted(r, ListDocuments.WORK)
-        private val rank = DocValues.getNumeric(r, ListDocuments.RANK)
-        private val updated = DocValues.getNumeric(r, ListDocuments.UPDATED)
-        private val added = DocValues.getNumeric(r, ListDocuments.ADDED)
-        private val graded = DocValues.getNumeric(r, ListDocuments.GRADED)
-        private val marked = DocValues.getNumeric(r, ListDocuments.MARKED)
-        private val title = DocValues.getBinary(r, ListDocuments.TITLE)
-        private val dates = WorkDatum.entries.associateWith { DocValues.getNumeric(r, it.field) }
-        private val stages = WorkStage.entries.associateWith { DocValues.getNumeric(r, it.field) }
-        private val stored = r.storedFields()
-
-        /** The documents of works of several items. */
-        private val linked =
-            BitSet().also { set ->
-                r.postings(Term(ListDocuments.LINKED, ListDocuments.YES))?.let { docs ->
-                    var doc = docs.nextDoc()
-                    while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                        set.set(doc)
-                        doc = docs.nextDoc()
-                    }
-                }
+    /** Of the items [keys], their facets' values in their order. */
+    private fun facetsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, List<String>>> {
+        val out = HashMap<String, LinkedHashMap<String, MutableList<String>>>()
+        val v = ITEM_VALUE
+        db.select(v.ITEM_KEY, v.FACET, v.VALUE_KEY)
+            .from(v)
+            .where(v.ITEM_KEY.`in`(keys))
+            .orderBy(v.ITEM_KEY, v.FACET, v.POS)
+            .fetch { r ->
+                out.getOrPut(r.value1()!!) { LinkedHashMap() }.getOrPut(r.value2()!!) { ArrayList() } += r.value3()!!
             }
-
-        /** Every text held whole and every vector of the segment, by the field, as its doc values. */
-        private val binaries =
-            r.fieldInfos
-                .filter {
-                    it.docValuesType == DocValuesType.BINARY &&
-                        (ListTexts.textKeyOf(it.name) != null || ListTexts.isVectorField(it.name))
-                }
-                .associate { it.name to DocValues.getBinary(r, it.name) }
-
-        /** Every number of the segment, by its id, as its doc values. */
-        private val numbers =
-            r.fieldInfos
-                .filter { it.name.startsWith(NUMBER) && it.docValuesType == DocValuesType.SORTED_NUMERIC }
-                .associate { it.name.removePrefix(NUMBER) to DocValues.getSortedNumeric(r, it.name) }
-
-        fun of(doc: Int): KeptRow {
-            val visitor = Facets()
-            stored.document(doc, visitor)
-            val held = binariesOf(doc)
-            return KeptRow(
-                work = if (work.advanceExact(doc)) work.lookupOrd(work.ordValue()).utf8ToString() else "",
-                rank = if (rank.advanceExact(doc)) rank.longValue() else -1,
-                linked = linked.get(doc),
-                updated = if (updated.advanceExact(doc)) updated.longValue() else -1,
-                added = if (added.advanceExact(doc)) added.longValue() else -1,
-                graded = if (graded.advanceExact(doc)) graded.longValue() else -1,
-                marked = if (marked.advanceExact(doc)) marked.longValue() else -1,
-                title = if (title.advanceExact(doc)) title.binaryValue().utf8ToString() else "",
-                facets = visitor.values,
-                numbers =
-                    numbers
-                        .filterValues { it.advanceExact(doc) }
-                        .mapValues { (_, v) -> NumericUtils.sortableLongToDouble(v.nextValue()) },
-                dates =
-                    dates
-                        .mapNotNull { (datum, v) -> if (v.advanceExact(doc)) datum to v.longValue() else null }
-                        .toMap(),
-                stages = WorkStages(stages.mapValues { (_, v) -> if (v.advanceExact(doc)) v.longValue() else 0L }),
-                texts =
-                    held.mapNotNull { (name, bytes) -> ListTexts.textKeyOf(name)?.let { it to String(bytes) } }.toMap(),
-                vectors = held.filterKeys(ListTexts::isVectorField),
-            )
-        }
-
-        /** Of the document [doc], every binary of [binaries] it has. */
-        private fun binariesOf(doc: Int): Map<String, ByteArray> =
-            binaries
-                .filterValues { it.advanceExact(doc) }
-                .mapValues { (_, v) -> BytesRef.deepCopyOf(v.binaryValue()).bytes }
+        return out
     }
 
-    /** What a stored document is read for: the values of its facets, in their order. */
-    private class Facets : StoredFieldVisitor() {
-        val values = LinkedHashMap<String, MutableList<String>>()
-
-        override fun needsField(fieldInfo: FieldInfo): Status =
-            if (ListDocuments.facetIdOf(fieldInfo.name) != null) Status.YES else Status.NO
-
-        override fun stringField(fieldInfo: FieldInfo, value: String) {
-            values.getOrPut(ListDocuments.facetIdOf(fieldInfo.name)!!) { ArrayList() } += value
+    /** Of the items [keys], their numbers. */
+    private fun numbersOf(db: DSLContext, keys: List<String>): Map<String, Map<String, Double>> {
+        val out = HashMap<String, HashMap<String, Double>>()
+        val n = ITEM_NUMBER
+        db.select(n.ITEM_KEY, n.NUMBER_ID, n.CONTENT).from(n).where(n.ITEM_KEY.`in`(keys)).fetch { r ->
+            out.getOrPut(r.value1()!!) { HashMap() }[r.value2()!!] = r.value3()!!
         }
+        return out
     }
 
-    /** The prefix of a number's field ([ListDocuments.numberField]). */
-    private val NUMBER = ListDocuments.numberField("")
+    /** Of the items [keys], their texts held whole. */
+    private fun textsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, String>> {
+        val out = HashMap<String, HashMap<String, String>>()
+        val t = ITEM_TEXT
+        db.select(t.ITEM_KEY, t.TEXT_KEY, t.CONTENT).from(t).where(t.ITEM_KEY.`in`(keys)).fetch { r ->
+            out.getOrPut(r.value1()!!) { HashMap() }[r.value2()!!] = r.value3()!!
+        }
+        return out
+    }
+
+    /** Of the items [keys], the vectors of their texts by the fields of their encoders. */
+    private fun vectorsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, ByteArray>> {
+        val out = HashMap<String, HashMap<String, ByteArray>>()
+        val u = ITEM_VECTOR
+        db.select(u.ITEM_KEY, u.ENCODER, u.TEXT_KEY, u.VEC).from(u).where(u.ITEM_KEY.`in`(keys)).fetch { r ->
+            out.getOrPut(r.value1()!!) { HashMap() }[ListTexts.vectorField(r.value2()!!, r.value3()!!)] = r.value4()!!
+        }
+        return out
+    }
+
+    /** The columns of an item's own row a written row is read by. */
+    private val COLUMNS =
+        listOf(ITEM.ITEM_KEY, ITEM.WORK, ITEM.WORK_RANK, ITEM.LINKED, ITEM.UPDATED, ITEM.ADDED) +
+            listOf(ITEM.GRADED, ITEM.MARKED, ITEM.TITLE) +
+            WorkDatum.entries.map { it.column } +
+            WorkStage.entries.map { it.column }
 }

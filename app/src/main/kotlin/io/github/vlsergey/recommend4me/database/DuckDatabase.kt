@@ -21,10 +21,16 @@ private val log = LoggerFactory.getLogger(DuckDatabase::class.java)
  * never the only copy of the user's word. Made by its one [script] (a resource) as it is new, and made anew, empty, as
  * its tables are other than the script makes: what it holds is made again by the work that wrote it. Opened once and
  * held open till the end; every use a connection of its own made of the one it opened ([DuckDBConnection.duplicate]),
- * and none on a computation that reads nothing of a database ([DatabaseRefused]). Of the memory, at most [memory].
+ * and — of a file [refused] to a computation that reads nothing of a database — none on such a computation
+ * ([DatabaseRefused]): the index of the list is read by them, as its Lucene index was. Of the memory, at most [memory].
  */
-class DuckDatabase(private val name: String, private val file: Path, private val script: String, memory: String) :
-    AutoCloseable {
+class DuckDatabase(
+    private val name: String,
+    private val file: Path,
+    private val script: String,
+    memory: String,
+    private val refused: Boolean = true,
+) : AutoCloseable {
 
     private val config = Properties().apply { setProperty("memory_limit", memory) }
 
@@ -34,15 +40,12 @@ class DuckDatabase(private val name: String, private val file: Path, private val
     val dsl: DSLContext =
         DSL.using(
             object : ConnectionProvider {
-                override fun acquire(): Connection {
-                    DatabaseRefused.check()
-                    return base.duplicate()
-                }
+                override fun acquire(): Connection = connection()
 
                 override fun release(connection: Connection) = connection.close()
             },
             SQLDialect.DUCKDB,
-            Settings().withRenderSchema(false),
+            SETTINGS,
         )
 
     /**
@@ -50,13 +53,11 @@ class DuckDatabase(private val name: String, private val file: Path, private val
      * appender of many rows ([DuckDBConnection.createAppender]) —, committed as it ends, taken back as it fails.
      */
     fun <T> transaction(block: (DuckDBConnection, DSLContext) -> T): T {
-        DatabaseRefused.check()
-        val connection = base.duplicate() as DuckDBConnection
-        connection.use { c ->
+        connection().use { c ->
             c.autoCommit = false
             var committed = false
             try {
-                val out = block(c, DSL.using(c, SQLDialect.DUCKDB, Settings().withRenderSchema(false)))
+                val out = block(c, dslOf(c))
                 c.commit()
                 committed = true
                 return out
@@ -65,6 +66,15 @@ class DuckDatabase(private val name: String, private val file: Path, private val
             }
         }
     }
+
+    /** A connection of its own, the caller's to close: of the transactions it keeps open itself. */
+    fun connection(): DuckDBConnection {
+        if (refused) DatabaseRefused.check()
+        return base.duplicate() as DuckDBConnection
+    }
+
+    /** A DSL of the [connection], of the dialect of DuckDB, no schema named. */
+    fun dslOf(connection: Connection): DSLContext = DSL.using(connection, SQLDialect.DUCKDB, SETTINGS)
 
     override fun close() = base.close()
 
@@ -123,6 +133,9 @@ class DuckDatabase(private val name: String, private val file: Path, private val
         }
 
     private companion object {
+        /** No schema named: the file has its own. */
+        val SETTINGS: Settings = Settings().withRenderSchema(false)
+
         /** The columns of the information of a column compared: its table, name, type, nullability. */
         const val COLUMNS = 4
     }

@@ -11,7 +11,6 @@ import io.github.vlsergey.recommend4me.worklist.HeldTexts
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListTexts
-import org.apache.lucene.util.BytesRef
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(TextsCompared::class.java)
@@ -49,7 +48,7 @@ internal class TextsCompared(
             val descriptions = UnitRows(ids.size)
             val texts = LetteredText.entries.associateWith { arrayOfNulls<String>(ids.size) }
             // Every doc value read, by its place: the vectors' rows, the texts' arrays
-            val read: List<Pair<String, (Int, BytesRef) -> Unit>> =
+            val read: List<Pair<String, (Int, ByteArray) -> Unit>> =
                 listOfNotNull(
                     ListTexts.vectorField(encoder, TextVectors.TITLE) to titles::put,
                     description?.let { ListTexts.vectorField(encoder, it) to descriptions::put },
@@ -67,7 +66,7 @@ internal class TextsCompared(
             else
                 HeldTexts.of(index, ids.map { ItemKey(s.id, it) }, fields).forEach { (key, own) ->
                     val i = at[key.id] ?: return@forEach
-                    own.forEach { (field, bytes) -> read[fields.indexOf(field)].second(i, BytesRef(bytes)) }
+                    own.forEach { (field, bytes) -> read[fields.indexOf(field)].second(i, bytes) }
                 }
             val streamed = System.nanoTime()
             fandomsOf(s, ids, at, index)?.copyInto(texts.getValue(LetteredText.FANDOMS))
@@ -99,8 +98,8 @@ internal class TextsCompared(
         }
 
         /** The texts of the works by their places as a doc value of the index holds them: its UTF-8, a blank none. */
-        private fun Array<String?>.putter(): (Int, BytesRef) -> Unit = { i, b ->
-            this[i] = b.utf8ToString().takeIf { it.isNotBlank() }
+        private fun Array<String?>.putter(): (Int, ByteArray) -> Unit = { i, b ->
+            this[i] = String(b, Charsets.UTF_8).takeIf { it.isNotBlank() }
         }
 
         /**
@@ -151,9 +150,9 @@ private class UnitRows(private val count: Int) {
     val had = BooleanArray(count)
 
     /** The vector of the [i]-th work as the index holds it. */
-    fun put(i: Int, packed: BytesRef) {
-        val into = matrix ?: ByteMatrix(count, ByteMatrix.packedCols(packed.length)).also { matrix = it }
-        if (into.putPacked(i, packed.bytes, packed.offset, packed.length)) had[i] = true
+    fun put(i: Int, packed: ByteArray) {
+        val into = matrix ?: ByteMatrix(count, ByteMatrix.packedCols(packed.size)).also { matrix = it }
+        if (into.putPacked(i, packed)) had[i] = true
     }
 
     /** The rows read; of none, rows of no column. */

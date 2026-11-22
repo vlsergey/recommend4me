@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.AverageWork
 import io.github.vlsergey.recommend4me.model.Averages
@@ -12,7 +13,6 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.inBackground
-import io.github.vlsergey.recommend4me.worklist.ListDocuments
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import kotlin.math.abs
@@ -21,7 +21,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.apache.lucene.document.DoubleDocValuesField
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 
@@ -153,11 +152,14 @@ class SiteWorkPredictionsTest : SiteTestBase() {
 
     /** The predictions of the site's works [ids] gone from the index of the list, as of works never predicted. */
     private fun forget(ids: Collection<String>) {
-        val none =
-            listOf(ListDocuments.PREDICTION, ListDocuments.MODEL_INTEREST, ListDocuments.EXPECTED)
-                .map { DoubleDocValuesField(it, Double.NEGATIVE_INFINITY) }
-                .toTypedArray()
-        lists.of("books").update(ids.associate { ItemKey("site", it) to none })
+        lists.of("books").written { db ->
+            db.update(ITEM)
+                .setNull(ITEM.PREDICTION)
+                .setNull(ITEM.MODEL_INTEREST)
+                .setNull(ITEM.EXPECTED)
+                .where(ITEM.ITEM_KEY.`in`(ids.map { ItemKey("site", it).toString() }))
+                .execute()
+        }
     }
 
     /** Every work of the [scope] whose expectation is to be made made, a few at a time. */

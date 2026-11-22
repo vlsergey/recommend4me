@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_NUMBER
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VALUE
+import io.github.vlsergey.recommend4me.item.ItemKey
 import java.util.Arrays
-import java.util.stream.IntStream
-import org.apache.lucene.index.LeafReader
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
-import org.apache.lucene.util.NumericUtils
+import org.jooq.DSLContext
 
 /**
  * EVERY ITEM OF A SOURCE AS THE INDEX OF THE LIST KEEPS IT ([ListFacetValues.everyItem]), by their places, the ids
@@ -23,9 +23,9 @@ class ItemRows(
 )
 
 /**
- * The reading of every item of a [source]: of every segment of the index its items' doc values read a run of documents
- * on a core, each with doc values of its own — the key, the title, the ordinals of every facet's values, the numbers —;
- * then the ordinals met numbered once a value, and every segment's items put together, ordered by their ids.
+ * The reading of every item of a [source]: its items and their titles in one pass, ordered by their ids; then the
+ * values of the facets [facetIds] in one pass of theirs, each numbered once a value, and the numbers [numberIds] alike,
+ * every row put at its item's place.
  */
 internal class EveryItem(
     private val source: String,
@@ -33,137 +33,90 @@ internal class EveryItem(
     private val numberIds: List<String>,
     private val titled: Boolean,
 ) {
-    private val names = ArrayList<String>()
-    private val byName = HashMap<String, Int>()
-
-    fun read(leaves: List<LeafReader>): ItemRows {
-        val read = leaves.map { Segment(it).also(Segment::read) }
-        read.forEach(Segment::number)
-        // The segments one after another
-        val total = read.sumOf { it.ids.size }
-        val ids = arrayOfNulls<String>(total)
-        val values = arrayOfNulls<IntArray>(total)
-        val titles = arrayOfNulls<String>(total)
-        val numbers = numberIds.associateWith { DoubleArray(total) }
-        var at = 0
-        read.forEach { s ->
-            s.ids.copyInto(ids, at)
-            s.values.copyInto(values, at)
-            s.titles?.copyInto(titles, at)
-            numberIds.forEach { id -> s.numbers.getValue(id).copyInto(numbers.getValue(id), at) }
-            at += s.ids.size
-        }
-        // Ordered by their ids, an item of none and an id met twice left out
-        val order = ids.indices.filter { ids[it] != null }.toTypedArray()
-        Arrays.parallelSort(order) { a, b -> ids[a]!!.compareTo(ids[b]!!) }
-        val kept = order.filterIndexed { k, i -> k == 0 || ids[order[k - 1]] != ids[i] }.toIntArray()
+    fun read(db: DSLContext): ItemRows {
+        val keys = ArrayList<String>()
+        val titleOf = HashMap<String, String?>()
+        db.select(ITEM.ITEM_KEY, ITEM.TITLE)
+            .from(ITEM)
+            .where(ITEM.SOURCE.eq(source))
+            .fetchSize(STREAMED)
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach { r ->
+                    val id = ItemKey.parse(r.value1()!!).id
+                    keys += id
+                    if (titled) titleOf[id] = r.value2()
+                }
+            }
+        val ids = keys.toTypedArray().also { Arrays.parallelSort(it) }.asList()
+        val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
+        val prefix = ItemKey(source, "").toString()
         return ItemRows(
-            List(kept.size) { ids[kept[it]]!! },
-            Array(kept.size) { values[kept[it]] ?: IntArray(0) },
-            List(kept.size) { titles[kept[it]] },
-            numbers.mapValues { (_, all) -> DoubleArray(kept.size) { all[kept[it]] } },
+            ids,
+            valuesOf(db, at),
+            if (titled) ids.map { titleOf[it] } else List(ids.size) { null },
+            numbersOf(db, at, prefix),
             names,
         )
     }
 
-    /** One segment: its live documents of the source, read a run on a core. */
-    private inner class Segment(private val r: LeafReader) {
-        private val docs: IntArray = docsOf()
-        val ids = arrayOfNulls<String>(docs.size)
-        val titles = if (titled) arrayOfNulls<String>(docs.size) else null
-        val numbers = numberIds.associateWith { DoubleArray(docs.size) }
+    private val names = ArrayList<String>()
+    private val byName = HashMap<String, Int>()
 
-        /** Of every item its values: the segment's ordinals made codes first ([codeAt]), then numbers ([number]). */
-        val values = arrayOfNulls<IntArray>(docs.size)
-
-        /** Where every facet's ordinals begin among the codes of the segment. */
-        private val codeAt =
-            IntArray(facetIds.size + 1).also { at ->
-                facetIds.forEachIndexed { f, id ->
-                    at[f + 1] =
-                        at[f] + (r.getSortedSetDocValues(ListDocuments.valuesField(id))?.valueCount ?: 0L).toInt()
-                }
-            }
-        private val used = BooleanArray(codeAt.last())
-
-        private fun docsOf(): IntArray {
-            val postings = r.postings(Term(ListDocuments.SOURCE, source)) ?: return IntArray(0)
-            val live = r.liveDocs
-            val out = ArrayList<Int>()
-            var doc = postings.nextDoc()
-            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                if (live == null || live.get(doc)) out += doc
-                doc = postings.nextDoc()
-            }
-            return out.toIntArray()
-        }
-
-        fun read() {
-            val runs = (docs.size + RUN - 1) / RUN
-            IntStream.range(0, runs).parallel().forEach { k -> readRun(k * RUN, minOf(docs.size, (k + 1) * RUN)) }
-        }
-
-        /** The items [from] to [to] with doc values of their own: a run on a core. */
-        private fun readRun(from: Int, to: Int) {
-            val keys = r.getSortedDocValues(ListDocuments.KEY) ?: return
-            val title = if (titled) r.getBinaryDocValues(ListDocuments.TITLE) else null
-            val sets = facetIds.map { r.getSortedSetDocValues(ListDocuments.valuesField(it)) }
-            val nums = numberIds.map { r.getSortedNumericDocValues(ListDocuments.numberField(it)) }
-            val buffer = IntArray(BUFFER)
-            for (i in from until to) {
-                val doc = docs[i]
-                if (!keys.advanceExact(doc)) continue
-                ids[i] = idOf(keys.lookupOrd(keys.ordValue()))
-                if (title != null && title.advanceExact(doc)) titles!![i] = title.binaryValue().utf8ToString()
-                var n = 0
-                sets.forEachIndexed { f, dv ->
-                    if (dv == null || !dv.advanceExact(doc)) return@forEachIndexed
-                    repeat(dv.docValueCount()) {
-                        val code = codeAt[f] + dv.nextOrd().toInt()
-                        used[code] = true
-                        if (n < buffer.size) buffer[n++] = code
+    /** Of every item by its place [at], the numbers of its values of the facets read. */
+    private fun valuesOf(db: DSLContext, at: Map<String, Int>): Array<IntArray> {
+        val buffers = arrayOfNulls<IntArray>(at.size)
+        val counts = IntArray(at.size)
+        if (facetIds.isNotEmpty()) {
+            val v = ITEM_VALUE
+            db.select(v.ITEM_KEY, v.FACET, v.VALUE_KEY)
+                .from(v)
+                .join(ITEM)
+                .on(ITEM.ITEM_KEY.eq(v.ITEM_KEY))
+                .where(ITEM.SOURCE.eq(source), v.FACET.`in`(facetIds))
+                .fetchSize(STREAMED)
+                .fetchLazy()
+                .use { cursor ->
+                    cursor.forEach { r ->
+                        val i = at[ItemKey.parse(r.value1()!!).id] ?: return@forEach
+                        val name = "${r.value2()}:${r.value3()}"
+                        val code = byName.getOrPut(name) { names.size.also { names += name } }
+                        val own = buffers[i] ?: IntArray(START).also { buffers[i] = it }
+                        val grown =
+                            if (counts[i] == own.size) own.copyOf(own.size * 2).also { buffers[i] = it } else own
+                        grown[counts[i]++] = code
                     }
                 }
-                values[i] = buffer.copyOf(n)
-                nums.forEachIndexed { k, dv ->
-                    if (dv != null && dv.advanceExact(doc))
-                        numbers.getValue(numberIds[k])[i] = NumericUtils.sortableLongToDouble(dv.nextValue())
-                }
-            }
         }
+        return Array(at.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY }
+    }
 
-        /** The codes met numbered — a value's name looked up once — and every item's codes made their numbers. */
-        fun number() {
-            val numberOf = IntArray(used.size) { -1 }
-            facetIds.forEachIndexed { f, id ->
-                val dv = r.getSortedSetDocValues(ListDocuments.valuesField(id)) ?: return@forEachIndexed
-                for (code in codeAt[f] until codeAt[f + 1]) {
-                    if (!used[code]) continue
-                    val name = "$id:${dv.lookupOrd((code - codeAt[f]).toLong()).utf8ToString()}"
-                    numberOf[code] = byName.getOrPut(name) { names.size.also { names += name } }
+    /** Of every number of [numberIds], its value of every item by its place [at]; nought of one not known. */
+    private fun numbersOf(db: DSLContext, at: Map<String, Int>, prefix: String): Map<String, DoubleArray> {
+        val out = numberIds.associateWith { DoubleArray(at.size) }
+        if (numberIds.isEmpty()) return out
+        val n = ITEM_NUMBER
+        db.select(n.ITEM_KEY, n.NUMBER_ID, n.CONTENT)
+            .from(n)
+            .where(n.NUMBER_ID.`in`(numberIds), n.ITEM_KEY.startsWith(prefix))
+            .fetchSize(STREAMED)
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach { r ->
+                    val i = at[r.value1()!!.substring(prefix.length)] ?: return@forEach
+                    out.getValue(r.value2()!!)[i] = r.value3()!!
                 }
             }
-            IntStream.range(0, values.size).parallel().forEach { i ->
-                values[i]?.let { codes -> for (k in codes.indices) codes[k] = numberOf[codes[k]] }
-            }
-        }
+        return out
     }
 
     private companion object {
-        /** The items a core reads at a time. */
-        const val RUN = 32_768
+        /** The rows streamed at a time: memory, not meaning. */
+        const val STREAMED = 50_000
 
-        /** The values of an item at most. */
-        const val BUFFER = 4096
+        /** The values of an item first made room for. */
+        const val START = 8
 
-        /**
-         * The id of the key "<source>/<id>" ([io.github.vlsergey.recommend4me.item.ItemKey]), decoded of its bytes
-         * after the first slash: one string an item.
-         */
-        fun idOf(key: org.apache.lucene.util.BytesRef): String {
-            var slash = key.offset
-            while (slash < key.offset + key.length && key.bytes[slash] != '/'.code.toByte()) slash++
-            return String(key.bytes, slash + 1, key.offset + key.length - slash - 1, Charsets.UTF_8)
-        }
+        val EMPTY = IntArray(0)
     }
 }

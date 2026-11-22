@@ -1,11 +1,8 @@
 package io.github.vlsergey.recommend4me.worklist
 
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
-import org.apache.lucene.search.IndexSearcher
-import org.apache.lucene.search.TermInSetQuery
-import org.apache.lucene.search.TermQuery
-import org.apache.lucene.util.BytesRef
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VALUE
+import org.jooq.impl.DSL
 
 /**
  * How many items of the list have each value of a filter facet ([counts]), of how many items in all of the sources that
@@ -20,32 +17,23 @@ class ValueCounts(val counts: Map<String, Int>, val total: Int, val without: Int
 object ListCounts {
 
     /** The values of the filter facet [facetId] of the items of the [sources] that have it. */
-    fun of(index: ListIndex, facetId: String, sources: Collection<String>): ValueCounts = index.searching { s ->
-        val field = ListDocuments.facetField(facetId)
-        val counts = HashMap<String, Int>()
-        ListFacetValues.valuesOf(s, facetId).forEach { term ->
-            counts[term.utf8ToString()] = live(s, Term(field, term))
-        }
+    fun of(index: ListIndex, facetId: String, sources: Collection<String>): ValueCounts = index.searching { db ->
+        val v = ITEM_VALUE
+        val counts =
+            db.select(v.VALUE_KEY, DSL.countDistinct(v.ITEM_KEY))
+                .from(v)
+                .where(v.FACET.eq(facetId))
+                .groupBy(v.VALUE_KEY)
+                .fetch()
+                .associate { it.value1()!! to it.value2()!! }
+        val of = ITEM.SOURCE.`in`(sources)
         ValueCounts(
             counts,
-            s.count(TermInSetQuery(ListDocuments.SOURCE, sources.map(::BytesRef))),
-            s.count(TermQuery(Term(field, ListDocuments.NONE))),
+            db.selectCount().from(ITEM).where(of).fetchOne(0, Int::class.java) ?: 0,
+            db.selectCount()
+                .from(ITEM)
+                .where(of, ITEM.ITEM_KEY.notIn(DSL.select(v.ITEM_KEY).from(v).where(v.FACET.eq(facetId))))
+                .fetchOne(0, Int::class.java) ?: 0,
         )
-    }
-
-    /** How many items not removed have the [term]: its documents walked, not its count, which holds the removed. */
-    private fun live(s: IndexSearcher, term: Term): Int {
-        var n = 0
-        s.indexReader.leaves().forEach { leaf ->
-            val r = leaf.reader()
-            val live = r.liveDocs
-            val docs = r.postings(term) ?: return@forEach
-            var doc = docs.nextDoc()
-            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                if (live == null || live.get(doc)) n++
-                doc = docs.nextDoc()
-            }
-        }
-        return n
     }
 }

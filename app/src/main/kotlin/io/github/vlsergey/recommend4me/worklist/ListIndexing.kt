@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -12,9 +13,6 @@ import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.IndexSearcher
-import org.apache.lucene.search.TermQuery
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -163,12 +161,14 @@ class ListIndexing(
     }
 
     /**
-     * Of the source [s], the documents of its items gone removed — when the index holds more of them than the source
-     * has items: an item taken out of the library, nothing of it left to be dated —; how many.
+     * Of the source [s], the rows of its items gone removed — when the index holds more of them than the source has
+     * items: an item taken out of the library, nothing of it left to be dated —; how many.
      */
     private fun removeGone(s: SourceStore, index: ListIndex): Int {
-        val documents = index.written { IndexSearcher(it).count(TermQuery(Term(ListDocuments.SOURCE, s.id))) }
-        if (documents <= s.items.count()) return 0
+        val rows = index.written { db ->
+            db.selectCount().from(ITEM).where(ITEM.SOURCE.eq(s.id)).fetchOne(0, Int::class.java) ?: 0
+        }
+        if (rows <= s.items.count()) return 0
         return index.keepOnly(s.id, s.items.keys().mapTo(HashSet()) { it.id })
     }
 

@@ -2,18 +2,11 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.task.TaskCursor
-import org.apache.lucene.document.NumericDocValuesField
-import org.apache.lucene.search.BooleanClause
-import org.apache.lucene.search.BooleanQuery
-import org.apache.lucene.search.FieldDoc
-import org.apache.lucene.search.IndexSearcher
-import org.apache.lucene.search.Query
-import org.apache.lucene.search.Sort
-import org.apache.lucene.search.SortField
-import org.apache.lucene.search.TermInSetQuery
-import org.apache.lucene.util.BytesRef
+import org.jooq.Condition
+import org.jooq.impl.DSL
 
 /** An item a task over the works takes, and its expected grade: none of no expectation. */
 class TakenWork(val key: ItemKey, val grade: Double) {
@@ -33,40 +26,34 @@ object NextWorks {
     fun priority(scope: WorkScope): TaskPriority =
         if (scope == WorkScope.MARKED) TaskPriority.MARKED_WORKS else TaskPriority.OTHER_WORKS
 
-    /** The next [n] items of the [scope] the query [stale] finds, from the [cursor] on, the highest expected first. */
-    fun next(index: ListIndex, scope: WorkScope, stale: Query, cursor: TaskCursor, n: Int): List<TakenWork> =
-        index.written { reader ->
-            val searcher = IndexSearcher(reader)
-            val marked = if (scope == WorkScope.MARKED) 1L else 0L
-            val query =
-                BooleanQuery.Builder()
-                    .add(
-                        NumericDocValuesField.newSlowExactQuery(ListDocuments.MARKED, marked),
-                        BooleanClause.Occur.FILTER,
-                    )
-                    .add(stale, BooleanClause.Occur.FILTER)
-                    .build()
-            val sort =
-                Sort(
-                    SortField(ListDocuments.PREDICTION, SortField.Type.DOUBLE, true),
-                    SortField(ListDocuments.KEY, SortField.Type.STRING),
-                )
-            // From the cursor on, it among them: a document of the cursor's place compares alike, and its number is
-            // above none
-            val hits =
-                cursor.grade?.let { grade ->
-                    val after = FieldDoc(-1, Float.NaN, arrayOf(grade, BytesRef(cursor.work.orEmpty())))
-                    searcher.searchAfter(after, query, n, sort)
-                } ?: searcher.search(query, n, sort)
-            val stored = searcher.storedFields()
-            hits.scoreDocs.mapNotNull { hit ->
-                val key = stored.document(hit.doc, setOf(ListDocuments.KEY)).get(ListDocuments.KEY)
-                val grade = (hit as FieldDoc).fields[0] as Double
-                key?.let { TakenWork(ItemKey.parse(it), grade) }
-            }
+    /**
+     * The next [n] items of the [scope] the condition [stale] picks, from the [cursor] on, the highest expected first.
+     */
+    fun next(index: ListIndex, scope: WorkScope, stale: Condition, cursor: TaskCursor, n: Int): List<TakenWork> =
+        index.written { db ->
+            val marked = ITEM.MARKED.eq(scope == WorkScope.MARKED)
+            db.select(ITEM.ITEM_KEY, ITEM.PREDICTION)
+                .from(ITEM)
+                .where(marked, stale, after(cursor))
+                .orderBy(ITEM.PREDICTION.desc().nullsLast(), ITEM.ITEM_KEY.asc())
+                .limit(n)
+                .fetch { r -> TakenWork(ItemKey.parse(r.value1()!!), r.value2() ?: Double.NEGATIVE_INFINITY) }
         }
 
-    /** The documents of the items [keys] alone: what another store tells is to be done of them. */
-    fun among(keys: Collection<ItemKey>): Query =
-        TermInSetQuery(ListDocuments.KEY, keys.map { BytesRef(it.toString()) })
+    /**
+     * The items after the [cursor] in the order of the tasks: of a lower expectation, or of the same and a greater key
+     * — the items of no expectation, of -∞, after every other.
+     */
+    private fun after(cursor: TaskCursor): Condition {
+        val grade = cursor.grade
+        val key = ITEM.ITEM_KEY.gt(cursor.work.orEmpty())
+        return when (grade) {
+            null -> DSL.noCondition()
+            Double.NEGATIVE_INFINITY -> ITEM.PREDICTION.isNull.and(key)
+            else -> DSL.or(ITEM.PREDICTION.lt(grade), ITEM.PREDICTION.eq(grade).and(key), ITEM.PREDICTION.isNull)
+        }
+    }
+
+    /** The items [keys] alone: what another store tells is to be done of them. */
+    fun among(keys: Collection<ItemKey>): Condition = ITEM.ITEM_KEY.`in`(keys.map { it.toString() })
 }

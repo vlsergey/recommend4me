@@ -7,13 +7,13 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.vector.Vectors
 
 /**
- * THE TEXTS OF AN ITEM ITS DOCUMENT OF THE INDEX OF THE LIST HOLDS WHOLE, AND THE VECTORS OF ITS TEXTS (owner,
- * 2026-11-22: "everything the search of the duplicates needs taken from the index"; "every text — the fields, not the
- * texts of the chapters — in the index of Lucene"): every text of its own as the user corrected it ([textKeys]), and
- * the vectors of its title and its description by the encoder of now ([vectorKeys]), each of unit length, a byte a
- * number with its scale ([ByteMatrix.pack]) — what a computation over every work reads in one pass of the index, no
- * database read: of the 1.4 million works of ficbook the texts read of the database, a seek of the disk a row, took
- * twelve minutes of a search (2026-11-22).
+ * THE TEXTS OF AN ITEM ITS ROWS OF THE INDEX OF THE LIST HOLD WHOLE, AND THE VECTORS OF ITS TEXTS (owner, 2026-11-22:
+ * "everything the search of the duplicates needs taken from the index"; "every text — the fields, not the texts of the
+ * chapters — in the index of Lucene"): every text of its own as the user corrected it ([textKeys]), and the vectors of
+ * its title and its description by the encoder of now ([vectorKeys]), each of unit length, a byte a number with its
+ * scale ([ByteMatrix.pack]) — what a computation over every work reads in one pass of the index, no database read: of
+ * the 1.4 million works of ficbook the texts read of the database, a seek of the disk a row, took twelve minutes of a
+ * search (2026-11-22).
  */
 object ListTexts {
 
@@ -56,6 +56,17 @@ object ListTexts {
      * byte a number with its scale ([packed]).
      */
     fun vectorField(encoder: String, key: String) = "$VECTOR$encoder:$key"
+
+    /** The encoder and the key of the text of the field of a vector [name]; null of a field of no vector. */
+    fun vectorOf(name: String): Pair<String, String>? =
+        name
+            .takeIf { it.startsWith(VECTOR) }
+            ?.substring(VECTOR.length)
+            ?.split(':', limit = 2)
+            ?.takeIf { it.size == 2 }
+            ?.let {
+                it[0] to it[1]
+            }
 
     private const val TEXT = "t:"
     private const val VECTOR = "u:"

@@ -30,8 +30,6 @@ dependencies {
     // original as AVIF, read by javif, a pure Java AV1 decoder
     implementation(libs.imageio.webp)
     implementation(libs.javif)
-    // The stemmer of Russian words: a character is found however its name is declined
-    implementation(libs.lucene.analysis.common)
 
     jooqCodegen(platform(libs.spring.boot.bom))
     jooqCodegen(libs.h2)
@@ -76,16 +74,22 @@ fun h2Of(kind: String): String {
 }
 
 /**
- * The store of the search of duplicates (DuplicateStore), a DuckDB file made by its one script: H2 reads the script for
- * the generator alike, as DuckDB runs it in the application.
+ * The DuckDB files, each made by its one script (DuckDatabase): the store of the search of duplicates and the index of
+ * the list, by the package of their classes. H2 reads a script for the generator alike, as DuckDB runs it in the
+ * application.
  */
-val duplicateStore = layout.projectDirectory.file("src/main/resources/duplicate/store.sql")
+val duckStores =
+    mapOf(
+        "duplicates" to layout.projectDirectory.file("src/main/resources/duplicate/store.sql"),
+        "worklist" to layout.projectDirectory.file("src/main/resources/worklist/store.sql"),
+    )
 
 /** Of every schema jOOQ's classes are made of, the database in memory the generator reads. */
 val generated: Map<String, String> =
     schemas.associateWith(::h2Of) +
-        ("duplicates" to
-            "jdbc:h2:mem:jooq_duplicates;INIT=RUNSCRIPT FROM '${duplicateStore.asFile.absolutePath.replace('\\', '/')}' CHARSET 'UTF-8'")
+        duckStores.mapValues { (kind, script) ->
+            "jdbc:h2:mem:jooq_$kind;INIT=RUNSCRIPT FROM '${script.asFile.absolutePath.replace('\\', '/')}' CHARSET 'UTF-8'"
+        }
 
 jooq {
     executions {
@@ -133,7 +137,7 @@ tasks
     .matching { it.name.startsWith("jooqCodegen") }
     .configureEach {
         inputs.dir(migrations)
-        inputs.file(duplicateStore)
+        duckStores.values.forEach { inputs.file(it) }
     }
 
 // --- OpenAPI: the contract in api/openapi.yaml is the single source of truth ---

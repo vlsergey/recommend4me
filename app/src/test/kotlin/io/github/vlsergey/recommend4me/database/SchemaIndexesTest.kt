@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.database.model.Public as ModelSchema
 import io.github.vlsergey.recommend4me.database.preferences.Public as PreferencesSchema
 import io.github.vlsergey.recommend4me.database.ratings.Public as RatingsSchema
 import io.github.vlsergey.recommend4me.database.source.Public as SourceSchema
+import io.github.vlsergey.recommend4me.database.worklist.Public as WorklistSchema
 import kotlin.test.Test
 import kotlin.test.fail
 import org.jooq.Schema
@@ -30,6 +31,7 @@ class SchemaIndexesTest {
             PreferencesSchema.PUBLIC,
             RatingsSchema.PUBLIC,
             SourceSchema.PUBLIC,
+            WorklistSchema.PUBLIC,
         )
 
     @Test

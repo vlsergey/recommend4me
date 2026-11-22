@@ -1,18 +1,16 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
-import org.apache.lucene.document.NumericDocValuesField
-import org.apache.lucene.index.DocValues
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
+import org.jooq.Field
 
 /**
  * WHAT A WORK IS MADE OF, AS THE STAGES OF THE TASKS OVER THE WORKS READ IT (owner, 2026-11-21: "a normal, finished
  * solution without hacks, with a self-evident decomposition of dependencies"): every kind of data of a work has the
- * date it last changed in its document of the index of the list ([field]) — of the [outer] ones the date their writes
- * keep with the rows of the databases, brought into the document as it is written ([ListRows]); of the others the date
- * the stage that makes them gave them, where they came out other than they were ([WorkStage.output]). A stage reads
- * kinds of data, never fields: nothing here tells which field reads which dictionary.
+ * date it last changed in its row of the index of the list ([column]) — of the [outer] ones the date their writes keep
+ * with the rows of the databases, brought into the document as it is written ([ListRows]); of the others the date the
+ * stage that makes them gave them, where they came out other than they were ([WorkStage.output]). A stage reads kinds
+ * of data, never fields: nothing here tells which field reads which dictionary.
  */
 enum class WorkDatum(val outer: Boolean) {
     /** What the site says of the item — its head, values, numbers, texts — and what the dictionaries draft of it. */
@@ -40,18 +38,17 @@ enum class WorkDatum(val outer: Boolean) {
     /** The values the models of the fields give it. */
     FIELDS(false);
 
-    /** The field of the document of the date the data last changed, milliseconds. */
-    val field = "at:${name.lowercase()}"
+    /** The column of the row of an item of the date the data last changed, milliseconds. */
+    val column: Field<Long?> = ITEM.columnOf("${name.lowercase()}_at")
 }
 
 /**
  * A STAGE OF THE TASKS OVER THE WORKS (docs/computations.md, 9–11): what it [reads], the stages it waits for ([after] —
  * none of its works is taken before they did every change it reads up to the same date), what it makes ([output]), and
- * the field of a document telling the sweep that last did it ([field]: what a sweep passes over once done of it). Each
+ * the column of an item's row telling the sweep that last did it ([column]: what a sweep passes over once done). Each
  * stage keeps of every source and scope the date it did every change up to ([StageSweeps]).
  */
 enum class WorkStage(
-    val field: String,
     val reads: List<WorkDatum>,
     val after: List<WorkStage>,
     val output: WorkDatum?,
@@ -59,23 +56,20 @@ enum class WorkStage(
     val reason: String,
 ) {
     VECTORS(
-        ListDocuments.VECTORS_AT,
         listOf(WorkDatum.DATA, WorkDatum.ANSWERS),
         emptyList(),
         WorkDatum.VECTORS,
         "texts",
     ),
-    WINDOWS(ListDocuments.WINDOWS_AT, listOf(WorkDatum.CHAPTERS), emptyList(), WorkDatum.WINDOWS, "parts"),
-    CAST(ListDocuments.CAST_AT, listOf(WorkDatum.DATA), emptyList(), WorkDatum.CAST, "castNames"),
+    WINDOWS(listOf(WorkDatum.CHAPTERS), emptyList(), WorkDatum.WINDOWS, "parts"),
+    CAST(listOf(WorkDatum.DATA), emptyList(), WorkDatum.CAST, "castNames"),
     SETS(
-        ListDocuments.SETS_AT,
         listOf(WorkDatum.WINDOWS, WorkDatum.REVIEWS, WorkDatum.PICTURES),
         listOf(WINDOWS),
         WorkDatum.SETS,
         "setVectors",
     ),
     FIELDS(
-        ListDocuments.FIELDS_AT,
         listOf(
             WorkDatum.DATA,
             WorkDatum.ANSWERS,
@@ -89,7 +83,6 @@ enum class WorkStage(
         "fields",
     ),
     PREDICTED(
-        ListDocuments.PREDICTED_AT,
         listOf(
             WorkDatum.DATA,
             WorkDatum.ANSWERS,
@@ -105,12 +98,14 @@ enum class WorkStage(
         "predicted",
     ),
     TEXTS(
-        ListDocuments.TEXTS_AT,
         listOf(WorkDatum.DATA, WorkDatum.ANSWERS, WorkDatum.CHAPTERS, WorkDatum.VECTORS, WorkDatum.WINDOWS),
         listOf(VECTORS, WINDOWS),
         null,
         "texts",
     );
+
+    /** The column of the row of an item of the sweep of the stage that last did it, milliseconds; none of never. */
+    val column: Field<Long?> = ITEM.columnOf("${name.lowercase()}_done")
 
     companion object {
         /**
@@ -132,48 +127,40 @@ enum class WorkStage(
 }
 
 /**
- * Of a document, the sweep of every stage that last did it ([WorkStage.field]: the date the sweep began, milliseconds;
- * none of never): what a sweep passes over once done of it, carried as the document is made anew.
+ * Of an item, the sweep of every stage that last did it ([WorkStage.column]: the date the sweep began, milliseconds;
+ * none of never): what a sweep passes over once done of it, carried as the item's row is written anew.
  */
 class WorkStages(private val at: Map<WorkStage, Long>) {
-    /** The sweep of the [stage] that last did the document; nought of none. */
+    /** The sweep of the [stage] that last did the item; nought of none. */
     operator fun get(stage: WorkStage): Long = at[stage] ?: 0L
-
-    /** The stages as the fields of a document, updated in place. */
-    fun fields() = WorkStage.entries.map { NumericDocValuesField(it.field, get(it)) }.toTypedArray()
 
     companion object {
         /** Of no stage done. */
         val NONE = WorkStages(emptyMap())
 
-        /** Of the items [ids] of the [source], the stages kept, as written so far; an item of no document left out. */
+        /** Of the items [ids] of the [source], the stages kept, as written so far; an item of no row left out. */
         fun of(index: ListIndex, source: String, ids: Collection<String>): Map<String, WorkStages> =
-            index.written { reader ->
+            index.written { db ->
                 val out = HashMap<String, WorkStages>()
-                reader.leaves().forEach { leaf ->
-                    val r = leaf.reader()
-                    val live = r.liveDocs
-                    // Of every key its document not deleted — one made anew replaced another —, read in the order of
-                    // the documents: the values are read forward alone
-                    val found = sortedMapOf<Int, String>()
-                    ids.forEach { id ->
-                        val docs = r.postings(Term(ListDocuments.KEY, ItemKey(source, id).toString())) ?: return@forEach
-                        var doc = docs.nextDoc()
-                        while (doc != DocIdSetIterator.NO_MORE_DOCS && live != null && !live.get(doc)) doc =
-                            docs.nextDoc()
-                        if (doc != DocIdSetIterator.NO_MORE_DOCS) found[doc] = id
-                    }
-                    val fields = WorkStage.entries.associateWith { DocValues.getNumeric(r, it.field) }
-                    found.forEach { (doc, id) ->
-                        out[id] =
-                            WorkStages(fields.mapValues { (_, v) -> if (v.advanceExact(doc)) v.longValue() else 0L })
-                    }
+                val columns = WorkStage.entries.map { it.column }
+                ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+                    db.select(listOf(ITEM.ITEM_KEY) + columns)
+                        .from(ITEM)
+                        .where(ITEM.ITEM_KEY.`in`(chunk.map { ItemKey(source, it).toString() }))
+                        .fetch { r ->
+                            out[ItemKey.parse(r.get(ITEM.ITEM_KEY)!!).id] =
+                                WorkStages(WorkStage.entries.associateWith { r.get(it.column) ?: 0L })
+                        }
                 }
                 out
             }
     }
 }
 
-/** The items [keys] of the [index] done of the [stage] by the sweep begun [at] — in place, a document of none left. */
-fun WorkStage.done(index: ListIndex, keys: Collection<ItemKey>, at: Long) =
-    index.update(keys.associateWith { arrayOf(NumericDocValuesField(field, at)) })
+/** The items [keys] of the [index] done of the [stage] by the sweep begun [at] — in place, an item of no row left. */
+fun WorkStage.done(index: ListIndex, keys: Collection<ItemKey>, at: Long) = index.set(column, keys.associateWith { at })
+
+/** The column of the table of the items of the [name]: of the script of the store, else no column of it at all. */
+private fun io.github.vlsergey.recommend4me.database.worklist.tables.Item.columnOf(name: String): Field<Long?> =
+    @Suppress("UNCHECKED_CAST") (field(name.uppercase()) as Field<Long?>?)
+        ?: error("No column $name of the list's items")

@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,7 +31,7 @@ class ListKeptRowsTest {
 
     @Test
     fun `a document read as written is its row's, and is no longer of a row changed in anything it holds`() {
-        ListIndex(Files.createTempDirectory("list-index")).use { index ->
+        temporaryIndex { index ->
             val a = row("a")
             val b = row("b", linked = false, numbers = emptyMap(), facets = mapOf("tags" to listOf("t3")))
             index.replace(listOf(a, b))
@@ -53,7 +52,7 @@ class ListKeptRowsTest {
 
     @Test
     fun `the order of a facet's values is no change — neither another row nor a dictionary's draft`() {
-        ListIndex(Files.createTempDirectory("list-index")).use { index ->
+        temporaryIndex { index ->
             index.replace(listOf(row("a", facets = mapOf("tags" to listOf("t1", "t2", "t3")))))
             index.commit()
             val written = index.written { ListKeptRows.of(it, "site", listOf("a")) }.getValue("a")

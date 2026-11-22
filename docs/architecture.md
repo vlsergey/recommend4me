@@ -136,8 +136,9 @@ types/<type>/duplicates.duckdb     the store of the search of duplicates (DuckDB
                                    the models of the answers, how rare every value is — all
                                    recomputable, made anew empty as its tables change
 types/<type>/search-index/         the search index
-types/<type>/list-index/           the index of the list of works (Lucene): what the list is
-                                   filtered, sorted, counted and paged by — all recomputable
+types/<type>/list.duckdb           the index of the list of works (DuckDB): what the list is
+                                   filtered, sorted, counted and paged by — all recomputable,
+                                   made anew empty as its tables change
 models/                            ONNX graphs of the encoders
 backups/                           the settings, the dictionaries, the preferences, corrections
                                    and ratings, zipped on every start
@@ -148,24 +149,29 @@ files, so whatever reads several of them reads each file once, in batch, only th
 needs, and puts the answer together in memory for that one operation.
 
 THE LIST OF WORKS IS ASKED OF ITS INDEX ALONE (user, 2026-11-17): of a million works, the list put
-together of every file at every request was minutes. A Lucene index of every content type
-(`worklist`: `ListIndex`) holds a document of every item — the work it is of, a work of several
-items one row grouped by it; the values of every filter facet as the user sees them (the site's,
-the models' — kept here alone, apart too (`m:<facet>`, `ListModelValues`) —, the user's word on top) as terms; every number as a point and
-a sorted value; its dates; and what changes of its work without it — graded, the prediction, the
-chance of interest, their product — updated in place. The filters, the orders, the count and the
-page are a query of it; only the cards of the page are read of the databases, by their keys. The
+together of every file at every request was minutes. A DuckDB file of every content type
+(`worklist`: `ListIndex`, made by `worklist/store.sql`; of Lucene till 2026-11-22, owner: "work")
+holds a row of every item (`item`) — the work it is of, a work of several items one row grouped
+by it; its dates; and what changes of its work without it — graded, the prediction, the chance of
+interest, their product — set in place, many rows by one `UPDATE … FROM` of a table of what is
+pending — and, in the tables beside, keyed by the item, the values of every filter facet as the
+user sees them (the site's, the models' kept, the user's word on top: `item_value`), the values the
+models give it — kept here alone (`item_model`, `ListModelValues`) —, every number
+(`item_number`), every text held whole and every vector of a text. The filters, the orders, the
+count and the page are one SQL query of it; only the cards of the page are read of the databases,
+by their keys. It is written through one connection whose transaction stays open till a commit,
+and read by the requests as last committed. The
 databases stay the truth: the index is written in the queue of the computations (`ListIndexing`)
 a second after something it holds changed — an item's data, an answer, the values the model gives, a
 grade, a mark of interest, a regrouping of the works — a consumer of the changes as the stages are:
 of every source the items changed after where its writing stands, in the order of the dates the
 databases keep with the rows (`item.changed_at`, `normalized_work.changed_at`), ten thousand a turn,
-where it stands kept with the index's commit (`ListCursors`): nothing is named in the queue. Every document holds the date
+where it stands kept with the index's commit (`ListCursors`, the rows of `list_mark`): nothing is named in the queue. Every row holds the date
 every kind of data of its work last changed (`WorkDatum`), and the stages of the tasks over the works take
 the works by them, each by the kinds it reads, up to its own mark (`StageSweeps`, docs/computations.md, c).
 The predictions of the works are kept in the index alone (`ListPredictions`), written in place by what
 makes them where they change as the index keeps them, to three digits. The index has no format: one
-current as of nought takes every item from the first, a document of what it holds anew alone written
+current as of nought takes every item from the first, a row of what it holds anew alone written
 with its stages as they were.
 
 ## Works, items and their data

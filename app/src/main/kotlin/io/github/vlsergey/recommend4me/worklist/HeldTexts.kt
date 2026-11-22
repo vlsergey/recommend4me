@@ -1,76 +1,91 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_TEXT
+import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VECTOR
 import io.github.vlsergey.recommend4me.item.ItemKey
-import org.apache.lucene.index.IndexReader
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
-import org.apache.lucene.util.BytesRef
+import org.jooq.Condition
+import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 /**
- * THE TEXTS AND THE VECTORS THE DOCUMENTS OF THE LIST HOLD ([ListTexts]), read of the index: of every item of a source
- * in one pass of its doc values, or of the items asked for by their keys.
+ * THE TEXTS AND THE VECTORS THE INDEX OF THE LIST HOLDS ([ListTexts]), read of it by the names of their fields
+ * ([ListTexts.textField]: a text's UTF-8, [ListTexts.vectorField]: a vector as packed): of every item of a source in
+ * one pass of each table, or of the items asked for by their keys.
  */
 object HeldTexts {
+
     /**
-     * Of every item of the [source] the index holds, the value of each of the doc values [fields] it has, by the
-     * field's place among them, as the index holds it — handed on at once, the bytes valid till the next is.
+     * Of every item of the [source] the index holds, the value of each of the [fields] it has, by the field's place
+     * among them, as committed — handed on at once.
      */
-    fun forEvery(index: ListIndex, source: String, fields: List<String>, action: (String, Int, BytesRef) -> Unit) =
-        index.searching { s ->
-            s.indexReader.leaves().forEach { leaf ->
-                val r = leaf.reader()
-                val keys = r.getSortedDocValues(ListDocuments.KEY) ?: return@forEach
-                val values = fields.map { r.getBinaryDocValues(it) }
-                if (values.all { it == null }) return@forEach
-                val docs = r.postings(Term(ListDocuments.SOURCE, source)) ?: return@forEach
-                val live = r.liveDocs
-                var doc = docs.nextDoc()
-                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                    if ((live == null || live.get(doc)) && keys.advanceExact(doc)) {
-                        val id = ItemKey.parse(keys.lookupOrd(keys.ordValue()).utf8ToString()).id
-                        values.forEachIndexed { k, dv ->
-                            if (dv != null && dv.advanceExact(doc)) action(id, k, dv.binaryValue())
-                        }
-                    }
-                    doc = docs.nextDoc()
-                }
+    fun forEvery(index: ListIndex, source: String, fields: List<String>, action: (String, Int, ByteArray) -> Unit) =
+        index.searching { db ->
+            val prefix = ItemKey(source, "").toString()
+            read(db, fields, { key -> key.startsWith(prefix) }) { key, k, value ->
+                action(key.substring(prefix.length), k, value)
             }
         }
 
     /** Of the items [keys], the value of each of the doc values [fields] they have, by the field: as committed. */
     fun of(index: ListIndex, keys: Collection<ItemKey>, fields: List<String>): Map<ItemKey, Map<String, ByteArray>> =
         index.searching {
-            of(it.indexReader, keys, fields)
+            of(it, keys, fields)
         }
 
-    /**
-     * Of the items [keys], the value of each of the doc values [fields] they have, by the field, as the [reader] has
-     * it.
-     */
-    fun of(reader: IndexReader, keys: Collection<ItemKey>, fields: List<String>): Map<ItemKey, Map<String, ByteArray>> {
+    /** Of the items [keys], the value of each of the [fields] they have, by the field, as the [db] has it. */
+    fun of(db: DSLContext, keys: Collection<ItemKey>, fields: List<String>): Map<ItemKey, Map<String, ByteArray>> {
         if (keys.isEmpty()) return emptyMap()
         val out = HashMap<ItemKey, HashMap<String, ByteArray>>()
-        reader.leaves().forEach { leaf ->
-            val r = leaf.reader()
-            val live = r.liveDocs
-            // Of every key its live document, in the order of the documents: the values are read forward alone
-            val found = sortedMapOf<Int, ItemKey>()
-            keys.forEach { key ->
-                val docs = r.postings(Term(ListDocuments.KEY, key.toString())) ?: return@forEach
-                var doc = docs.nextDoc()
-                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                    if (live == null || live.get(doc)) found[doc] = key
-                    doc = docs.nextDoc()
-                }
-            }
-            fields.forEach { field ->
-                val dv = r.getBinaryDocValues(field) ?: return@forEach
-                found.forEach { (doc, key) ->
-                    if (dv.advanceExact(doc))
-                        out.getOrPut(key) { HashMap() }[field] = BytesRef.deepCopyOf(dv.binaryValue()).bytes
-                }
+        keys.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+            val asked = chunk.map { it.toString() }
+            read(db, fields, { it.`in`(asked) }) { key, k, value ->
+                out.getOrPut(ItemKey.parse(key)) { HashMap() }[fields[k]] = value
             }
         }
         return out
     }
+
+    /**
+     * Of the items the [items] condition picks of the column of their keys, the value of each of the [fields], with its
+     * item's key and the field's place.
+     */
+    private fun read(
+        db: DSLContext,
+        fields: List<String>,
+        items: (org.jooq.Field<String?>) -> Condition,
+        action: (String, Int, ByteArray) -> Unit,
+    ) {
+        val texts = fields.withIndex().mapNotNull { (k, f) -> ListTexts.textKeyOf(f)?.let { it to k } }.toMap()
+        val vectors = fields.withIndex().mapNotNull { (k, f) -> ListTexts.vectorOf(f)?.let { it to k } }.toMap()
+        if (texts.isNotEmpty()) {
+            val t = ITEM_TEXT
+            db.select(t.ITEM_KEY, t.TEXT_KEY, t.CONTENT)
+                .from(t)
+                .where(items(t.ITEM_KEY), t.TEXT_KEY.`in`(texts.keys))
+                .fetchSize(STREAMED)
+                .fetchLazy()
+                .use { cursor ->
+                    cursor.forEach { r ->
+                        action(r.value1()!!, texts.getValue(r.value2()!!), r.value3()!!.toByteArray())
+                    }
+                }
+        }
+        if (vectors.isNotEmpty()) {
+            val v = ITEM_VECTOR
+            val asked = DSL.or(vectors.keys.map { (encoder, key) -> v.ENCODER.eq(encoder).and(v.TEXT_KEY.eq(key)) })
+            db.select(v.ITEM_KEY, v.ENCODER, v.TEXT_KEY, v.VEC)
+                .from(v)
+                .where(items(v.ITEM_KEY), asked)
+                .fetchSize(STREAMED)
+                .fetchLazy()
+                .use { cursor ->
+                    cursor.forEach { r ->
+                        action(r.value1()!!, vectors.getValue(r.value2()!! to r.value3()!!), r.value4()!!)
+                    }
+                }
+        }
+    }
+
+    /** The rows streamed at a time: memory, not meaning. */
+    private const val STREAMED = 10_000
 }

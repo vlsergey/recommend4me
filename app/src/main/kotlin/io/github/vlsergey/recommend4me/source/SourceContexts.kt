@@ -76,10 +76,7 @@ class SourceContexts(
         override fun itemsInOrder(): List<String> {
             val graded = store.ratings.gradedItems()
             val predictions =
-                indexes
-                    .of(store.type)
-                    .searching { ListPredictions.ofEvery(it.indexReader, store.id) }
-                    .mapValues { it.value.score }
+                indexes.of(store.type).searching { ListPredictions.ofEvery(it, store.id) }.mapValues { it.value.score }
             return store.items
                 .keys()
                 .sortedWith(

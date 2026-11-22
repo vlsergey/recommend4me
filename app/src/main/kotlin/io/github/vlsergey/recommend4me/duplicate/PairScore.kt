@@ -170,7 +170,7 @@ internal class PairWorth(
         fun of(type: TypeStore, index: ListIndex) =
             PairWorth(
                 type.sources.associate { s ->
-                    s.id to index.searching { ListPredictions.ofEvery(it.indexReader, s.id) }
+                    s.id to index.searching { ListPredictions.ofEvery(it, s.id) }
                 },
                 type.sources.associate { s -> s.id to s.interest.all().mapValues { it.value.interesting } },
             )

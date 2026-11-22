@@ -39,10 +39,7 @@ internal class NextPictures(private val stores: Stores, private val indexes: Lis
                 val todo = s.pictures.queue.itemsWithPending(encoder.id) - best.keys
                 // As the index of the list keeps them
                 val predictions =
-                    indexes
-                        .of(s.type)
-                        .searching { ListPredictions.ofEvery(it.indexReader, s.id) }
-                        .mapValues { it.value.score }
+                    indexes.of(s.type).searching { ListPredictions.ofEvery(it, s.id) }.mapValues { it.value.score }
                 val order = todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
                 s.pictures.queue.pendingOf(order, encoder.id, emptySet(), limit - graded.size)
             }

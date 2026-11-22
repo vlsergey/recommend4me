@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,7 +28,7 @@ class ListFacetValuesTest {
 
     @Test
     fun `every item's values read of the doc values, by number, as written last`() {
-        ListIndex(Files.createTempDirectory("list-index")).use { index ->
+        temporaryIndex { index ->
             index.replace(
                 listOf(
                     row("a", mapOf("tags" to listOf("t1", "t2"), "kind" to listOf("k"))),
