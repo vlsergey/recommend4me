@@ -3,7 +3,9 @@
 `types/<type>/duplicates.duckdb` — a DuckDB file (owner, 2026-11-22: "let us move to DuckDB"), made by its one script
 `app/src/main/resources/duplicate/store.sql` and made anew, empty, as its tables are other than the script makes
 (`DuckDatabase`): everything in it is made again by the next search, the user's words on the pairs kept elsewhere. The
-candidates are written whole by every search, appended in the order of their key, no index of them kept.
+candidates and the rarities of the values are written whole by every search, the candidates appended in the order of
+their key, no index nor key of either kept: a key emptied and filled again in one transaction cost a search 61 s of its
+writing and 57 s of its commit (2026-11-22).
 
 | Table | What it holds |
 |---|---|

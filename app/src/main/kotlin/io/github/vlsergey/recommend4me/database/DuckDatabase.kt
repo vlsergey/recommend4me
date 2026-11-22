@@ -19,10 +19,11 @@ private val log = LoggerFactory.getLogger(DuckDatabase::class.java)
  * A DUCKDB FILE OF THE APPLICATION (owner, 2026-11-22: "let us move to DuckDB"): a store of columns, for a table
  * written whole and read by the columns of a filter and a sort, no index kept — of what is made again of the rest,
  * never the only copy of the user's word. Made by its one [script] (a resource) as it is new, and made anew, empty, as
- * its tables are other than the script makes: what it holds is made again by the work that wrote it. Opened once and
- * held open till the end; every use a connection of its own made of the one it opened ([DuckDBConnection.duplicate]),
- * and — of a file [refused] to a computation that reads nothing of a database — none on such a computation
- * ([DatabaseRefused]): the index of the list is read by them, as its Lucene index was. Of the memory, at most [memory].
+ * its tables — their columns, keys and indexes — are other than the script makes: what it holds is made again by the
+ * work that wrote it. Opened once and held open till the end; every use a connection of its own made of the one it
+ * opened ([DuckDBConnection.duplicate]), and — of a file [refused] to a computation that reads nothing of a database —
+ * none on such a computation ([DatabaseRefused]): the index of the list is read by them, as its Lucene index was. Of
+ * the memory, at most [memory].
  */
 class DuckDatabase(
     private val name: String,
@@ -106,18 +107,18 @@ class DuckDatabase(
             tablesOf(memory)
         }
 
-    /** The tables of the [connection]'s database: of every column its table, name, type and whether it may be null. */
+    /**
+     * The tables of the [connection]'s database: of every column its table, name, type and whether it may be null; of
+     * every key and index its table, kind and columns — a key or an index taken away or added makes the file anew too.
+     */
     private fun tablesOf(connection: Connection): List<String> =
         connection.createStatement().use { s ->
-            s.executeQuery(
-                    "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns " +
-                        "WHERE table_schema = 'main' ORDER BY table_name, ordinal_position"
-                )
-                .use { rs ->
-                    buildList {
-                        while (rs.next()) add((1..COLUMNS).joinToString(" ") { rs.getString(it) })
-                    }
+            TABLES.flatMap { query ->
+                s.executeQuery(query).use { rs ->
+                    val columns = rs.metaData.columnCount
+                    buildList { while (rs.next()) add((1..columns).joinToString(" ") { rs.getString(it) }) }
                 }
+            }
         }
 
     /** The statements of the [sql] run one after another: each ends its line with a semicolon. */
@@ -136,7 +137,15 @@ class DuckDatabase(
         /** No schema named: the file has its own. */
         val SETTINGS: Settings = Settings().withRenderSchema(false)
 
-        /** The columns of the information of a column compared: its table, name, type, nullability. */
-        const val COLUMNS = 4
+        /** What the tables are compared by: their columns, their keys, their indexes. */
+        val TABLES =
+            listOf(
+                "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns " +
+                    "WHERE table_schema = 'main' ORDER BY table_name, ordinal_position",
+                "SELECT table_name, constraint_type, constraint_column_names::VARCHAR FROM duckdb_constraints() " +
+                    "WHERE schema_name = 'main' AND constraint_type <> 'NOT NULL' ORDER BY ALL",
+                "SELECT table_name, index_name, is_unique, expressions FROM duckdb_indexes() " +
+                    "WHERE schema_name = 'main' ORDER BY ALL",
+            )
     }
 }

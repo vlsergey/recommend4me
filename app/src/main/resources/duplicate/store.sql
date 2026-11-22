@@ -56,8 +56,10 @@ CREATE TABLE duplicate_search (
     fit_millis BIGINT
 );
 
--- How rare every value the search compares is among every work of the type
+-- How rare every value the search compares is among every work of the type; no key kept: the values are written anew
+-- whole by every search, and a key emptied and filled again in one transaction cost a search of 2.6 million pairs 61 s
+-- of its writing and 57 s of its commit, 15 ms and 0.5 s without (2026-11-22)
 CREATE TABLE duplicate_value (
-    name VARCHAR(1000) NOT NULL PRIMARY KEY,
+    name VARCHAR(1000) NOT NULL,
     rarity REAL NOT NULL
 );
