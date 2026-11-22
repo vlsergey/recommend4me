@@ -4,8 +4,10 @@ import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_NUMBER
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VALUE
 import io.github.vlsergey.recommend4me.item.ItemKey
-import java.util.Arrays
 import org.jooq.DSLContext
+import org.jooq.Field
+import org.jooq.Table
+import org.jooq.impl.DSL
 
 /**
  * EVERY ITEM OF A SOURCE AS THE INDEX OF THE LIST KEEPS IT ([ListFacetValues.everyItem]), by their places, the ids
@@ -23,9 +25,12 @@ class ItemRows(
 )
 
 /**
- * The reading of every item of a [source]: its items and their titles in one pass, ordered by their ids; then the
- * values of the facets [facetIds] in one pass of theirs, each numbered once a value, and the numbers [numberIds] alike,
- * every row put at its item's place.
+ * The reading of every item of a [source], in one transaction ([ListIndex.searching]): its items and their titles in
+ * one pass, ordered by their keys; then the values of the facets [facetIds] in one pass of theirs, and the numbers
+ * [numberIds] alike. The database numbers them itself — an item by its place among the source's keys ascending, a value
+ * by its place among the values read — and hands two integers a row, the names of the values once: the 16.5 million
+ * values of ficbook as three strings a row, an item's key parsed and a value's name made and looked up of every one,
+ * took 15 s of the 17 of the reading, numbered so 0.8 (2026-11-22, measured on a copy of the books' index).
  */
 internal class EveryItem(
     private val source: String,
@@ -34,80 +39,135 @@ internal class EveryItem(
     private val titled: Boolean,
 ) {
     fun read(db: DSLContext): ItemRows {
+        val prefix = ItemKey(source, "").toString()
         val keys = ArrayList<String>()
-        val titleOf = HashMap<String, String?>()
+        val titles = ArrayList<String?>()
         db.select(ITEM.ITEM_KEY, ITEM.TITLE)
             .from(ITEM)
             .where(ITEM.SOURCE.eq(source))
+            .orderBy(ITEM.ITEM_KEY)
             .fetchSize(STREAMED)
             .fetchLazy()
             .use { cursor ->
                 cursor.forEach { r ->
-                    val id = ItemKey.parse(r.value1()!!).id
-                    keys += id
-                    if (titled) titleOf[id] = r.value2()
+                    keys += r.value1()!!.substring(prefix.length)
+                    if (titled) titles += r.value2()
                 }
             }
-        val ids = keys.toTypedArray().also { Arrays.parallelSort(it) }.asList()
-        val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
-        val prefix = ItemKey(source, "").toString()
+        val placed = Placed.of(keys)
+        val places = Places(source)
+        val (values, names) = valuesOf(db, places, placed)
         return ItemRows(
-            ids,
-            valuesOf(db, at),
-            if (titled) ids.map { titleOf[it] } else List(ids.size) { null },
-            numbersOf(db, at, prefix),
+            placed.ids,
+            values,
+            if (titled) placed.inOrder(titles) else List(keys.size) { null },
+            numbersOf(db, places, placed),
             names,
         )
     }
 
-    private val names = ArrayList<String>()
-    private val byName = HashMap<String, Int>()
-
-    /** Of every item by its place [at], the numbers of its values of the facets read. */
-    private fun valuesOf(db: DSLContext, at: Map<String, Int>): Array<IntArray> {
-        val buffers = arrayOfNulls<IntArray>(at.size)
-        val counts = IntArray(at.size)
-        if (facetIds.isNotEmpty()) {
-            val v = ITEM_VALUE
-            db.select(v.ITEM_KEY, v.FACET, v.VALUE_KEY)
+    /** Of every item by its place, the numbers of its values of the facets read; the names of the numbers. */
+    private fun valuesOf(db: DSLContext, places: Places, placed: Placed): Pair<Array<IntArray>, List<String>> {
+        if (facetIds.isEmpty()) return Array(placed.size) { EMPTY } to emptyList()
+        val v = ITEM_VALUE
+        val named =
+            DSL.selectDistinct(v.FACET, v.VALUE_KEY)
                 .from(v)
-                .join(ITEM)
-                .on(ITEM.ITEM_KEY.eq(v.ITEM_KEY))
-                .where(ITEM.SOURCE.eq(source), v.FACET.`in`(facetIds))
-                .fetchSize(STREAMED)
-                .fetchLazy()
-                .use { cursor ->
-                    cursor.forEach { r ->
-                        val i = at[ItemKey.parse(r.value1()!!).id] ?: return@forEach
-                        val name = "${r.value2()}:${r.value3()}"
-                        val code = byName.getOrPut(name) { names.size.also { names += name } }
-                        val own = buffers[i] ?: IntArray(START).also { buffers[i] = it }
-                        val grown =
-                            if (counts[i] == own.size) own.copyOf(own.size * 2).also { buffers[i] = it } else own
-                        grown[counts[i]++] = code
-                    }
-                }
-        }
-        return Array(at.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY }
-    }
-
-    /** Of every number of [numberIds], its value of every item by its place [at]; nought of one not known. */
-    private fun numbersOf(db: DSLContext, at: Map<String, Int>, prefix: String): Map<String, DoubleArray> {
-        val out = numberIds.associateWith { DoubleArray(at.size) }
-        if (numberIds.isEmpty()) return out
-        val n = ITEM_NUMBER
-        db.select(n.ITEM_KEY, n.NUMBER_ID, n.CONTENT)
-            .from(n)
-            .where(n.NUMBER_ID.`in`(numberIds), n.ITEM_KEY.startsWith(prefix))
+                .join(places.table)
+                .on(places.key.eq(v.ITEM_KEY))
+                .where(v.FACET.`in`(facetIds))
+                .asTable("named")
+        val facet = named.field(v.FACET)!!
+        val valueKey = named.field(v.VALUE_KEY)!!
+        val codes =
+            DSL.select(facet, valueKey, DSL.rowNumber().over().orderBy(facet, valueKey).minus(1).`as`(CODE))
+                .from(named)
+                .asTable("codes")
+        val code = codes.field(CODE, Int::class.java)!!
+        val names =
+            db.select(codes.field(facet)!!, codes.field(valueKey)!!).from(codes).orderBy(code).fetch {
+                "${it.value1()}:${it.value2()}"
+            }
+        val buffers = arrayOfNulls<IntArray>(placed.size)
+        val counts = IntArray(placed.size)
+        db.select(places.place, code)
+            .from(v)
+            .join(places.table)
+            .on(places.key.eq(v.ITEM_KEY))
+            .join(codes)
+            .on(codes.field(facet)!!.eq(v.FACET).and(codes.field(valueKey)!!.eq(v.VALUE_KEY)))
+            .where(v.FACET.`in`(facetIds))
             .fetchSize(STREAMED)
             .fetchLazy()
             .use { cursor ->
                 cursor.forEach { r ->
-                    val i = at[r.value1()!!.substring(prefix.length)] ?: return@forEach
-                    out.getValue(r.value2()!!)[i] = r.value3()!!
+                    val i = placed.of(r.value1()!!)
+                    val own = buffers[i] ?: IntArray(START).also { buffers[i] = it }
+                    val grown = if (counts[i] == own.size) own.copyOf(own.size * 2).also { buffers[i] = it } else own
+                    grown[counts[i]++] = r.value2()!!
                 }
             }
+        return Array(placed.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY } to names
+    }
+
+    /** Of every number of [numberIds], its value of every item by its place; nought of one not known. */
+    private fun numbersOf(db: DSLContext, places: Places, placed: Placed): Map<String, DoubleArray> {
+        val out = numberIds.associateWith { DoubleArray(placed.size) }
+        if (numberIds.isEmpty()) return out
+        val n = ITEM_NUMBER
+        db.select(places.place, n.NUMBER_ID, n.CONTENT)
+            .from(n)
+            .join(places.table)
+            .on(places.key.eq(n.ITEM_KEY))
+            .where(n.NUMBER_ID.`in`(numberIds))
+            .fetchSize(STREAMED)
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach { r -> out.getValue(r.value2()!!)[placed.of(r.value1()!!)] = r.value3()!! }
+            }
         return out
+    }
+
+    /** The items of the source, each with its place among their keys ascending as the database orders them. */
+    private class Places(source: String) {
+        val table: Table<*> =
+            DSL.select(ITEM.ITEM_KEY, DSL.rowNumber().over().orderBy(ITEM.ITEM_KEY).minus(1).`as`(PLACE))
+                .from(ITEM)
+                .where(ITEM.SOURCE.eq(source))
+                .asTable("places")
+        val key: Field<String?> = table.field(ITEM.ITEM_KEY)!!
+        val place: Field<Int?> = table.field(PLACE, Int::class.java)!!
+    }
+
+    /**
+     * The ids as the database ordered them, and their places as Kotlin's strings compare ([ids], what is searched in by
+     * halves): the same but of an id of a letter beyond the 16 bits — the database orders by the code points, the
+     * strings by their 16-bit units.
+     */
+    private class Placed(ordered: List<String>, private val order: IntArray?) {
+        val size = ordered.size
+
+        val ids: List<String> = if (order == null) ordered else inOrder(ordered).map { it!! }
+
+        /** The place of the item the database placed at [place]. */
+        fun of(place: Int): Int = order?.get(place) ?: place
+
+        /** The [rows] by the database's places put at their own. */
+        fun <T> inOrder(rows: List<T>): List<T?> {
+            if (order == null) return rows
+            val out = arrayOfNulls<Any?>(rows.size)
+            rows.forEachIndexed { i, row -> out[order[i]] = row }
+            @Suppress("UNCHECKED_CAST")
+            return out.asList() as List<T?>
+        }
+
+        companion object {
+            fun of(ordered: List<String>): Placed {
+                if ((1 until ordered.size).all { ordered[it - 1] < ordered[it] }) return Placed(ordered, null)
+                val sorted = ordered.indices.sortedWith(compareBy { ordered[it] })
+                return Placed(ordered, IntArray(ordered.size).also { o -> sorted.forEachIndexed { j, i -> o[i] = j } })
+            }
+        }
     }
 
     private companion object {
@@ -116,6 +176,9 @@ internal class EveryItem(
 
         /** The values of an item first made room for. */
         const val START = 8
+
+        const val PLACE = "place"
+        const val CODE = "code"
 
         val EMPTY = IntArray(0)
     }

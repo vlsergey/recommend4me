@@ -50,8 +50,20 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
             }
         )
 
-    /** The [block] of a reading of the index as it was last committed. */
-    fun <T> searching(block: (DSLContext) -> T): T = block(store.dsl)
+    /**
+     * The [block] of a reading of the index as it was last committed: one connection of its own, one transaction, so
+     * that every query of the block reads the same commit — the places a query numbers the items by are those of the
+     * next ([EveryItem]). Taken back as it ends: it writes nothing.
+     */
+    fun <T> searching(block: (DSLContext) -> T): T =
+        store.connection().use { c ->
+            c.autoCommit = false
+            try {
+                block(store.dslOf(c))
+            } finally {
+                c.rollback()
+            }
+        }
 
     /** The [block] of a reading of the index as written so far, committed or not. */
     fun <T> written(block: (DSLContext) -> T): T = lock.withLock { block(writing) }
