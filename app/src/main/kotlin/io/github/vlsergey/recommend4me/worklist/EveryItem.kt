@@ -13,8 +13,9 @@ import org.jooq.impl.DSL
  * EVERY ITEM OF A SOURCE AS THE INDEX OF THE LIST KEEPS IT ([ListFacetValues.everyItem]), by their places, the ids
  * ascending ([ids]): its values by their numbers ([values]) — a value one number whichever item has it, its name in
  * [names], "<facet id>:<value>" —, its title as the user corrected it when asked for ([titles]), its numbers by their
- * ids ([numbers]: nought of one not known). Arrays by place, not maps by id: of the 1.4 million works of ficbook the
- * maps of strings and boxed numbers took most of the reading (owner, 2026-11-20).
+ * ids ([numbers]: nought of one not known), and the keys of its values of the facets read apart, by the facet ([apart]:
+ * none of an item of none). Arrays by place, not maps by id: of the 1.4 million works of ficbook the maps of strings
+ * and boxed numbers took most of the reading (owner, 2026-11-20).
  */
 class ItemRows(
     val ids: List<String>,
@@ -22,11 +23,13 @@ class ItemRows(
     val titles: List<String?>,
     val numbers: Map<String, DoubleArray>,
     val names: List<String>,
+    val apart: Map<String, List<List<String>>> = emptyMap(),
 )
 
 /**
  * The reading of every item of a [source], in one transaction ([ListIndex.searching]): its items and their titles in
- * one pass, ordered by their keys; then the values of the facets [facetIds] in one pass of theirs, and the numbers
+ * one pass, ordered by their keys; then the values of the facets [facetIds] and of those read [apart] in one pass of
+ * theirs — not another pass of every item for a facet another reader wants (ficbook's fandoms, 3 s) —, and the numbers
  * [numberIds] alike. The database numbers them itself — an item by its place among the source's keys ascending, a value
  * by its place among the values read — and hands two integers a row, the names of the values once: the 16.5 million
  * values of ficbook as three strings a row, an item's key parsed and a value's name made and looked up of every one,
@@ -37,6 +40,7 @@ internal class EveryItem(
     private val facetIds: List<String>,
     private val numberIds: List<String>,
     private val titled: Boolean,
+    private val apart: List<String> = emptyList(),
 ) {
     fun read(db: DSLContext): ItemRows {
         val prefix = ItemKey(source, "").toString()
@@ -56,58 +60,101 @@ internal class EveryItem(
             }
         val placed = Placed.of(keys)
         val places = Places(source)
-        val (values, names) = valuesOf(db, places, placed)
+        val values = valuesOf(db, places, placed)
         return ItemRows(
             placed.ids,
-            values,
+            values.compared,
             if (titled) placed.inOrder(titles) else List(keys.size) { null },
             numbersOf(db, places, placed),
-            names,
+            values.codes.names,
+            values.apart,
         )
     }
 
-    /** Of every item by its place, the numbers of its values of the facets read; the names of the numbers. */
-    private fun valuesOf(db: DSLContext, places: Places, placed: Placed): Pair<Array<IntArray>, List<String>> {
-        if (facetIds.isEmpty()) return Array(placed.size) { EMPTY } to emptyList()
+    /** The values read, of every item by its place: the numbers of those of [facetIds], the keys of those [apart]. */
+    private class Values(val codes: Codes, val compared: Array<IntArray>, val apart: Map<String, List<List<String>>>)
+
+    /**
+     * The values the database numbered, by their numbers: of a facet of [facetIds], its number among theirs
+     * ([compared], -1 of none) and their names ([names]); of a facet read [apart], its facet's place among them
+     * ([apartFacet], -1 of none) and its key ([key]).
+     */
+    private inner class Codes(rows: List<Pair<String, String>>) {
+        val names = ArrayList<String>()
+        val compared = IntArray(rows.size) { -1 }
+        val apartFacet = IntArray(rows.size) { -1 }
+        val key = arrayOfNulls<String>(rows.size)
+
+        init {
+            val comparedFacets = facetIds.toSet()
+            rows.forEachIndexed { c, (facet, value) ->
+                if (facet in comparedFacets) compared[c] = names.size.also { names += "$facet:$value" }
+                apartFacet[c] = apart.indexOf(facet)
+                if (apartFacet[c] >= 0) key[c] = value
+            }
+        }
+    }
+
+    /** Of every item by its place, its values of the facets read: compared by their numbers, apart by their keys. */
+    private fun valuesOf(db: DSLContext, places: Places, placed: Placed): Values {
+        val asked = (facetIds + apart).distinct()
+        if (asked.isEmpty()) return Values(Codes(emptyList()), Array(placed.size) { EMPTY }, emptyMap())
         val v = ITEM_VALUE
         val named =
             DSL.selectDistinct(v.FACET, v.VALUE_KEY)
                 .from(v)
                 .join(places.table)
                 .on(places.key.eq(v.ITEM_KEY))
-                .where(v.FACET.`in`(facetIds))
+                .where(v.FACET.`in`(asked))
                 .asTable("named")
         val facet = named.field(v.FACET)!!
         val valueKey = named.field(v.VALUE_KEY)!!
-        val codes =
+        val numbered =
             DSL.select(facet, valueKey, DSL.rowNumber().over().orderBy(facet, valueKey).minus(1).`as`(CODE))
                 .from(named)
                 .asTable("codes")
-        val code = codes.field(CODE, Int::class.java)!!
-        val names =
-            db.select(codes.field(facet)!!, codes.field(valueKey)!!).from(codes).orderBy(code).fetch {
-                "${it.value1()}:${it.value2()}"
-            }
+        val code = numbered.field(CODE, Int::class.java)!!
+        val codes =
+            Codes(
+                db.select(numbered.field(facet)!!, numbered.field(valueKey)!!).from(numbered).orderBy(code).fetch {
+                    it.value1()!! to it.value2()!!
+                }
+            )
         val buffers = arrayOfNulls<IntArray>(placed.size)
         val counts = IntArray(placed.size)
+        val keys = List(apart.size) { arrayOfNulls<MutableList<String>>(placed.size) }
         db.select(places.place, code)
             .from(v)
             .join(places.table)
             .on(places.key.eq(v.ITEM_KEY))
-            .join(codes)
-            .on(codes.field(facet)!!.eq(v.FACET).and(codes.field(valueKey)!!.eq(v.VALUE_KEY)))
-            .where(v.FACET.`in`(facetIds))
+            .join(numbered)
+            .on(numbered.field(facet)!!.eq(v.FACET).and(numbered.field(valueKey)!!.eq(v.VALUE_KEY)))
+            .where(v.FACET.`in`(asked))
             .fetchSize(STREAMED)
             .fetchLazy()
             .use { cursor ->
                 cursor.forEach { r ->
                     val i = placed.of(r.value1()!!)
-                    val own = buffers[i] ?: IntArray(START).also { buffers[i] = it }
-                    val grown = if (counts[i] == own.size) own.copyOf(own.size * 2).also { buffers[i] = it } else own
-                    grown[counts[i]++] = r.value2()!!
+                    val c = r.value2()!!
+                    if (codes.compared[c] >= 0) put(buffers, counts, i, codes.compared[c])
+                    if (codes.apartFacet[c] >= 0)
+                        (keys[codes.apartFacet[c]][i]
+                                ?: ArrayList<String>(1).also { keys[codes.apartFacet[c]][i] = it })
+                            .add(codes.key[c]!!)
                 }
             }
-        return Array(placed.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY } to names
+        return Values(
+            codes,
+            Array(placed.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY },
+            apart.withIndex().associate { (f, id) -> id to List(placed.size) { keys[f][it] ?: emptyList() } },
+        )
+    }
+
+    /** The value [code] added to the values of the item at [i], the room of its buffer grown as it fills. */
+    private fun put(buffers: Array<IntArray?>, counts: IntArray, i: Int, code: Int) {
+        val own = buffers[i] ?: IntArray(START).also { buffers[i] = it }
+        val grown = if (counts[i] == own.size) own.copyOf(own.size * 2).also { buffers[i] = it } else own
+        grown[counts[i]++] = code
     }
 
     /**

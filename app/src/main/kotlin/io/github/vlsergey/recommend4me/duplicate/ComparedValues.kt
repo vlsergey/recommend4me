@@ -49,12 +49,21 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
     /**
      * Every work of a title of the site the index holds, its ids ascending ([Compared.ids]) with their titles as the
      * user corrected them ([Compared.titles]), read in one pass of the index; their numbers of size of the [sizes]
-     * numbers. By the works' places throughout, no map by an id (owner, 2026-11-20: the reading of the 1.4 million
-     * works of ficbook took eleven seconds, most of them maps of strings and boxed numbers).
+     * numbers; the keys of their values of the facets [apart], not compared, of the same pass ([Compared.apart]). By
+     * the works' places throughout, no map by an id (owner, 2026-11-20: the reading of the 1.4 million works of ficbook
+     * took eleven seconds, most of them maps of strings and boxed numbers).
      */
-    fun every(sizes: Collection<String>): Compared {
+    fun every(sizes: Collection<String>, apart: Collection<String> = emptyList()): Compared {
         val started = System.currentTimeMillis()
-        val rows = ListFacetValues.everyItem(index, s.id, families.keys + listOfNotNull(authorId), sizes, titles = true)
+        val rows =
+            ListFacetValues.everyItem(
+                index,
+                s.id,
+                families.keys + listOfNotNull(authorId),
+                sizes,
+                titles = true,
+                apart = apart,
+            )
         val kept = rows.ids.indices.filter { !rows.titles[it].isNullOrEmpty() }.toIntArray()
         val values = Array(kept.size) { rows.values[kept[it]] }
         val indexed = System.currentTimeMillis()
@@ -84,6 +93,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 namesOf(authorKeys, names),
                 List(kept.size) { rows.titles[kept[it]]!! },
                 rows.numbers.mapValues { (_, all) -> DoubleArray(kept.size) { all[kept[it]] } },
+                rows.apart.mapValues { (_, all) -> List(kept.size) { all[kept[it]] } },
             )
         log.info(
             "{}: the values of {} works read in {} ms: the index {}, the authors {}, their names {}, gathered {}",
@@ -179,6 +189,8 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         /** Every work's title as the user corrected it, of the index; none of the works read by their ids. */
         val titles: List<String>,
         val numbers: Map<String, DoubleArray>,
+        /** The keys of every work's values of the facets read apart, by the facet, by the works' places. */
+        val apart: Map<String, List<List<String>>> = emptyMap(),
     ) {
         /** The name of every value by its number: of a value the user ignores, none. */
         val names: List<String?>

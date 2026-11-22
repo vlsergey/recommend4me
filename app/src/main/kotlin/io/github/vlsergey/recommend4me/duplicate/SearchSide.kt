@@ -135,10 +135,11 @@ internal class SearchSide(
         fun read(s: SourceStore, encoder: String, model: KeptRatios, index: ListIndex): ReadSide? {
             val started = System.currentTimeMillis()
             // Every work of a title, ascending, as the user corrected it, its values, authors and sizes: of the index
-            // of
-            // the list, not of the databases (user, 2026-11-18)
+            // of the list, not of the databases (user, 2026-11-18); the site's own fandoms, compared by their names'
+            // letters, of the same pass
             val numbers = sizeNumbers(s)
-            val compared = ComparedValues(s, index).every(numbers.keys + COUNTS)
+            val fandomId = TextsCompared.fandomFacetId(s)
+            val compared = ComparedValues(s, index).every(numbers.keys + COUNTS, listOfNotNull(fandomId))
             val ids = compared.ids
             if (ids.isEmpty()) return null
             val read = System.currentTimeMillis()
@@ -146,7 +147,7 @@ internal class SearchSide(
             val (titles, titleLengths) = Letters.rows(compared.titles)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val lettered = System.currentTimeMillis()
-            val texts = TextsCompared.read(s, encoder, ids, index)
+            val texts = TextsCompared.read(s, encoder, ids, index, fandomId?.let { compared.apart.getValue(it) })
             val vectors = System.currentTimeMillis()
             val sizes =
                 sizesOf(ids, model.of(s.id, compared, { countedOf(compared) }) { classesOf(compared) }, numbers) {

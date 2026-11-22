@@ -39,9 +39,9 @@ object ListFacetValues {
 
     /**
      * Of every item of the [source] the index holds, its values of the filter facets [facetIds] by their numbers — a
-     * value one number whichever item has it, its name in [ItemRows.names] — and its numbers of [numberIds]: what a
-     * computation over every work reads of the index, in one pass of each table, no database read and no value a string
-     * an item (user, 2026-11-18).
+     * value one number whichever item has it, its name in [ItemRows.names] —, the keys of its values of the facets read
+     * [apart] ([ItemRows.apart]), and its numbers of [numberIds]: what a computation over every work reads of the
+     * index, in one pass of each table, no database read and no value a string an item (user, 2026-11-18).
      */
     fun everyItem(
         index: ListIndex,
@@ -49,5 +49,8 @@ object ListFacetValues {
         facetIds: Collection<String>,
         numberIds: Collection<String>,
         titles: Boolean = false,
-    ): ItemRows = index.searching { db -> EveryItem(source, facetIds.toList(), numberIds.toList(), titles).read(db) }
+        apart: Collection<String> = emptyList(),
+    ): ItemRows = index.searching { db ->
+        EveryItem(source, facetIds.toList(), numberIds.toList(), titles, apart.toList()).read(db)
+    }
 }

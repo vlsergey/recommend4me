@@ -39,9 +39,16 @@ internal class TextsCompared(
          * "everything the search of the duplicates needs taken from the index"): the vectors of their titles and their
          * descriptions by the [encoder], their description and their line of the characters as the user corrected them,
          * the names the site gives their fandoms — of every work of a site in one pass of the index, of a few by their
-         * keys —, the letters.
+         * keys —, the letters. The keys of the fandoms of the works by their places when read already ([fandomKeys]: of
+         * the pass of their values, [fandomFacetId] read apart), else by the works' keys.
          */
-        fun read(s: SourceStore, encoder: String, ids: List<String>, index: ListIndex): TextsCompared {
+        fun read(
+            s: SourceStore,
+            encoder: String,
+            ids: List<String>,
+            index: ListIndex,
+            fandomKeys: List<List<String>>? = null,
+        ): TextsCompared {
             val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
             val description = ListTexts.descriptionOf(s.schema)
             val titles = UnitRows(ids.size)
@@ -69,7 +76,7 @@ internal class TextsCompared(
                     own.forEach { (field, bytes) -> read[fields.indexOf(field)].second(i, bytes) }
                 }
             val streamed = System.nanoTime()
-            fandomsOf(s, ids, at, index)?.copyInto(texts.getValue(LetteredText.FANDOMS))
+            fandomsOf(s, ids, at, index, fandomKeys)?.copyInto(texts.getValue(LetteredText.FANDOMS))
             val named = System.nanoTime()
             // The description long, every row whole; the names of the fandoms and the line of the characters short
             val rows =
@@ -102,28 +109,29 @@ internal class TextsCompared(
             this[i] = String(b, Charsets.UTF_8).takeIf { it.isNotBlank() }
         }
 
+        /** The id the index of the list keeps the site's own fandoms by; none of a site of no fandoms. */
+        fun fandomFacetId(s: SourceStore): String? =
+            UniverseFacet.fandomFacet(s.schema)?.let { key ->
+                FeatureNames.facetId(s.source, s.schema.facets.first { it.key == key })
+            }
+
         /**
-         * The names the site gives the fandoms of the works [ids] as the [index] of the list holds them, one after
-         * another; none of a work of none, and of a site of no fandoms. The names read by their keys.
+         * The names the site gives the fandoms of the works [ids] — of their keys [read] already, else as the [index]
+         * of the list holds them by the works' keys —, one after another; none of a work of none, and of a site of no
+         * fandoms. The names read by their keys.
          */
         private fun fandomsOf(
             s: SourceStore,
             ids: List<String>,
             at: Map<String, Int>,
             index: ListIndex,
+            read: List<List<String>>?,
         ): Array<String?>? {
             val key = UniverseFacet.fandomFacet(s.schema) ?: return null
-            val def = s.schema.facets.first { it.key == key }
-            val facetId = FeatureNames.facetId(s.source, def)
+            val facetId = fandomFacetId(s)!!
             val fandoms = arrayOfNulls<List<String>>(ids.size)
-            if (ids.size > FEW) {
-                val every = ListFacetValues.everyItem(index, s.id, listOf(facetId), emptyList())
-                val keyOf = every.names.map { it.removePrefix("$facetId:") }
-                every.ids.forEachIndexed { k, id ->
-                    val own = every.values[k]
-                    if (own.isNotEmpty()) at[id]?.let { i -> fandoms[i] = own.map(keyOf::get) }
-                }
-            } else
+            if (read != null) read.forEachIndexed { i, keys -> if (keys.isNotEmpty()) fandoms[i] = keys }
+            else
                 ListFacetValues.of(index, ids.map { ItemKey(s.id, it) }).forEach { (item, facets) ->
                     facets[facetId]?.let { keys -> at[item.id]?.let { fandoms[it] = keys } }
                 }
