@@ -23,9 +23,9 @@ private val log = LoggerFactory.getLogger(ListIndexing::class.java)
 
 /**
  * The documents of works of the [type] written anew: the [stages] of what changed, or behind, look again
- * ([StageSweeps.written]); of an index made [anew] whole, every stage of every work.
+ * ([StageSweeps.written]).
  */
-data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>, val anew: Boolean = false)
+data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>)
 
 /**
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
@@ -38,9 +38,11 @@ data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>, 
  *   not alike made anew ([sameAs]) — their data, the user's answers and corrections, when the work last changed — with
  *   their stages as written: a stage done before its work changed is done again of itself ([StageBehind]);
  * - of a source changed whole — a dictionary its values are drafted by —, every item read and compared, those not alike
- *   made anew with every stage to be done again; an index of another format made anew whole; the documents of the items
- *   gone from their source removed. The passes over the works told from the first written on
- *   ([WorkDocumentWriteEvent]).
+ *   made anew with every stage to be done again — of every source so when the index holds no date of writing (owner,
+ *   2026-11-22: "you were simply to mark that the index is current as of nought"); a document other than written by
+ *   what it holds anew alone — what the documents had not held, its dates alike — written with its stages as they were,
+ *   nothing to be done again; the documents of the items gone from their source removed. The passes over the works told
+ *   from the first written on ([WorkDocumentWriteEvent]).
  *
  * Nothing is named in the queue: what changed is read of the databases when the work runs, and a stop loses nothing.
  */
@@ -78,7 +80,7 @@ class ListIndexing(
         // background's works: of the user's change, first only of a press (owner, 2026-11-19: first only "the button
         // 'find the duplicates anew' and the choice of the model; the button 'train'; a page of a graded work opened;
         // the buttons of the page of the models; a field's model searched anew")
-        val users = reason in USERS || (reason == FORMAT && !indexes.of(typeId).current())
+        val users = reason in USERS || writtenOf(indexes.of(typeId)) == Instant.EPOCH
         tasks.plan(
             work(typeId),
             Instant.now().plusSeconds(QUIET_SECONDS),
@@ -102,29 +104,27 @@ class ListIndexing(
      */
     fun writeWaiting(typeId: String) = tasks.run(work(typeId)) { write(typeId) }
 
-    /** Whether the index of the content type [typeId] is of this format. */
-    fun current(typeId: String): Boolean = indexes.of(typeId).current()
-
-    /** Whether anything of the [type] changed since its index was last written: what a start plans its writing of. */
-    fun pending(type: TypeStore): Boolean = ListChanges.any(type, writtenOf(indexes.of(type.id)))
+    /**
+     * Whether anything of the [type] changed since its index was last written — of an index of no date of writing,
+     * everything: what a start plans its writing of.
+     */
+    fun pending(type: TypeStore): Boolean =
+        writtenOf(indexes.of(type.id)).let { it == Instant.EPOCH || ListChanges.any(type, it) }
 
     /** What changed of the content type [typeId] since the last writing written to its index, and committed. */
     private fun write(typeId: String) {
         val type = stores.type(typeId) ?: return
         val started = Instant.now()
         val index = indexes.of(typeId)
-        // An index of another format made anew whole, over its documents of before: their models' values and
-        // predictions
-        // read of them as every source is written
-        val anew = !index.current()
-        if (anew) index.madeAnew(type.sources.mapTo(HashSet()) { it.id })
+        index.keepSources(type.sources.mapTo(HashSet()) { it.id })
         val since = writtenOf(index)
-        val whole = if (anew) type.sources.map { it.id }.toSet() else ListChanges.whole(type, since)
+        // Of an index of no date of writing, every source read whole and compared with its documents
+        val whole = if (since == Instant.EPOCH) type.sources.map { it.id }.toSet() else ListChanges.whole(type, since)
         val clusters = works.of(type)
         val named = ListChanges.named(type, clusters, since, whole)
         val gathered = System.currentTimeMillis()
         val changed = HashSet<WorkDatum>()
-        var written = whole.sumOf { writeWhole(type, it, index, clusters, anew, changed) }
+        var written = whole.sumOf { writeWhole(type, it, index, clusters, changed) }
         named.forEach { (sourceId, ids) ->
             type.source(sourceId)?.let { s ->
                 ids.chunked(PORTION).forEach { written += writeNamed(s, it.toSet(), index, clusters, changed) }
@@ -134,14 +134,10 @@ class ListIndexing(
         val replaced = System.currentTimeMillis()
         index.stages.changed(WRITTEN, started.toEpochMilli())
         val sourceIds = type.sources.map { it.id }
-        val due =
-            if (anew) WorkStage.entries.toSet()
-            else sweeps.written(typeId, sourceIds, changed, since.toEpochMilli(), started.toEpochMilli())
+        val due = sweeps.written(typeId, sourceIds, changed, since.toEpochMilli(), started.toEpochMilli())
         index.commit()
         val committed = System.currentTimeMillis()
-        // Of an index made anew, every stage of every work
-        if (anew) WorkStage.entries.forEach { sweeps.reset(it, typeId, sourceIds) }
-        if (due.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, due, anew))
+        if (due.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, due))
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} gone — the changes " +
                 "read {}, read and replaced {}, committed {}",
@@ -193,54 +189,56 @@ class ListIndexing(
     }
 
     /**
-     * Every item of the source [sourceId] read whole, the documents of those its document is not alike made anew
-     * ([sameAs]; owner, 2026-11-21: "read really everything, and rewrite what changed") — every one of an index made
-     * [anew] —, those of the items gone removed: how many were written. The values the models gave its items and their
+     * Every item of the source [sourceId] read whole — the vectors of its texts in one pass of them —, the documents of
+     * those its document is not alike made anew ([sameAs]; owner, 2026-11-21: "read really everything, and rewrite what
+     * changed"), those of the items gone removed: how many were written. The values the models gave its items and their
      * predictions as the index kept them, the stages of the tasks over their works and the dates of what they made as
-     * written. A document other than written with every outer date alike changed of what is drafted of it — a
-     * dictionary its values are drafted by —: its item dated so ([WorkDatum.DATA]); the kinds of data whose dates
-     * changed kept in [changed].
+     * written. A document other than written with every outer date alike: of what is drafted of it changed — a
+     * dictionary its values are drafted by —, its item dated so ([WorkDatum.DATA]); of what the documents held not
+     * before alone ([draftedOtherThan] not), written as it is, nothing to be done again of it. The kinds of data whose
+     * dates changed kept in [changed].
      */
     private fun writeWhole(
         type: TypeStore,
         sourceId: String,
         index: ListIndex,
         clusters: WorkClusters,
-        anew: Boolean,
         changed: MutableSet<WorkDatum>,
     ): Int {
         val s = type.source(sourceId) ?: return 0
         val kept = ListModelValues.ofEvery(index, sourceId)
         val predicted = index.written { ListPredictions.ofEvery(it, sourceId) }
-        val rows = ListRows.read(s, null, clusters, kept, predicted, plugins.textEncoder()?.id)
-        // Compared a portion at a time with the documents as written before any is: one reading of the index
-        val undated = ArrayList<ListRow>()
-        val other = index.written { reader ->
-            rows.chunked(PORTION).flatMap { portion ->
-                val written = ListKeptRows.of(reader, sourceId, portion.map { it.key.id })
-                portion.mapNotNull { r ->
-                    val before = written[r.key.id]
-                    when {
-                        anew || before == null -> r.also { changed += it.changedOf(null) }
-                        r.sameAs(before) -> null
-                        !r.datedOtherThan(before) -> r.over(before).also { undated += it }
-                        else -> r.over(before).also { changed += it.changedOf(before) }
+        val read = ListRows.read(s, null, clusters, kept, predicted, plugins.textEncoder()?.id)
+        val filters = ListRows.filterIds(s)
+        return RowVectors.attached(s, read, plugins.textEncoder()?.id) { rows ->
+            // Compared a portion at a time with the documents as written before any is: one reading of the index
+            val undated = ArrayList<ListRow>()
+            val other = index.written { reader ->
+                rows.chunked(PORTION).flatMap { portion ->
+                    val written = ListKeptRows.of(reader, sourceId, portion.map { it.key.id })
+                    portion.mapNotNull { r ->
+                        val before = written[r.key.id]
+                        when {
+                            before == null -> r.also { changed += it.changedOf(null) }
+                            r.sameAs(before) -> null
+                            r.datedOtherThan(before) -> r.over(before).also { changed += it.changedOf(before) }
+                            r.draftedOtherThan(before, filters) -> r.over(before).also { undated += it }
+                            else -> r.over(before)
+                        }
                     }
                 }
             }
+            // Other than written with every date the databases keep alike: of what is drafted of it, its item dated so
+            val now = Instant.now()
+            if (undated.isNotEmpty()) {
+                s.changes.changed(undated.map { it.key.id }, WorkDatum.DATA, now)
+                changed += WorkDatum.DATA
+            }
+            val drafted = undated.mapTo(HashSet()) { it.key }
+            index.replace(other.map { if (it.key in drafted) it.dated(WorkDatum.DATA, now.toEpochMilli()) else it })
+            index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
+            other.size
         }
-        // Other than written with every date the databases keep alike: of what is drafted of it, its item dated so
-        val now = Instant.now()
-        if (undated.isNotEmpty()) {
-            s.changes.changed(undated.map { it.key.id }, WorkDatum.DATA, now)
-            changed += WorkDatum.DATA
-        }
-        val drafted = undated.mapTo(HashSet()) { it.key }
-        val dated = other.map { if (it.key in drafted) it.dated(WorkDatum.DATA, now.toEpochMilli()) else it }
-        // The vectors of the texts of those written alone, read now
-        ListRows.withVectors(s, dated, plugins.textEncoder()?.id) { index.replace(it) }
-        index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
-        return other.size
     }
 
     companion object {
@@ -262,9 +260,6 @@ class ListIndexing(
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L
-
-        /** The reason of an index of another format, or none: made anew whole. */
-        const val FORMAT = "listFormat"
 
         /** The reasons that are the user's own actions: their writing goes ahead of the background's works. */
         private val USERS = setOf("answer", "grade", "interest")

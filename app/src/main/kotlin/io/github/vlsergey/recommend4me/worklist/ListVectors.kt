@@ -41,12 +41,12 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
         clusters: Lazy<WorkClusters>,
     ): Int {
         val vectorKeys = ListTexts.vectorKeys(s.schema)
-        val fields = vectorKeys.associateWith { ListDocuments.vectorField(encoder, it) }
+        val fields = vectorKeys.associateWith { ListTexts.vectorField(encoder, it) }
         val kept =
             s.textVectors.halvesOf(ids, encoder, vectorKeys).mapValues { (_, own) ->
                 own.entries.associate { (key, halves) -> fields.getValue(key) to ListTexts.packedHalves(halves) }
             }
-        val held = index.written { ListTexts.of(it, ids.map { id -> ItemKey(s.id, id) }, fields.values.toList()) }
+        val held = index.written { HeldTexts.of(it, ids.map { id -> ItemKey(s.id, id) }, fields.values.toList()) }
         val other = ids.filter { id -> !alike(kept[id].orEmpty(), held[ItemKey(s.id, id)].orEmpty()) }
         if (other.isEmpty()) return 0
         val (predicted, written) =

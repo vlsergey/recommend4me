@@ -38,9 +38,9 @@ private constructor(
         had[key].set(i)
     }
 
-    /** The vectors of the item [id] as its document holds them, by the texts' keys; none of an item of none. */
-    fun of(id: String): RowVectors? {
-        val i = place[id]?.takeIf { at -> keys.indices.any { had[it][at] } } ?: return null
+    /** The vectors of the item [id] as its document holds them, by the texts' keys: none of an item of none. */
+    fun of(id: String): RowVectors {
+        val i = place[id] ?: return RowVectors(encoder) { emptyMap() }
         return RowVectors(encoder) {
             keys.indices
                 .filter { had[it][i] }

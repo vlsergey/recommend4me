@@ -10,6 +10,7 @@ import org.apache.lucene.index.LeafReader
 import org.apache.lucene.index.StoredFieldVisitor
 import org.apache.lucene.index.Term
 import org.apache.lucene.search.DocIdSetIterator
+import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.NumericUtils
 
 /**
@@ -34,6 +35,10 @@ class KeptRow(
     val dates: Map<WorkDatum, Long>,
     /** The stages of the tasks over its work, as written: not compared, kept of a document made anew. */
     val stages: WorkStages,
+    /** Its texts held whole, by their keys ([ListTexts]). */
+    val texts: Map<String, String> = emptyMap(),
+    /** The vectors of its texts, of every encoder, by their fields ([ListTexts.vectorField]). */
+    val vectors: Map<String, ByteArray> = emptyMap(),
 )
 
 /** Whether the document [kept] is this row's as the databases make it now: of the same row, nothing to write. */
@@ -48,7 +53,30 @@ fun ListRow.sameAs(kept: KeptRow): Boolean =
         title == kept.title &&
         facets.filterValues { it.isNotEmpty() } == kept.facets &&
         numbers == kept.numbers &&
-        dates.filterKeys { it.outer } == kept.dates.filterKeys { it.outer }
+        dates.filterKeys { it.outer } == kept.dates.filterKeys { it.outer } &&
+        holdsAlike(kept)
+
+/** Whether the texts held whole and the vectors of the row's texts are those its document holds ([kept]). */
+private fun ListRow.holdsAlike(kept: KeptRow): Boolean = texts == kept.texts && vectorsAlike(kept)
+
+/**
+ * Whether the vectors of the row's texts are those its document holds of their encoder; of a row of no encoder, alike
+ * whatever the document holds.
+ */
+private fun ListRow.vectorsAlike(kept: KeptRow): Boolean {
+    val own = vectors ?: return true
+    val held = kept.vectors.filterKeys { it.startsWith(ListTexts.vectorField(own.encoder, "")) }
+    val packed = own.packed.mapKeys { (key, _) -> ListTexts.vectorField(own.encoder, key) }
+    return packed.keys == held.keys && packed.all { (field, bytes) -> bytes.contentEquals(held.getValue(field)) }
+}
+
+/**
+ * Whether the values of the filter facets [filters] — what the dictionaries draft of the site's words — are other than
+ * its document holds ([kept]): of a document other than written with its dates alike, a change of a dictionary, not of
+ * what the documents held not before.
+ */
+fun ListRow.draftedOtherThan(kept: KeptRow, filters: Set<String>): Boolean =
+    facets.filterKeys { it in filters }.filterValues { it.isNotEmpty() } != kept.facets.filterKeys { it in filters }
 
 /**
  * The row over its document as written ([kept]): the stages that did it and the dates of what they made of it carried;
@@ -115,6 +143,15 @@ object ListKeptRows {
                 }
             }
 
+        /** Every text held whole and every vector of the segment, by the field, as its doc values. */
+        private val binaries =
+            r.fieldInfos
+                .filter {
+                    it.docValuesType == DocValuesType.BINARY &&
+                        (ListTexts.textKeyOf(it.name) != null || ListTexts.isVectorField(it.name))
+                }
+                .associate { it.name to DocValues.getBinary(r, it.name) }
+
         /** Every number of the segment, by its id, as its doc values. */
         private val numbers =
             r.fieldInfos
@@ -124,6 +161,7 @@ object ListKeptRows {
         fun of(doc: Int): KeptRow {
             val visitor = Facets()
             stored.document(doc, visitor)
+            val held = binariesOf(doc)
             return KeptRow(
                 work = if (work.advanceExact(doc)) work.lookupOrd(work.ordValue()).utf8ToString() else "",
                 rank = if (rank.advanceExact(doc)) rank.longValue() else -1,
@@ -143,8 +181,17 @@ object ListKeptRows {
                         .mapNotNull { (datum, v) -> if (v.advanceExact(doc)) datum to v.longValue() else null }
                         .toMap(),
                 stages = WorkStages(stages.mapValues { (_, v) -> if (v.advanceExact(doc)) v.longValue() else 0L }),
+                texts =
+                    held.mapNotNull { (name, bytes) -> ListTexts.textKeyOf(name)?.let { it to String(bytes) } }.toMap(),
+                vectors = held.filterKeys(ListTexts::isVectorField),
             )
         }
+
+        /** Of the document [doc], every binary of [binaries] it has. */
+        private fun binariesOf(doc: Int): Map<String, ByteArray> =
+            binaries
+                .filterValues { it.advanceExact(doc) }
+                .mapValues { (_, v) -> BytesRef.deepCopyOf(v.binaryValue()).bytes }
     }
 
     /** What a stored document is read for: the values of its facets, in their order. */

@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component
 /**
  * WHAT CHANGED THAT THE INDEX OF THE LIST HOLDS ([ListIndexing]), each change a reason the interface words: an item's
  * data, the values the model gives it, an answer, a grade, a mark of interest — its date set, its work's documents made
- * anew —; a regrouping of the works; an index of another format, of every item. The predictions are written into the
- * index by what makes them ([ListPredictions]).
+ * anew —; a regrouping of the works; an index of no date of writing, of every item. The predictions are written into
+ * the index by what makes them ([ListPredictions]).
  */
 @Component
 internal class ListIndexEvents(
@@ -25,18 +25,11 @@ internal class ListIndexEvents(
     private val indexing: ListIndexing,
 ) {
     /**
-     * Of every type whose index is of another format, or none, every item written anew — the tasks over the works
-     * following it ([WorkFields]); of every other, what changed since its index was last written. What the data say,
-     * nothing for the start itself.
+     * Of every type, what changed since its index was last written — of an index of no date of writing, every item read
+     * and compared ([ListIndexing.pending]). What the data say, nothing for the start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        stores.types.forEach { type ->
-            when {
-                !indexing.current(type.id) -> indexing.plan(type.id, ListIndexing.FORMAT)
-                indexing.pending(type) -> indexing.plan(type.id, "start")
-            }
-        }
+    fun start() = stores.types.filter(indexing::pending).forEach { indexing.plan(it.id, "start") }
 
     /** What the site says of items, or what is drafted of them, changed. */
     @EventListener

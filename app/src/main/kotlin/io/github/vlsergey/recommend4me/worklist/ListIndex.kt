@@ -28,8 +28,9 @@ import org.apache.lucene.util.BytesRef
  * and what changes of its work without the item — graded, the prediction, the chance of interest, their product — as
  * values updated in place ([update]): a training writes the prediction of every work without a document made anew.
  *
- * The databases are the truth: the index is made of them ([ListIndexing]) and made anew whole when it is of another
- * [FORMAT]. Written in the queue of the computations alone, one writing at a time; read by any request.
+ * The databases are the truth: the index is made of them ([ListIndexing]), every document compared with what they make
+ * of it and written where other — of every source whole when the index holds no date of writing. Written in the queue
+ * of the computations alone, one writing at a time; read by any request.
  */
 class ListIndex(dir: Path) : AutoCloseable {
 
@@ -41,33 +42,16 @@ class ListIndex(dir: Path) : AutoCloseable {
     private val searchers = SearcherManager(writer, SearcherFactory())
 
     /** Since when each stage of the tasks over the works holds, kept with the commits ([StageTimes]). */
-    val stages = StageTimes(writer.liveCommitData?.associate { it.key to it.value }.orEmpty() - FORMAT_KEY)
+    val stages = StageTimes(writer.liveCommitData?.associate { it.key to it.value }.orEmpty())
 
-    /** Whether the index is of this [FORMAT]: else it is to be made anew whole before it is read. */
-    fun current(): Boolean =
-        DirectoryReader.open(writer).use {
-            it.indexCommit.userData[FORMAT_KEY] == FORMAT.toString() && it.numDocs() > 0
-        }
-
-    /**
-     * The format the documents are of, kept with the commits: of the last commit as the index opens, this one's once it
-     * is made anew whole ([clear]) — a commit of anything else tells nothing of the documents written before.
-     */
-    @Volatile private var format: String? = writer.liveCommitData?.firstOrNull { it.key == FORMAT_KEY }?.value
-
-    /**
-     * The index to be made anew of this [FORMAT], its documents of the [sources] written again whole over those of the
-     * format before — whose values of the models and predictions they are made with, read of them first — those of any
-     * other source removed: kept with the next commit.
-     */
-    fun madeAnew(sources: Set<String>) {
+    /** The documents of every source not among [sources] removed: of a source the application no longer has. */
+    fun keepSources(sources: Set<String>) {
         writer.deleteDocuments(
             BooleanQuery.Builder()
                 .add(MatchAllDocsQuery(), BooleanClause.Occur.MUST)
                 .add(TermInSetQuery(SOURCE, sources.map { BytesRef(it) }), BooleanClause.Occur.MUST_NOT)
                 .build()
         )
-        format = FORMAT.toString()
     }
 
     /** The documents of the [rows] written in place of those of their items, and those of the items [gone] removed. */
@@ -123,8 +107,7 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     /** What was written made what the requests read, and kept. */
     fun commit() {
-        val data = stages.data() + listOfNotNull(format?.let { FORMAT_KEY to it })
-        writer.setLiveCommitData(data.entries)
+        writer.setLiveCommitData(stages.data().entries)
         writer.commit()
         searchers.maybeRefreshBlocking()
     }
@@ -145,19 +128,6 @@ class ListIndex(dir: Path) : AutoCloseable {
     }
 
     companion object {
-        /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
-        /**
-         * 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]); 10 —
-         * the same, made anew: a commit of the stages' times told 9 of documents written before it; 11 — the vectors of
-         * the site's text fields a stage too ([WorkStage.VECTORS]); 12 — the words and the characters of an item's kept
-         * texts among its numbers ([io.github.vlsergey.recommend4me.part.PartCounts.WORDS_ID]); 13 — and of their
-         * characters by their classes ([io.github.vlsergey.recommend4me.part.CharClasses]); 14 — the texts held whole,
-         * the vectors of the title and the description, the site's fandoms: what the search of the duplicates reads
-         * ([ListTexts]).
-         */
-        const val FORMAT = 14
-        private const val FORMAT_KEY = "format"
-
         /** The memory the writer gathers documents in before it writes them out. */
         private const val BUFFER_MB = 256.0
     }

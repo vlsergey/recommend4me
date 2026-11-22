@@ -19,8 +19,8 @@ import org.apache.lucene.util.BytesRef
  * rows are grouped by, and its [RANK] among the items of the work; whether the work is of several items ([LINKED]); its
  * dates; the values of every filter facet as terms ([facetField]), kept with the document too, an item of none of a
  * facet the term [NONE]; every number as a point and a sorted value ([numberField]); its texts held whole and the
- * vectors of its texts as doc values ([textField], [vectorField]: [ListTexts]); and what changes of its work without
- * it, updated in place ([valueFields]) — a value of none a -∞, last of a list sorted down.
+ * vectors of its texts as doc values ([ListTexts.textField], [ListTexts.vectorField]); and what changes of its work
+ * without it, updated in place ([valueFields]) — a value of none a -∞, last of a list sorted down.
  */
 object ListDocuments {
     const val KEY = "key"
@@ -70,15 +70,6 @@ object ListDocuments {
     /** The field of the doc values of the filter facet [facetId]'s values ([ListFacetValues.everyItem]). */
     fun valuesField(facetId: String) = "v:$facetId"
 
-    /** The field of the doc values of the text [key] held whole ([ListTexts.textKeys]): its UTF-8. */
-    fun textField(key: String) = "t:$key"
-
-    /**
-     * The field of the doc values of the vector of the text [key] by the [encoder] ([ListTexts.vectorKeys]): of unit
-     * length, a byte a number with its scale ([ListTexts.packed]).
-     */
-    fun vectorField(encoder: String, key: String) = "u:$encoder:$key"
-
     /** The filter id of the facet of the field [name]; null of a field of no facet. */
     fun facetIdOf(name: String): String? = name.takeIf { it.startsWith(FACET) }?.substring(FACET.length)
 
@@ -127,10 +118,10 @@ object ListDocuments {
         row.numbers.forEach { (numberId, value) -> doc.add(DoubleField(numberField(numberId), value, Field.Store.NO)) }
         row.model.forEach { (facet, keys) -> keys.forEach { doc.add(StoredField(modelField(facet), it)) } }
         doc.add(BinaryDocValuesField(TITLE, BytesRef(row.title)))
-        row.texts.forEach { (key, text) -> doc.add(BinaryDocValuesField(textField(key), BytesRef(text))) }
+        row.texts.forEach { (key, text) -> doc.add(BinaryDocValuesField(ListTexts.textField(key), BytesRef(text))) }
         row.vectors?.let { v ->
             v.packed.forEach { (key, packed) ->
-                doc.add(BinaryDocValuesField(vectorField(v.encoder, key), BytesRef(packed)))
+                doc.add(BinaryDocValuesField(ListTexts.vectorField(v.encoder, key), BytesRef(packed)))
             }
         }
         return doc

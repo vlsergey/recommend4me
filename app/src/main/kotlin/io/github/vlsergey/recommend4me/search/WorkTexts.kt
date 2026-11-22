@@ -70,10 +70,7 @@ class WorkTexts(
     /** The documents of works written anew, of what the search reads changed: their documents of the search written. */
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (STAGE in event.stages)
-            WorkScope.entries.forEach {
-                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
-            }
+        if (STAGE in event.stages) WorkScope.entries.forEach { plan(event.type, it, "items", TaskCursor.FIRST) }
     }
 
     /** The vectors of the texts the search waits for done: the documents of the works they got past written. */

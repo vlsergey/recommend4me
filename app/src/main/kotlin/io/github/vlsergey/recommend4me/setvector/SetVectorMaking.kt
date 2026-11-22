@@ -70,7 +70,7 @@ class SetVectorMaking(
     fun documentsWritten(event: WorkDocumentWriteEvent) {
         if (STAGE in event.stages)
             WorkScope.entries.forEach {
-                plan(event.type, it, if (event.anew) "listFormat" else "items", TaskCursor.FIRST)
+                plan(event.type, it, "items", TaskCursor.FIRST)
             }
     }
 

@@ -5048,7 +5048,6 @@ components:
           - grade
           - interest
           - items
-          - listFormat
           - manner
           - mark
           - models

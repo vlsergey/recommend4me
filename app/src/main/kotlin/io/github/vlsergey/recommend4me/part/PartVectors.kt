@@ -55,7 +55,7 @@ class PartVectors(
     fun documentsWritten(event: WorkDocumentWriteEvent) {
         if (STAGE in event.stages)
             WorkScope.entries.forEach {
-                plan(event.type, it, if (event.anew) "listFormat" else "parts", TaskCursor.FIRST)
+                plan(event.type, it, "parts", TaskCursor.FIRST)
             }
     }
 

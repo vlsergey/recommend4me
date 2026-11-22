@@ -76,8 +76,9 @@ class StageSweeps(
      * The index of the [typeId] written up to [now], of the kinds of data [changed], having been written up to
      * [before]: of every stage the change does not reach ([WorkStage.reached]) and every source of the [sources] it did
      * everything of up to [before], the mark moved to [now] — nothing it reads changed between; to be committed with
-     * the writing. The stages to look again: those reached, and those behind of a source — of none of its works done
-     * yet, or waiting for a stage before them.
+     * the writing. Of a writing after none ([before] nought: an index never written, or marked current as of nought) no
+     * mark moves and every stage is behind — none did anything up to it. The stages to look again: those reached, and
+     * those behind of a source — of none of its works done yet, or waiting for a stage before them.
      */
     fun written(
         typeId: String,
@@ -92,9 +93,9 @@ class StageSweeps(
             (WorkStage.entries - reached).filterTo(HashSet()) { stage ->
                 WorkScope.entries.any { scope ->
                     sources
-                        .filter { StageMarks.mark(index, stage, scope, it) >= before }
+                        .filter { before > 0 && StageMarks.mark(index, stage, scope, it) >= before }
                         .forEach { index.stages.changed(StageMarks.markKey(stage, scope, it), now) }
-                    sources.any { StageMarks.mark(index, stage, scope, it) < before }
+                    sources.any { before == 0L || StageMarks.mark(index, stage, scope, it) < before }
                 }
             }
         return reached + behind

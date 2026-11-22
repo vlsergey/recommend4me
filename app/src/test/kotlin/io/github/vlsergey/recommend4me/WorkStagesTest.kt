@@ -5,8 +5,9 @@ import io.github.vlsergey.recommend4me.api.model.InterestRequest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.TextVectors
-import io.github.vlsergey.recommend4me.worklist.ListDocuments
+import io.github.vlsergey.recommend4me.worklist.HeldTexts
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListIndexing
 import io.github.vlsergey.recommend4me.worklist.ListTexts
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import io.github.vlsergey.recommend4me.worklist.WorkStages
@@ -62,9 +63,9 @@ class WorkStagesTest : SiteTestBase() {
         capture("wt1|The third lantern|space|A lantern lit on a high cliff||")
         background.run()
         val key = ItemKey(site, "wt1")
-        val title = ListDocuments.vectorField(plugins.textEncoder()!!.id, TextVectors.TITLE)
-        val text = ListDocuments.textField("annotation")
-        fun held() = ListTexts.of(lists.of("books"), listOf(key), listOf(title, text))[key].orEmpty()
+        val title = ListTexts.vectorField(plugins.textEncoder()!!.id, TextVectors.TITLE)
+        val text = ListTexts.textField("annotation")
+        fun held() = HeldTexts.of(lists.of("books"), listOf(key), listOf(title, text))[key].orEmpty()
         val first = held()
         assertTrue(title in first, "the vector of the title")
         assertEquals("A lantern lit on a high cliff", String(first.getValue(text)))
@@ -74,5 +75,20 @@ class WorkStagesTest : SiteTestBase() {
         background.run()
         val second = held()
         assertTrue(!first.getValue(title).contentEquals(second.getValue(title)), "the vector of the new title")
+    }
+
+    @Test
+    fun `an index marked current as of nought is compared whole, every stage of its works kept`() {
+        capture("wz1|The fourth lantern|space|A lantern lit in a deep bay||")
+        background.run()
+        val before = stages("wz1").getValue("wz1")
+        val index = lists.of("books")
+        index.stages.changed(ListIndexing.WRITTEN, 0)
+        index.commit()
+        listIndexing.plan("books", "start")
+        background.run()
+        val after = stages("wz1").getValue("wz1")
+        WorkStage.entries.forEach { assertEquals(before[it], after[it], "$it of a work its document holds alike") }
+        assertTrue((index.stages.since(ListIndexing.WRITTEN) ?: 0) > 0, "the index written again")
     }
 }

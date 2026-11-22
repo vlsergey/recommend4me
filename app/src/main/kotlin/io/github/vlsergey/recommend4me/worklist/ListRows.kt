@@ -126,6 +126,40 @@ class ListRow(
 class RowVectors(val encoder: String, private val made: () -> Map<String, ByteArray>) {
     val packed: Map<String, ByteArray>
         get() = made()
+
+    companion object {
+        /** The vectors of an item of none by the [encoder]. */
+        fun none(encoder: String) = RowVectors(encoder) { emptyMap() }
+
+        /**
+         * The [rows] of the source [s] with the vectors of their texts by the [encoder]: of many read in one pass of
+         * the source's vectors, held off the heap till the [block] is done with them; of a few by their keys.
+         */
+        fun <T> attached(s: SourceStore, rows: List<ListRow>, encoder: String?, block: (List<ListRow>) -> T): T {
+            val ids = rows.map { it.key.id }
+            return when {
+                encoder == null || rows.isEmpty() -> block(rows)
+                rows.size <= ListRows.MANY ->
+                    of(s, ids, encoder).let { byId ->
+                        block(rows.map { it.withVectors(byId[it.key.id] ?: none(encoder)) })
+                    }
+                else ->
+                    EveryVector.read(s, encoder, ids).use { every ->
+                        block(rows.map { it.withVectors(every.of(it.key.id)) })
+                    }
+            }
+        }
+
+        /**
+         * The vectors of the texts of the items [ids] by the [encoder] as their documents hold them, read by their
+         * keys.
+         */
+        fun of(s: SourceStore, ids: Collection<String>, encoder: String): Map<String, RowVectors> =
+            s.textVectors.halvesOf(ids, encoder, ListTexts.vectorKeys(s.schema)).mapValues { (_, own) ->
+                val packed = own.mapValues { ListTexts.packedHalves(it.value) }
+                RowVectors(encoder) { packed }
+            }
+    }
 }
 
 /**
@@ -165,7 +199,8 @@ internal object ListRows {
         val numbers = numbersOf(s, ids, fields)
         val titles = titlesOf(s, ids, fields)
         val texts = textsOf(s, ids, fields)
-        val vectors = if (encoder == null || ids == null) emptyMap() else vectorsOf(s, ids, encoder)
+        val vectors = if (encoder == null || ids == null) emptyMap() else RowVectors.of(s, ids, encoder)
+        val none = encoder?.takeIf { ids != null }?.let(RowVectors::none)
         // When every outer kind of data of each changed last: of its item, and of the user's word on its work
         val itemDates = s.changes.of(ids)
         val workDates = s.works.changes.ofItems(s.id, ids)
@@ -194,7 +229,7 @@ internal object ListRows {
                 stages = stages(h.id),
                 dates = itemDates[h.id].orEmpty() + workDates[h.id].orEmpty(),
                 texts = texts[h.id].orEmpty(),
-                vectors = vectors[h.id],
+                vectors = vectors[h.id] ?: none,
             )
         }
     }
@@ -227,31 +262,9 @@ internal object ListRows {
         return out
     }
 
-    /**
-     * The [rows] of the source [s] with the vectors of their texts by the [encoder]: of many read in one pass of the
-     * source's vectors, held off the heap till the [block] is done with them; of a few by their keys.
-     */
-    fun <T> withVectors(s: SourceStore, rows: List<ListRow>, encoder: String?, block: (List<ListRow>) -> T): T {
-        val ids = rows.map { it.key.id }
-        return when {
-            encoder == null || rows.isEmpty() -> block(rows)
-            rows.size <= MANY ->
-                vectorsOf(s, ids, encoder).let { byId -> block(rows.map { it.withVectors(byId[it.key.id]) }) }
-            else ->
-                EveryVector.read(s, encoder, ids).use { every ->
-                    block(rows.map { it.withVectors(every.of(it.key.id)) })
-                }
-        }
-    }
-
-    /**
-     * The vectors of the texts of the items [ids] by the [encoder] as their documents hold them, read by their keys.
-     */
-    private fun vectorsOf(s: SourceStore, ids: Collection<String>, encoder: String): Map<String, RowVectors> =
-        s.textVectors.halvesOf(ids, encoder, ListTexts.vectorKeys(s.schema)).mapValues { (_, own) ->
-            val packed = own.mapValues { ListTexts.packedHalves(it.value) }
-            RowVectors(encoder) { packed }
-        }
+    /** The ids of the filter facets of the source [s]: what the dictionaries draft of the site's words. */
+    fun filterIds(s: SourceStore): Set<String> =
+        s.schema.facets.filter { it.filter }.mapTo(HashSet()) { FeatureNames.facetId(s.source, it) }
 
     /**
      * The values of the items of the source that change without the item — the grade, prediction and interest —, of
@@ -386,5 +399,5 @@ internal object ListRows {
     }
 
     /** Of more items than so many, every item read and picked from. */
-    private const val MANY = 10_000
+    internal const val MANY = 10_000
 }

@@ -7,7 +7,7 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import io.github.vlsergey.recommend4me.worklist.ListDocuments
+import io.github.vlsergey.recommend4me.worklist.HeldTexts
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListTexts
@@ -51,21 +51,21 @@ internal class TextsCompared(
             // Every doc value read, by its place: the vectors' rows, the texts' arrays
             val read: List<Pair<String, (Int, BytesRef) -> Unit>> =
                 listOfNotNull(
-                    ListDocuments.vectorField(encoder, TextVectors.TITLE) to titles::put,
-                    description?.let { ListDocuments.vectorField(encoder, it) to descriptions::put },
+                    ListTexts.vectorField(encoder, TextVectors.TITLE) to titles::put,
+                    description?.let { ListTexts.vectorField(encoder, it) to descriptions::put },
                     description?.let {
-                        ListDocuments.textField(it) to texts.getValue(LetteredText.DESCRIPTION).putter()
+                        ListTexts.textField(it) to texts.getValue(LetteredText.DESCRIPTION).putter()
                     },
                     s.schema.universeLine?.let {
-                        ListDocuments.textField(it) to texts.getValue(LetteredText.CHARACTERS).putter()
+                        ListTexts.textField(it) to texts.getValue(LetteredText.CHARACTERS).putter()
                     },
                 )
             val fields = read.map { it.first }
             val started = System.nanoTime()
             if (ids.size > FEW)
-                ListTexts.forEvery(index, s.id, fields) { id, k, bytes -> at[id]?.let { read[k].second(it, bytes) } }
+                HeldTexts.forEvery(index, s.id, fields) { id, k, bytes -> at[id]?.let { read[k].second(it, bytes) } }
             else
-                ListTexts.of(index, ids.map { ItemKey(s.id, it) }, fields).forEach { (key, own) ->
+                HeldTexts.of(index, ids.map { ItemKey(s.id, it) }, fields).forEach { (key, own) ->
                     val i = at[key.id] ?: return@forEach
                     own.forEach { (field, bytes) -> read[fields.indexOf(field)].second(i, BytesRef(bytes)) }
                 }
