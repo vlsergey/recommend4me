@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import org.jooq.impl.SQLDataType.BLOB
 
 /**
  * THE TEXTS AND THE VECTORS THE INDEX OF THE LIST HOLDS ([ListTexts]), read of it by the names of their fields
@@ -59,30 +60,31 @@ object HeldTexts {
         val vectors = fields.withIndex().mapNotNull { (k, f) -> ListTexts.vectorOf(f)?.let { it to k } }.toMap()
         if (texts.isNotEmpty()) {
             val t = ITEM_TEXT
-            db.select(t.ITEM_KEY, t.TEXT_KEY, t.CONTENT)
+            // The text as its UTF-8, made by the database: not a string the driver makes, turned back into bytes
+            db.select(
+                    t.ITEM_KEY,
+                    DSL.case_(t.TEXT_KEY).mapValues(HashMap<String?, Int>(texts)),
+                    DSL.function("encode", BLOB, t.CONTENT),
+                )
                 .from(t)
                 .where(items(t.ITEM_KEY), t.TEXT_KEY.`in`(texts.keys))
                 .fetchSize(STREAMED)
                 .fetchLazy()
-                .use { cursor ->
-                    cursor.forEach { r ->
-                        action(r.value1()!!, texts.getValue(r.value2()!!), r.value3()!!.toByteArray())
-                    }
-                }
+                .use { cursor -> cursor.forEach { r -> action(r.value1()!!, r.value2()!!, r.value3()!!) } }
         }
         if (vectors.isNotEmpty()) {
             val v = ITEM_VECTOR
-            val asked = DSL.or(vectors.keys.map { (encoder, key) -> v.ENCODER.eq(encoder).and(v.TEXT_KEY.eq(key)) })
-            db.select(v.ITEM_KEY, v.ENCODER, v.TEXT_KEY, v.VEC)
+            val asked = vectors.mapKeys { (key, _) -> v.ENCODER.eq(key.first).and(v.TEXT_KEY.eq(key.second)) }
+            val field =
+                asked.entries.drop(1).fold(DSL.case_().`when`(asked.keys.first(), asked.values.first())) { c, (q, k) ->
+                    c.`when`(q, k)
+                }
+            db.select(v.ITEM_KEY, field, v.VEC)
                 .from(v)
-                .where(items(v.ITEM_KEY), asked)
+                .where(items(v.ITEM_KEY), DSL.or(asked.keys))
                 .fetchSize(STREAMED)
                 .fetchLazy()
-                .use { cursor ->
-                    cursor.forEach { r ->
-                        action(r.value1()!!, vectors.getValue(r.value2()!! to r.value3()!!), r.value4()!!)
-                    }
-                }
+                .use { cursor -> cursor.forEach { r -> action(r.value1()!!, r.value2()!!, r.value3()!!) } }
         }
     }
 

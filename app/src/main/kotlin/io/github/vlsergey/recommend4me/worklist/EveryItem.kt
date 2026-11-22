@@ -110,22 +110,26 @@ internal class EveryItem(
         return Array(placed.size) { i -> buffers[i]?.copyOf(counts[i]) ?: EMPTY } to names
     }
 
-    /** Of every number of [numberIds], its value of every item by its place; nought of one not known. */
+    /**
+     * Of every number of [numberIds], its value of every item by its place; nought of one not known. The number by its
+     * place among [numberIds], not its id: ficbook's dozen numbers of 1.4 million works, an id a row, took 7 s.
+     */
     private fun numbersOf(db: DSLContext, places: Places, placed: Placed): Map<String, DoubleArray> {
-        val out = numberIds.associateWith { DoubleArray(placed.size) }
-        if (numberIds.isEmpty()) return out
+        val out = Array(numberIds.size) { DoubleArray(placed.size) }
+        if (numberIds.isEmpty()) return emptyMap()
         val n = ITEM_NUMBER
-        db.select(places.place, n.NUMBER_ID, n.CONTENT)
+        val number =
+            DSL.case_(n.NUMBER_ID)
+                .mapValues(numberIds.withIndex().associateTo(HashMap<String?, Int>()) { (k, id) -> id to k })
+        db.select(places.place, number, n.CONTENT)
             .from(n)
             .join(places.table)
             .on(places.key.eq(n.ITEM_KEY))
             .where(n.NUMBER_ID.`in`(numberIds))
             .fetchSize(STREAMED)
             .fetchLazy()
-            .use { cursor ->
-                cursor.forEach { r -> out.getValue(r.value2()!!)[placed.of(r.value1()!!)] = r.value3()!! }
-            }
-        return out
+            .use { cursor -> cursor.forEach { r -> out[r.value2()!!][placed.of(r.value1()!!)] = r.value3()!! } }
+        return numberIds.withIndex().associate { (k, id) -> id to out[k] }
     }
 
     /** The items of the source, each with its place among their keys ascending as the database orders them. */
