@@ -129,9 +129,11 @@ class Duplicates(
         val same = fitted.same ?: model.prior()
         val scores =
             PairScore.of(type, indexes.of(type.id), likely, said, same, fitted.series, WholeMatch(search.sides))
+        // The pairs scored before they are written: the writing told apart from what it writes
+        val scored = likely.map { it to scores(it) }
+        val score = System.currentTimeMillis() - started
         type.duplicates.replace(
-            likely,
-            scores,
+            scored,
             DuplicateSearch(
                 now,
                 encoder,
@@ -147,7 +149,8 @@ class Duplicates(
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs, {} of them kept, " +
                 "in {} ms " +
-                "(reading {}, comparing {}, fitting {}, writing {}); a model of one work {}, of one series {}",
+                "(reading {}, comparing {}, fitting {}, scoring {}, writing {}); a model of one work {}, of one " +
+                "series {}",
             type.id,
             search.works,
             search.sides.size,
@@ -158,7 +161,8 @@ class Duplicates(
             read,
             compared - read,
             fit - compared,
-            System.currentTimeMillis() - started - fit,
+            score - fit,
+            System.currentTimeMillis() - started - score,
             fitted.same != null,
             fitted.series != null,
         )

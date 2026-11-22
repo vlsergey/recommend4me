@@ -33,11 +33,10 @@ class DuplicateRepository(private val store: DuckDatabase) {
      * The candidates of a search in place of those before, and when it was made, with how rare every value is: in one
      * transaction, the rows of the candidates appended — no index of them kept, none made after (in H2 the ten indexes
      * of 2.6 million rows took two minutes of every search, 2026-11-22) — a reading in between sees the last search
-     * whole.
+     * whole. The candidates come scored: what the writing takes is what is written, nothing worked out of it.
      */
     fun replace(
-        candidates: Collection<DuplicateCandidate>,
-        scores: (DuplicateCandidate) -> PairScore,
+        candidates: List<Pair<DuplicateCandidate, PairScore>>,
         search: DuplicateSearch,
         rarity: Map<String, Float>,
     ) {
@@ -48,7 +47,7 @@ class DuplicateRepository(private val store: DuckDatabase) {
             tx.deleteFrom(DUPLICATE_SEARCH).execute()
             tx.deleteFrom(DUPLICATE_CANDIDATE).execute()
             laps.lap("emptied")
-            keep(connection, candidates, scores, laps)
+            keep(connection, candidates, laps)
             this.rarity.replace(connection, tx, rarity)
             laps.lap("rarities of ${rarity.size} values")
             fill(tx, search)
@@ -73,28 +72,22 @@ class DuplicateRepository(private val store: DuckDatabase) {
     }
 
     /**
-     * The [candidates] appended by the [connection], in the order of their key: the blocks of rows of a work's pairs
-     * together, what a pair is found by without an index.
+     * The [candidates] with their scores appended by the [connection], in the order of their key: the blocks of rows of
+     * a work's pairs together, what a pair is found by without an index.
      */
-    private fun keep(
-        connection: DuckDBConnection,
-        candidates: Collection<DuplicateCandidate>,
-        scores: (DuplicateCandidate) -> PairScore,
-        laps: Laps,
-    ) {
+    private fun keep(connection: DuckDBConnection, candidates: List<Pair<DuplicateCandidate, PairScore>>, laps: Laps) {
         val ordered =
             candidates.sortedWith(
-                compareBy<DuplicateCandidate>(
-                    { it.first.source },
-                    { it.first.id },
-                    { it.second.source },
-                    { it.second.id },
+                compareBy<Pair<DuplicateCandidate, PairScore>>(
+                    { it.first.first.source },
+                    { it.first.first.id },
+                    { it.first.second.source },
+                    { it.first.second.id },
                 )
             )
         laps.lap("ordered")
         connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, DUPLICATE_CANDIDATE.name.lowercase()).use { a ->
-            ordered.forEach { d ->
-                val score = scores(d)
+            ordered.forEach { (d, score) ->
                 a.beginRow()
                 a.append(d.first.source)
                 a.append(d.first.id)
