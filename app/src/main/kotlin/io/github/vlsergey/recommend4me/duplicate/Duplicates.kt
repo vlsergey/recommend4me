@@ -129,7 +129,7 @@ class Duplicates(
             log.info("{}: {}", type.id, it)
         }
         val likely = likely(found.values, kept.learnt)
-        val scores = PairScore.of(type, indexes.of(type.id), likely, WholeMatch(search.sides))
+        val scores = PairScore.of(likely, WholeMatch(search.sides), PairWorth(search.sides))
         // The pairs scored before they are written: the writing told apart from what it writes
         val scored = search.inKeyOrder(likely).map { it.candidate to scores(it) }
         val score = System.currentTimeMillis() - started

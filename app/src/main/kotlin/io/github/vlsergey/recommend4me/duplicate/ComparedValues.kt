@@ -63,6 +63,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 sizes,
                 titles = true,
                 apart = apart,
+                predicted = true,
             )
         val kept = rows.ids.indices.filter { !rows.titles[it].isNullOrEmpty() }.toIntArray()
         val values = Array(kept.size) { rows.values[kept[it]] }
@@ -94,6 +95,8 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 List(kept.size) { rows.titles[kept[it]]!! },
                 rows.numbers.mapValues { (_, all) -> DoubleArray(kept.size) { all[kept[it]] } },
                 rows.apart.mapValues { (_, all) -> List(kept.size) { all[kept[it]] } },
+                rows.predictions?.let { all -> DoubleArray(kept.size) { all[kept[it]] } },
+                rows.interests?.let { all -> DoubleArray(kept.size) { all[kept[it]] } },
             )
         log.info(
             "{}: the values of {} works read in {} ms: the index {}, the authors {}, their names {}, gathered {}",
@@ -191,6 +194,12 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val numbers: Map<String, DoubleArray>,
         /** The keys of every work's values of the facets read apart, by the facet, by the works' places. */
         val apart: Map<String, List<List<String>>> = emptyMap(),
+        /**
+         * Every work's predicted grade and chance of interest as the index keeps them, by its place (not a number of
+         * none); none of the works read by their ids.
+         */
+        val predictions: DoubleArray? = null,
+        val interests: DoubleArray? = null,
     ) {
         /** The name of every value by its number: of a value the user ignores, none. */
         val names: List<String?>

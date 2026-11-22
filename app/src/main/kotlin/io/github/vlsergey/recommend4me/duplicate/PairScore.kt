@@ -1,12 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
-import io.github.vlsergey.recommend4me.interest.Interest
-import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.model.Predicted
-import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.worklist.ListIndex
-import io.github.vlsergey.recommend4me.worklist.ListPredictions
 import kotlin.math.abs
 import kotlin.math.ln
 
@@ -45,24 +39,22 @@ class PairScore(
 
         /**
          * The scores of the [pairs] of a search by their chances and the user's words as it found them, what their
-         * works have alike ([match]: of the works as the search read them), and what every sort says of them as things
-         * stand: the sizes the search compared, where the user's answers change, the works' predictions as the [index]
-         * of the list keeps them and the user's marks of interest.
+         * works have alike ([match]) and what every sort says of them as things stand ([worth]): of the works as the
+         * search read them — the sizes it compared, the works' predictions and chances of interest —, and where the
+         * user's answers change.
          */
         internal fun of(
-            type: TypeStore,
-            index: ListIndex,
             pairs: Collection<FoundCandidate>,
             match: WholeMatch,
+            worth: PairWorth,
         ): (FoundCandidate) -> PairScore {
             val doubt = PairDoubt.of(pairs)
-            val worth = PairWorth.of(type, index)
             return { f ->
                 val c = f.candidate
                 val chance = f.same
                 val ofSeries = f.series
                 val size = sizeOf(c)
-                val sought = worth.sought(c)
+                val sought = worth.sought(f)
                 PairScore(
                     chance,
                     ofSeries,
@@ -135,18 +127,17 @@ internal class PairDoubt(private val same: Double, private val series: Double) {
 /**
  * WHAT A SORT SAYS OF THE WORK A PAIR WAS FOUND FOR — of both, the larger; of neither (an answered pair not found by
  * the search itself), the larger too —: of the predicted grade (not below nought) and the chance of interest, the
- * user's mark over the model's; nought of a work not predicted. Of every source's predictions and marks as the search
- * reads them.
+ * user's mark over the model's (1 of none); nought of a work not predicted. Of every work's prediction and chance as
+ * the index of the list keeps them, read with the works of the search ([SearchSide.predictions]), by their places: a
+ * reading of every prediction by its key and of every mark of interest of the databases, of every search, took 5 s of
+ * the books (2026-11-22).
  */
-internal class PairWorth(
-    private val predicted: Map<String, Map<String, Predicted>>,
-    private val marks: Map<String, Map<String, Boolean>>,
-) {
-    /** What the sorts of the formula, of interest and of the grade say of the pair [c]: each work looked up once. */
-    fun sought(c: DuplicateCandidate): Sought {
-        val first = of(c.first)
-        val second = of(c.second)
-        return when (c.foundFor) {
+internal class PairWorth(private val sides: List<SearchSide>) {
+    /** What the sorts of the formula, of interest and of the grade say of the pair [f]: each work looked up once. */
+    fun sought(f: FoundCandidate): Sought {
+        val first = of(f.site, f.item)
+        val second = of(f.otherSite, f.other)
+        return when (f.candidate.foundFor) {
             DuplicateCandidate.FIRST -> first
             DuplicateCandidate.SECOND -> second
             else ->
@@ -161,27 +152,16 @@ internal class PairWorth(
     /** What a sort says of a work: of the formula, the grade times the chance of interest. */
     class Sought(val formula: Double, val interest: Double, val grade: Double)
 
-    private fun of(key: ItemKey): Sought {
-        val p = predicted[key.source]?.get(key.id) ?: return NONE
-        val grade = p.score.coerceAtLeast(0.0)
-        val interest = Interest.chance(marks[key.source]?.get(key.id), p.interest) ?: 1.0
+    /** What the sorts say of the [a]-th site's [i]-th work. */
+    private fun of(a: Int, i: Int): Sought {
+        val score = sides[a].predictions?.get(i)?.takeUnless { it.isNaN() } ?: return NONE
+        val grade = score.coerceAtLeast(0.0)
+        val interest = sides[a].interests?.get(i)?.takeUnless { it.isNaN() } ?: 1.0
         return Sought(grade * interest, interest, grade)
     }
 
-    companion object {
+    private companion object {
         /** What the sorts say of a work not predicted. */
-        private val NONE = Sought(0.0, 0.0, 0.0)
-
-        /**
-         * Of every source of the [type] its predictions as the index of the list keeps them ([index]) and the user's
-         * marks of interest: a search's reading.
-         */
-        fun of(type: TypeStore, index: ListIndex) =
-            PairWorth(
-                type.sources.associate { s ->
-                    s.id to index.searching { ListPredictions.ofEvery(it, s.id) }
-                },
-                type.sources.associate { s -> s.id to s.interest.all().mapValues { it.value.interesting } },
-            )
+        val NONE = Sought(0.0, 0.0, 0.0)
     }
 }

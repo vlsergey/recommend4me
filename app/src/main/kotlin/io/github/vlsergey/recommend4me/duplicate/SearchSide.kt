@@ -52,6 +52,13 @@ internal class SearchSide(
     val texts: TextsCompared,
     /** Every work's title as the user corrected it, by its place. */
     val titleTexts: List<String>,
+    /**
+     * Every work's predicted grade and chance of interest — the user's mark over the model's — as the index keeps them,
+     * by its place, not a number of none: what the pairs are ordered by their worth by ([PairWorth]); none of a side of
+     * a few works.
+     */
+    val predictions: DoubleArray? = null,
+    val interests: DoubleArray? = null,
 ) {
     /**
      * The works as the model of pairs reads them ([SiteWorks]): of every work the weight of each of its [values] — the
@@ -178,6 +185,8 @@ internal class SearchSide(
                     compared.authors,
                     texts,
                     compared.titles,
+                    compared.predictions,
+                    compared.interests,
                 )
             }
         }
