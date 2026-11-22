@@ -132,6 +132,9 @@ sources/<source>/images/           picture files
 types/<type>/model.mv.db           the trained model, the predictions, the likeness to the marks,
                                    the directions of the set embeddings, the suggested tags — all
                                    recomputable
+types/<type>/duplicates.duckdb     the store of the search of duplicates (DuckDB): its candidates,
+                                   the models of the answers, how rare every value is — all
+                                   recomputable, made anew empty as its tables change
 types/<type>/search-index/         the search index
 types/<type>/list-index/           the index of the list of works (Lucene): what the list is
                                    filtered, sorted, counted and paged by — all recomputable
@@ -154,14 +157,16 @@ chance of interest, their product — updated in place. The filters, the orders,
 page are a query of it; only the cards of the page are read of the databases, by their keys. The
 databases stay the truth: the index is written in the queue of the computations (`ListIndexing`)
 a second after something it holds changed — an item's data, an answer, the values the model gives, a
-grade, a mark of interest, a regrouping of the works — of what changed since its last writing, by the
-dates the databases keep with the rows (`item.changed_at`, `normalized_work.changed_at`), the date of
-the writing kept with the index's commit: nothing is named in the queue. Every document holds the date
+grade, a mark of interest, a regrouping of the works — a consumer of the changes as the stages are:
+of every source the items changed after where its writing stands, in the order of the dates the
+databases keep with the rows (`item.changed_at`, `normalized_work.changed_at`), ten thousand a turn,
+where it stands kept with the index's commit (`ListCursors`): nothing is named in the queue. Every document holds the date
 every kind of data of its work last changed (`WorkDatum`), and the stages of the tasks over the works take
 the works by them, each by the kinds it reads, up to its own mark (`StageSweeps`, docs/computations.md, c).
 The predictions of the works are kept in the index alone (`ListPredictions`), written in place by what
-makes them where they change as the index keeps them, to three digits; an index of another format is
-written anew whole over its documents, the values of the models and the predictions read of them.
+makes them where they change as the index keeps them, to three digits. The index has no format: one
+current as of nought takes every item from the first, a document of what it holds anew alone written
+with its stages as they were.
 
 ## Works, items and their data
 
