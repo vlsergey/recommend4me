@@ -16,7 +16,7 @@ import kotlin.math.ln
  * of one series ([series]) — none of a series without a model of one —, the user's word on it ([answer]; [derived]: of
  * one series by the series, not by a word of the user's, [Said.derived]), whether its two works have every normalized
  * author alike ([sameAuthors]) and the same title ([sameTitle], [WholeMatch]), and what every other sort orders it by
- * ([ranks], by [RANKED]; none of what is not known).
+ * ([ranks], by [RANKED]; [NONE] of what is not known: numbers, not a boxed one each, of millions of pairs).
  */
 class PairScore(
     val same: Double,
@@ -25,7 +25,7 @@ class PairScore(
     val derived: Boolean,
     val sameAuthors: Boolean,
     val sameTitle: Boolean,
-    val ranks: Array<Double?>,
+    val ranks: DoubleArray,
 ) {
     companion object {
         /** The sorts of a key of their own besides the chances, in the order of [ranks]. */
@@ -40,8 +40,11 @@ class PairScore(
                 DuplicateSort.GRADE,
             )
 
+        /** A rank not known: of a pair of no chance of one series. */
+        const val NONE = Double.NaN
+
         /**
-         * The scores of the [pairs] of a search by their chances as it made them, the user's words [said], what their
+         * The scores of the [pairs] of a search by their chances and the user's words as it found them, what their
          * works have alike ([match]: of the works as the search read them), and what every sort says of them as things
          * stand: the sizes the search compared, where the user's answers change, the works' predictions as the [index]
          * of the list keeps them and the user's marks of interest.
@@ -50,32 +53,28 @@ class PairScore(
             type: TypeStore,
             index: ListIndex,
             pairs: Collection<FoundCandidate>,
-            said: Said,
             match: WholeMatch,
         ): (FoundCandidate) -> PairScore {
-            val doubt = PairDoubt.of(pairs, said)
+            val doubt = PairDoubt.of(pairs)
             val worth = PairWorth.of(type, index)
             return { f ->
                 val c = f.candidate
                 val chance = f.same
                 val ofSeries = f.series
                 val size = sizeOf(c)
-                // The word on the pair looked up once: the derived are of the pairs with a word
-                val pair = c.pair
-                val word = said[pair]
                 val sought = worth.sought(c)
                 PairScore(
                     chance,
                     ofSeries,
-                    word,
-                    word != null && pair in said.derived,
+                    f.word,
+                    f.derived,
                     match.authors(f),
                     match.title(f),
-                    arrayOf(
+                    doubleArrayOf(
                         size * chance,
-                        ofSeries?.let { size * it },
+                        if (ofSeries == null) NONE else size * ofSeries,
                         doubt.ofSame(chance),
-                        ofSeries?.let(doubt::ofSeries),
+                        if (ofSeries == null) NONE else doubt.ofSeries(ofSeries),
                         sought.formula * chance,
                         sought.interest * chance,
                         sought.grade * chance,
@@ -86,8 +85,12 @@ class PairScore(
 
         /** The mean of the two works' sizes in words, of those known: of a work of none, the other's alone. */
         private fun sizeOf(c: DuplicateCandidate): Double {
-            val known = listOfNotNull(c.words, c.otherWords)
-            return if (known.isEmpty()) 0.0 else known.average()
+            val a = c.words
+            val b = c.otherWords
+            return when {
+                a != null && b != null -> (a.toDouble() + b) / 2
+                else -> (a ?: b)?.toDouble() ?: 0.0
+            }
         }
     }
 }
@@ -109,21 +112,20 @@ internal class PairDoubt(private val same: Double, private val series: Double) {
 
         fun logit(chance: Double): Double = chance.coerceIn(LEAST, 1 - LEAST).let { ln(it / (1 - it)) }
 
-        /** Where the answers [said] on the [pairs] change, by their chances of one work and of one series. */
-        internal fun of(pairs: Collection<FoundCandidate>, said: Said): PairDoubt {
-            val answered = pairs.filter { it.candidate.pair in said }
+        /** Where the user's words on the [pairs] change, by their chances of one work and of one series. */
+        internal fun of(pairs: Collection<FoundCandidate>): PairDoubt {
+            val answered = pairs.filter { it.word != null }
             fun between(yes: List<Double>, no: List<Double>) =
                 if (yes.isEmpty() || no.isEmpty()) 0.0 else (yes.average() + no.average()) / 2
-            fun word(f: FoundCandidate) = said[f.candidate.pair]
             val ofSame =
                 between(
-                    answered.filter { word(it) == DuplicateAnswer.SAME }.map { logit(it.same) },
-                    answered.filter { word(it) == DuplicateAnswer.DIFFERENT }.map { logit(it.same) },
+                    answered.filter { it.word == DuplicateAnswer.SAME }.map { logit(it.same) },
+                    answered.filter { it.word == DuplicateAnswer.DIFFERENT }.map { logit(it.same) },
                 )
             val ofSeries =
                 between(
-                    answered.filter { word(it) == DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
-                    answered.filter { word(it) != DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
+                    answered.filter { it.word == DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
+                    answered.filter { it.word != DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
                 )
             return PairDoubt(ofSame, ofSeries)
         }

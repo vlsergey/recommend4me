@@ -18,10 +18,15 @@ class PairChancesTest {
     private fun pair(n: Int, title: Float) =
         DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), title, null, null, emptyMap())
 
-    /** The [pairs] as a search finds them: of one work by the title, of one series by [series]. */
-    private fun found(pairs: List<DuplicateCandidate>, series: (DuplicateCandidate) -> Double? = { null }) = pairs.map {
-        FoundCandidate(it, byTitle.chance(it.layers), series(it), 0, 0, 1, 0)
-    }
+    /**
+     * The [pairs] as a search finds them, with the words [said] on them: of one work by the title, of one series by
+     * [series].
+     */
+    private fun found(
+        pairs: List<DuplicateCandidate>,
+        said: Said,
+        series: (DuplicateCandidate) -> Double? = { null },
+    ) = pairs.map { FoundCandidate(it, byTitle.chance(it.layers), series(it), 0, 0, 1, 0, said[it.pair]) }
 
     @Test
     fun `the pairs in most doubt stand between what is said one work and what not, of a half of one kind of answer`() {
@@ -33,10 +38,10 @@ class PairChancesTest {
                     .toMap(),
                 emptySet(),
             )
-        val doubt = PairDoubt.of(found(same + different), said)
+        val doubt = PairDoubt.of(found(same + different, said))
         val between = doubt.ofSame(0.5)
         assertTrue(between > doubt.ofSame(0.9) && between > doubt.ofSame(0.2), "$between")
-        val oneKind = PairDoubt.of(found(same), said)
+        val oneKind = PairDoubt.of(found(same, said))
         assertEquals(1.0, oneKind.ofSame(0.5), 1e-9)
     }
 
@@ -101,10 +106,10 @@ class PairChancesTest {
                     .toMap(),
                 emptySet(),
             )
-        val doubt = PairDoubt.of(found(series + other) { 1 - it.title.toDouble() }, said)
+        val doubt = PairDoubt.of(found(series + other, said) { 1 - it.title.toDouble() })
         val between = doubt.ofSeries(0.6)
         assertTrue(between > doubt.ofSeries(0.9) && between > doubt.ofSeries(0.3), "$between")
-        val none = PairDoubt.of(found(series + other), said)
+        val none = PairDoubt.of(found(series + other, said))
         assertEquals(1.0, none.ofSeries(0.5), 1e-9)
     }
 }

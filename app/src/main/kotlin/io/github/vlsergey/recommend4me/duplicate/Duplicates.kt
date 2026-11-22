@@ -128,8 +128,8 @@ class Duplicates(
         ChanceSpread.of(found.values, search.sides.map { it.ids.size }, kept.learnt)?.let {
             log.info("{}: {}", type.id, it)
         }
-        val likely = likely(found.values, said, kept.learnt)
-        val scores = PairScore.of(type, indexes.of(type.id), likely, said, WholeMatch(search.sides))
+        val likely = likely(found.values, kept.learnt)
+        val scores = PairScore.of(type, indexes.of(type.id), likely, WholeMatch(search.sides))
         // The pairs scored before they are written: the writing told apart from what it writes
         val scored = search.inKeyOrder(likely).map { it.candidate to scores(it) }
         val score = System.currentTimeMillis() - started
@@ -179,19 +179,13 @@ class Duplicates(
 
     /**
      * Of the likeliest pair of every work [found], those the models of the answers give a chance of 1 % at least —
-     * their scale calibrated on the answers — and every pair answered on ([said]): of a million works most are plainly
-     * two works (user, 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet ([learnt]), every pair.
+     * their scale calibrated on the answers — and every pair answered on ([FoundCandidate.word]): of a million works
+     * most are plainly two works (user, 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet
+     * ([learnt]), every pair.
      */
-    private fun likely(
-        found: Collection<FoundCandidate>,
-        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
-        learnt: Boolean,
-    ): List<FoundCandidate> =
+    private fun likely(found: Collection<FoundCandidate>, learnt: Boolean): List<FoundCandidate> =
         if (!learnt) found.toList()
-        else
-            found.filter { f ->
-                f.candidate.pair in said || f.same >= LEAST_CHANCE || (f.series ?: 0.0) >= LEAST_CHANCE
-            }
+        else found.filter { f -> f.word != null || f.same >= LEAST_CHANCE || (f.series ?: 0.0) >= LEAST_CHANCE }
 
     /**
      * The user's word on the pair, in place of any before: one work — their normalized works merged, the grade and

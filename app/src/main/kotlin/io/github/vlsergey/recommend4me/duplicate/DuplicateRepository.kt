@@ -107,7 +107,7 @@ class DuplicateRepository(private val store: DuckDatabase) {
                 a.append(score.derived)
                 a.append(score.sameAuthors)
                 a.append(score.sameTitle)
-                score.ranks.forEach { a.add(it) }
+                score.ranks.forEach { if (it.isNaN()) a.appendNull() else a.append(it) }
                 a.endRow()
             }
         }

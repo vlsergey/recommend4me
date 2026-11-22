@@ -13,7 +13,9 @@ import java.util.stream.IntStream
  * A pair a search found ([candidate]) with its chances by the models the search was led by: of one work ([same]), and
  * of one series ([series]; none without a model of one) — made once, with its layers, as the search made the pair: what
  * it is kept by and kept with, no model fitted after the search scoring it again. Its works by their places in the
- * search: its first the [site]'s [item]-th, its second the [otherSite]'s [other]-th ([PairSearch.sites]).
+ * search: its first the [site]'s [item]-th, its second the [otherSite]'s [other]-th ([PairSearch.sites]). The user's
+ * [word] on it, and whether it is of one series by the series ([Said.derived]): told the pair as it is found, of the
+ * few answered, not looked up of every pair.
  */
 internal class FoundCandidate(
     val candidate: DuplicateCandidate,
@@ -23,7 +25,13 @@ internal class FoundCandidate(
     val item: Int,
     val otherSite: Int,
     val other: Int,
-)
+    val word: DuplicateAnswer? = null,
+    val derived: Boolean = false,
+) {
+    /** The pair with the user's [word] on it, [derived] or not. */
+    fun said(word: DuplicateAnswer, derived: Boolean) =
+        FoundCandidate(candidate, same, series, site, item, otherSite, other, word, derived)
+}
 
 /**
  * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
@@ -53,7 +61,7 @@ private constructor(
      * with its layers.
      */
     fun found(
-        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        said: Said,
         model: PairModel,
         chances: PairChances,
         card: Cublas?,
@@ -85,11 +93,13 @@ private constructor(
         pairs.forEachIndexed { k, (pair, _) ->
             found[pair] = made[k]!!.also { it.candidate.foundFor = foundFor.getValue(pair) }
         }
-        said.keys
-            .filter { it !in found }
-            .forEach { pair ->
-                placeOf(pair)?.let { p -> found[pair] = chances.of(pair, p.a, p.i, p.b, p.j) }
-            }
+        // Every pair answered on told its word, found or not: none of the others looked up
+        said.forEach { (pair, word) ->
+            val derived = pair in said.derived
+            val kept = found[pair]
+            if (kept != null) found[pair] = kept.said(word, derived)
+            else placeOf(pair)?.let { p -> found[pair] = chances.of(pair, p.a, p.i, p.b, p.j).said(word, derived) }
+        }
         return found
     }
 
