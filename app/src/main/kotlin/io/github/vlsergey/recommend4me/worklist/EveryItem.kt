@@ -33,7 +33,9 @@ class ItemRows(
  * [numberIds] alike. The database numbers them itself — an item by its place among the source's keys ascending, a value
  * by its place among the values read — and hands two integers a row, the names of the values once: the 16.5 million
  * values of ficbook as three strings a row, an item's key parsed and a value's name made and looked up of every one,
- * took 15 s of the 17 of the reading, numbered so 0.8 (2026-11-22, measured on a copy of the books' index).
+ * took 15 s of the 17 of the reading, numbered so 0.8 (2026-11-22, measured on a copy of the books' index). The rows
+ * read of the JDBC result itself, its columns by their places: jOOQ's records, a boxed number a column, made the 16.6
+ * million rows of the values 3.3 s and the 13.9 million of the numbers 6.5, the result alone gives them in 0.6 and 0.4.
  */
 internal class EveryItem(
     private val source: String,
@@ -51,11 +53,11 @@ internal class EveryItem(
             .where(ITEM.SOURCE.eq(source))
             .orderBy(ITEM.ITEM_KEY)
             .fetchSize(STREAMED)
-            .fetchLazy()
-            .use { cursor ->
-                cursor.forEach { r ->
-                    keys += r.value1()!!.substring(prefix.length)
-                    if (titled) titles += r.value2()
+            .fetchResultSet()
+            .use { rs ->
+                while (rs.next()) {
+                    keys += rs.getString(1).substring(prefix.length)
+                    if (titled) titles += rs.getString(2)
                 }
             }
         val placed = Placed.of(keys)
@@ -131,11 +133,11 @@ internal class EveryItem(
             .on(numbered.field(facet)!!.eq(v.FACET).and(numbered.field(valueKey)!!.eq(v.VALUE_KEY)))
             .where(v.FACET.`in`(asked))
             .fetchSize(STREAMED)
-            .fetchLazy()
-            .use { cursor ->
-                cursor.forEach { r ->
-                    val i = placed.of(r.value1()!!)
-                    val c = r.value2()!!
+            .fetchResultSet()
+            .use { rs ->
+                while (rs.next()) {
+                    val i = placed.of(rs.getInt(1))
+                    val c = rs.getInt(2)
                     if (codes.compared[c] >= 0) put(buffers, counts, i, codes.compared[c])
                     if (codes.apartFacet[c] >= 0)
                         (keys[codes.apartFacet[c]][i]
@@ -174,8 +176,8 @@ internal class EveryItem(
             .on(places.key.eq(n.ITEM_KEY))
             .where(n.NUMBER_ID.`in`(numberIds))
             .fetchSize(STREAMED)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { r -> out[r.value2()!!][placed.of(r.value1()!!)] = r.value3()!! } }
+            .fetchResultSet()
+            .use { rs -> while (rs.next()) out[rs.getInt(2)][placed.of(rs.getInt(1))] = rs.getDouble(VALUE_COLUMN) }
         return numberIds.withIndex().associate { (k, id) -> id to out[k] }
     }
 
@@ -224,6 +226,9 @@ internal class EveryItem(
     private companion object {
         /** The rows streamed at a time: memory, not meaning. */
         const val STREAMED = 50_000
+
+        /** The column of a number's value in its row read: after its item's place and the number's. */
+        const val VALUE_COLUMN = 3
 
         /** The values of an item first made room for. */
         const val START = 8

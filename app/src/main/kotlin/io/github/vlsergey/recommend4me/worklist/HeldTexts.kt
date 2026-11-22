@@ -11,7 +11,8 @@ import org.jooq.impl.SQLDataType.BLOB
 /**
  * THE TEXTS AND THE VECTORS THE INDEX OF THE LIST HOLDS ([ListTexts]), read of it by the names of their fields
  * ([ListTexts.textField]: a text's UTF-8, [ListTexts.vectorField]: a vector as packed): of every item of a source in
- * one pass of each table, or of the items asked for by their keys.
+ * one pass of each table, or of the items asked for by their keys. The rows read of the JDBC result itself, no record
+ * of jOOQ a row ([EveryItem]).
  */
 object HeldTexts {
 
@@ -69,8 +70,8 @@ object HeldTexts {
                 .from(t)
                 .where(items(t.ITEM_KEY), t.TEXT_KEY.`in`(texts.keys))
                 .fetchSize(STREAMED)
-                .fetchLazy()
-                .use { cursor -> cursor.forEach { r -> action(r.value1()!!, r.value2()!!, r.value3()!!) } }
+                .fetchResultSet()
+                .use { rs -> while (rs.next()) action(rs.getString(1), rs.getInt(2), rs.getBytes(CONTENT_COLUMN)) }
         }
         if (vectors.isNotEmpty()) {
             val v = ITEM_VECTOR
@@ -83,11 +84,14 @@ object HeldTexts {
                 .from(v)
                 .where(items(v.ITEM_KEY), DSL.or(asked.keys))
                 .fetchSize(STREAMED)
-                .fetchLazy()
-                .use { cursor -> cursor.forEach { r -> action(r.value1()!!, r.value2()!!, r.value3()!!) } }
+                .fetchResultSet()
+                .use { rs -> while (rs.next()) action(rs.getString(1), rs.getInt(2), rs.getBytes(CONTENT_COLUMN)) }
         }
     }
 
     /** The rows streamed at a time: memory, not meaning. */
     private const val STREAMED = 10_000
+
+    /** The column of a text's UTF-8 or a vector in its row read: after its item's key and its field's place. */
+    private const val CONTENT_COLUMN = 3
 }
