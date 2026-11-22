@@ -51,7 +51,7 @@ fun ListRow.sameAs(kept: KeptRow): Boolean =
         (if (values.graded) 1L else 0L) == kept.graded &&
         (if (values.marked) 1L else 0L) == kept.marked &&
         title == kept.title &&
-        facets.filterValues { it.isNotEmpty() } == kept.facets &&
+        valuesOf(facets) == valuesOf(kept.facets) &&
         numbers == kept.numbers &&
         dates.filterKeys { it.outer } == kept.dates.filterKeys { it.outer } &&
         holdsAlike(kept)
@@ -76,7 +76,16 @@ private fun ListRow.vectorsAlike(kept: KeptRow): Boolean {
  * what the documents held not before.
  */
 fun ListRow.draftedOtherThan(kept: KeptRow, filters: Set<String>): Boolean =
-    facets.filterKeys { it in filters }.filterValues { it.isNotEmpty() } != kept.facets.filterKeys { it in filters }
+    valuesOf(facets.filterKeys { it in filters }) != valuesOf(kept.facets.filterKeys { it in filters })
+
+/**
+ * The values of every facet of [facets] as a set — the order of a facet's values matters neither to the index nor to
+ * the search (docs/duplicates.md, 15): the drafts of a work read by its key and of every work come in orders of their
+ * own, and as lists they told a dictionary's change of 1.1 million works of ficbook none of which changed, every one of
+ * them dated anew and its stages done again (2026-11-22) —; a facet of none left out.
+ */
+private fun valuesOf(facets: Map<String, List<String>>): Map<String, Set<String>> =
+    facets.filterValues { it.isNotEmpty() }.mapValues { it.value.toSet() }
 
 /**
  * The row over its document as written ([kept]): the stages that did it and the dates of what they made of it carried;

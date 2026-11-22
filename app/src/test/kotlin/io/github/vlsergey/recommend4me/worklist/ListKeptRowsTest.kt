@@ -50,4 +50,18 @@ class ListKeptRowsTest {
             assertFalse(row("a", graded = true).sameAs(written), "graded")
         }
     }
+
+    @Test
+    fun `the order of a facet's values is no change — neither another row nor a dictionary's draft`() {
+        ListIndex(Files.createTempDirectory("list-index")).use { index ->
+            index.replace(listOf(row("a", facets = mapOf("tags" to listOf("t1", "t2", "t3")))))
+            index.commit()
+            val written = index.written { ListKeptRows.of(it, "site", listOf("a")) }.getValue("a")
+            // The drafts of a work read by its key and of every work come in orders of their own
+            val reordered = row("a", facets = mapOf("tags" to listOf("t3", "t1", "t2")))
+            assertTrue(reordered.sameAs(written), "the same values in another order")
+            assertFalse(reordered.draftedOtherThan(written, setOf("tags")), "no draft of a dictionary changed")
+            assertTrue(row("a", facets = mapOf("tags" to listOf("t1", "t4"))).draftedOtherThan(written, setOf("tags")))
+        }
+    }
 }
