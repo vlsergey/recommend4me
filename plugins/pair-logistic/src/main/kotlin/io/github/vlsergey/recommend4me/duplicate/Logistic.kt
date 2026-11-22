@@ -18,6 +18,9 @@ internal class Logistic(
     val calibration: Calibration = Calibration.NONE,
 ) : FittedPairModel {
 
+    /** The weights as a pair is scored by its layers, of a learnt model ([LayerWeights]). */
+    private val byLayers = weights?.let(::LayerWeights)
+
     override fun chance(layers: PairLayers): Double =
         if (weights == null) score(layers) else calibration.chance(score(layers))
 
@@ -25,22 +28,17 @@ internal class Logistic(
      * The score of a pair a search orders the pairs by: of a learnt model its logit, else the mean of the layers both
      * have.
      */
-    fun score(layers: PairLayers): Double {
-        val w =
-            weights
-                ?: return listOfNotNull(
-                        layers.title,
-                        layers.authors?.alike,
-                        layers.description,
-                        layers.size,
-                        layers.facets.values.takeIf { it.isNotEmpty() }?.average()?.toFloat(),
-                    )
-                    .map { it.toDouble() }
-                    .average()
-        var z = 0.0
-        features(layers).forEach { (name, x) -> z += (w[name] ?: 0.0) * x }
-        return z
-    }
+    fun score(layers: PairLayers): Double =
+        byLayers?.score(layers)
+            ?: listOfNotNull(
+                    layers.title,
+                    layers.authors?.alike,
+                    layers.description,
+                    layers.size,
+                    layers.facets.values.takeIf { it.isNotEmpty() }?.average()?.toFloat(),
+                )
+                .map { it.toDouble() }
+                .average()
 
     /**
      * The weights by name, a line each: "<name>=<weight>" — the text the application kept of the model before it came
@@ -272,57 +270,18 @@ internal class Logistic(
         fun has(feature: String) = "$feature?"
 
         /** The beginning of the features of the sites. */
-        private const val SITES = "sites:"
+        const val SITES = "sites:"
+
+        /** What stands between the two sites of their feature. */
+        const val SITES_APART = "|"
 
         /**
          * The feature of the two sites a pair is of, whichever is the first: "sites:<site>|<site>", in their order — a
          * site and itself, or two.
          */
-        fun sites(site: String, other: String) = SITES + listOf(site, other).sorted().joinToString("|")
+        fun sites(site: String, other: String) = SITES + listOf(site, other).sorted().joinToString(SITES_APART)
 
         private const val STEPS = 50
-
-        /**
-         * The features of a pair by their names: the constant, every layer both have and that they have it, its two
-         * sites.
-         */
-        fun features(layers: PairLayers): Map<String, Double> {
-            val out = HashMap<String, Double>()
-            out[CONSTANT] = 1.0
-            out[TITLE] = layers.title.toDouble()
-            out[TITLE_WITHIN] = layers.titleWithin.toDouble()
-            out[TITLE_HOLDING] = layers.titleHolding.toDouble()
-            layers.authors?.let {
-                out[AUTHORS] = it.alike.toDouble()
-                out[has(AUTHORS)] = 1.0
-                out[AUTHORS_WITHIN] = it.within.toDouble()
-                out[AUTHORS_HOLDING] = it.holding.toDouble()
-            }
-            if (layers.sameAuthor) out[SAME_AUTHOR] = 1.0
-            if (layers.partlySameAuthor) out[PARTLY_SAME_AUTHOR] = 1.0
-            layers.titleVector?.let {
-                out[TITLE_VECTOR] = it.toDouble()
-                out[has(TITLE_VECTOR)] = 1.0
-            }
-            layers.letters.forEach { (text, v) ->
-                out[letters(text)] = v.toDouble()
-                out[has(letters(text))] = 1.0
-            }
-            out[sites(layers.site, layers.otherSite)] = 1.0
-            layers.description?.let {
-                out[DESCRIPTION] = it.toDouble()
-                out[has(DESCRIPTION)] = 1.0
-            }
-            layers.size?.let {
-                out[SIZE] = it.toDouble()
-                out[has(SIZE)] = 1.0
-            }
-            layers.facets.forEach { (family, v) ->
-                out[facet(family)] = v.toDouble()
-                out[has(facet(family))] = 1.0
-            }
-            return out
-        }
 
         fun sigmoid(z: Double): Double = 1.0 / (1.0 + exp(-z))
 

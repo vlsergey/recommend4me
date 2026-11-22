@@ -25,18 +25,20 @@ internal object ChanceSpread {
 
     private fun percent(x: Double) = (x * PERCENT).toBigDecimal().stripTrailingZeros().toPlainString()
 
-    /** The spread of the chances by the [chances] of the user's answers of the [found] pairs; none of no model. */
-    fun of(found: Collection<DuplicateCandidate>, chances: PairChances?): String? {
-        if (chances?.learnt != true) return null
+    /**
+     * The spread of the chances of the [found] pairs, as the search made them; none of models of no answer yet
+     * ([learnt]).
+     */
+    fun of(found: Collection<FoundCandidate>, learnt: Boolean): String? {
+        if (!learnt) return null
         val same = IntArray(BANDS.size)
         val series = IntArray(BANDS.size)
         val best = HashMap<ItemKey, Double>()
-        found.forEach { c ->
-            val p = chances.same(c)
-            same[bandOf(p)]++
-            chances.series(c)?.let { series[bandOf(it)]++ }
-            best.merge(c.first, p, ::maxOf)
-            best.merge(c.second, p, ::maxOf)
+        found.forEach { f ->
+            same[bandOf(f.same)]++
+            f.series?.let { series[bandOf(it)]++ }
+            best.merge(f.candidate.first, f.same, ::maxOf)
+            best.merge(f.candidate.second, f.same, ::maxOf)
         }
         val works = IntArray(BANDS.size)
         best.values.forEach { works[bandOf(it)]++ }

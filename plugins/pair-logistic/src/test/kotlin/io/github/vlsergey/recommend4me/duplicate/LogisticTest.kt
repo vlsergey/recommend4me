@@ -157,6 +157,36 @@ class LogisticTest {
         assertEquals(0.9, c.chance(2.0), 0.02)
     }
 
+    @Test
+    fun `a pair is scored by its layers as the fitting scores it by its features`() {
+        // Pairs of every layer there is, some of it or none: of two sites and of one, of facets, texts and authors
+        val pairs =
+            (0 until 400).map { k ->
+                PairLayers(
+                    title = (k % 10) / 10f,
+                    description = if (k % 3 == 0) null else (k % 7) / 7f,
+                    size = if (k % 4 == 0) null else (k % 5) / 5f,
+                    facets =
+                        mapOf("tags" to (k % 6) / 6f, "universe" to (k % 2).toFloat()).filterKeys {
+                            k % 5 != 0 || it == "tags"
+                        },
+                    sameAuthor = k % 9 == 0,
+                    site = SITE,
+                    otherSite = if (k % 2 == 0) SITE else OTHER_SITE,
+                    titleWithin = (k % 4) / 4f,
+                    titleHolding = (k % 3) / 3f,
+                    authors = if (k % 8 == 0) null else Lexical((k % 11) / 11f, 0.5f, 0.25f),
+                    titleVector = if (k % 6 == 0) null else (k % 13) / 13f,
+                    letters = if (k % 2 == 0) mapOf(LetteredText.FANDOMS to (k % 3) / 3f) else emptyMap(),
+                    partlySameAuthor = k % 11 == 0,
+                )
+            }
+        val model = Logistic.fit(pairs, pairs.indices.map { if (it % 10 == 0) true else null })!!
+        val rows = PairRows.of(pairs)
+        val w = DoubleArray(rows.names.size) { model.weights!![rows.names[it]] ?: 0.0 }
+        pairs.indices.forEach { assertEquals(rows.logit(w, it), model.score(pairs[it]), 1e-6, "pair $it") }
+    }
+
     private companion object {
         /** The sites of the pairs of a test, unless it says other. */
         const val SITE = "ficbook"

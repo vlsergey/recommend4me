@@ -73,11 +73,6 @@ class LogisticPairModel : PairModel {
             null
         }
 
-    override fun fitted(search: PairSearch, models: List<FittedPairModel>) {
-        // What the next search will do of the models as they are now
-        SearchPlan.of(search, models.mapNotNull { it as? Logistic })
-    }
-
     companion object {
         const val ID = "pair-logistic"
 

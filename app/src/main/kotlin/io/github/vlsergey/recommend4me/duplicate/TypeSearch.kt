@@ -10,6 +10,13 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.IntStream
 
 /**
+ * A pair a search found ([candidate]) with its chances by the models the search was led by: of one work ([same]), and
+ * of one series ([series]; none without a model of one) — made once, with its layers, as the search made the pair: what
+ * it is kept by and kept with, no model fitted after the search scoring it again.
+ */
+internal class FoundCandidate(val candidate: DuplicateCandidate, val same: Double, val series: Double?)
+
+/**
  * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
  * among every work of the type (the logarithm of the works over those with it: "finished", a value of most works, tells
  * little, a character of a few much) — and handed to the model of pairs ([PairModel.search]) with the pairs the user
@@ -32,21 +39,22 @@ private constructor(
     private val bySource = sides.withIndex().associate { (k, side) -> side.store.id to k }
 
     /**
-     * The pairs the [model] keeps by every model of [models], on the [card] when there is one, and every pair answered
-     * on ([said]).
+     * The pairs the [model] keeps by the models of [chances] — of one work, and of one series when there is one —, on
+     * the [card] when there is one, and every pair answered on ([said]): each with its chances by those models, made
+     * with its layers.
      */
     fun found(
         said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
         model: PairModel,
-        models: List<FittedPairModel>,
+        chances: PairChances,
         card: Cublas?,
         progress: (Double) -> Unit = {},
-    ): HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate> {
+    ): HashMap<Pair<ItemKey, ItemKey>, FoundCandidate> {
         // Of every pair in the order kept, the first find of it, and for which of its works it was found: the one it is
         // the likeliest of
         val firsts = LinkedHashMap<Pair<ItemKey, ItemKey>, FoundPair>()
         val foundFor = HashMap<Pair<ItemKey, ItemKey>, Int>()
-        model.search(search, models, card, progress).forEach { f ->
+        model.search(search, listOfNotNull(chances.same, chances.series), card, progress).forEach { f ->
             val sought = key(f.site, f.item)
             val pair = type.links.ordered(sought, key(f.otherSite, f.other))
             firsts.putIfAbsent(pair, f)
@@ -56,23 +64,32 @@ private constructor(
                 Int::or,
             )
         }
-        // The layers of every pair at once: two products of a thousand numbers each, of half a million pairs
+        // The layers of every pair at once — two products of a thousand numbers each, of half a million pairs — and
+        // its chances of them
         val pairs = firsts.entries.toList()
-        val made = arrayOfNulls<DuplicateCandidate>(pairs.size)
+        val made = arrayOfNulls<FoundCandidate>(pairs.size)
         IntStream.range(0, pairs.size).parallel().forEach { k ->
             val (pair, f) = pairs[k]
-            made[k] = candidate(pair.first, pair.second, f.site, f.item, f.otherSite, f.other)
+            made[k] = chances.of(candidate(pair.first, pair.second, f.site, f.item, f.otherSite, f.other))
         }
-        val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>(pairs.size * 2)
+        val found = HashMap<Pair<ItemKey, ItemKey>, FoundCandidate>(pairs.size * 2)
         pairs.forEachIndexed { k, (pair, _) ->
-            found[pair] = made[k]!!.also { it.foundFor = foundFor.getValue(pair) }
+            found[pair] = made[k]!!.also { it.candidate.foundFor = foundFor.getValue(pair) }
         }
         said.keys
             .filter { it !in found }
             .forEach { pair ->
-                placeOf(pair)?.let { p -> found[pair] = candidate(pair.first, pair.second, p.a, p.i, p.b, p.j) }
+                placeOf(pair)?.let { p ->
+                    found[pair] = chances.of(candidate(pair.first, pair.second, p.a, p.i, p.b, p.j))
+                }
             }
         return found
+    }
+
+    /** The pair [c] with its chances by these models, of its layers made once. */
+    private fun PairChances.of(c: DuplicateCandidate): FoundCandidate {
+        val layers = c.layers
+        return FoundCandidate(c, same.chance(layers), series?.chance(layers))
     }
 
     private fun key(site: Int, item: Int) = ItemKey(sides[site].store.id, sides[site].ids[item])

@@ -38,8 +38,8 @@ private val log = LoggerFactory.getLogger(Duplicates::class.java)
  * [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work, and how likely it is one series of works, are models
- * of the user's answers over how alike its layers are — a plugin's ([PairModel], [PairModels]) — fitted at every search
- * and a few seconds after the answers ([PairFitting]); the search keeps of every work the pair every model finds
+ * of the user's answers over how alike its layers are — a plugin's ([PairModel], [PairModels]) — fitted a few seconds
+ * after the answers ([PairFitting]), never by a search; the search keeps of every work the pair every model finds
  * likeliest, every pair scored by both at once, on the card when there is one. The pairs are shown by the score by the
  * formula of the list (the prediction times the chance of interest) of the work the pair was found for times that
  * chance: a likely pair of a work the user would read first ([DuplicatePages]); the words on pairs are kept in a
@@ -66,11 +66,12 @@ class Duplicates(
     fun isSearching(type: TypeStore) = tasks.due(searching(type))
 
     /**
-     * The plugin of pairs [id] made the type's, and the pairs looked for anew by it, its models fitted with them: the
-     * models another plugin packed it reads none of. False of no such plugin.
+     * The plugin of pairs [id] made the type's, its models fitted on the answers, and the pairs looked for anew by them
+     * after: the models another plugin packed it reads none of. False of no such plugin.
      */
     fun chooseModel(type: TypeStore, id: String): Boolean {
         if (!models.choose(type.id, id)) return false
+        fitting.now(type)
         plan(type, "model chosen", TaskPriority.ASKED)
         return true
     }
@@ -104,9 +105,11 @@ class Duplicates(
     private fun searching(type: TypeStore) = Task(TaskKind.SEARCH_DUPLICATES, type = type.id)
 
     /**
-     * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one
-     * series when there is one —, its pairs kept in place of the last search's, and the models of the answers fitted on
-     * them. None without a plugin of pairs.
+     * The search of the type ([TypeSearch]) by the models as the last fitting on the user's answers left them — of one
+     * work, and of one series when there is one —, its pairs kept in place of the last search's with their chances by
+     * those models, the models kept as they were: a search fits nothing (owner, 2026-11-22: "the search of any
+     * duplicates must go by the model built"), the fitting is of the answers ([PairFitting]). None without a plugin of
+     * pairs.
      */
     private fun search(type: TypeStore) {
         val encoder = plugins.textEncoder()?.id ?: return
@@ -116,41 +119,36 @@ class Duplicates(
         val search = TypeSearch.read(type, encoder, said, indexes.of(type.id)) { tasks.progress(it * READ) }
         val read = System.currentTimeMillis() - started
         tasks.progress(READ)
-        val kept = models.of(type)
+        // The models the search is led by, as the last fitting kept them with the last search
+        val last = type.duplicates.search()?.takeIf { it.model == model.id }
+        val kept = models.of(type) ?: PairChances(model.prior(), null, false)
         val found = found(search, said, model, kept)
         val compared = System.currentTimeMillis() - started
         tasks.progress(COMPARED)
-        ChanceSpread.of(found.values, kept)?.let { log.info("{}: {}", type.id, it) }
-        val likely = likely(found.values, said, kept)
-        val fitted = PairModels.fit(model, likely, said)
-        model.fitted(search.search, listOfNotNull(fitted.same ?: model.prior(), fitted.series))
-        val fit = System.currentTimeMillis() - started
-        val now = Instant.now()
-        val same = fitted.same ?: model.prior()
-        val scores =
-            PairScore.of(type, indexes.of(type.id), likely, said, same, fitted.series, WholeMatch(search.sides))
+        ChanceSpread.of(found.values, kept.learnt)?.let { log.info("{}: {}", type.id, it) }
+        val likely = likely(found.values, said, kept.learnt)
+        val scores = PairScore.of(type, indexes.of(type.id), likely, said, WholeMatch(search.sides))
         // The pairs scored before they are written: the writing told apart from what it writes
-        val scored = likely.map { it to scores(it) }
+        val scored = likely.map { it.candidate to scores(it) }
         val score = System.currentTimeMillis() - started
         type.duplicates.replace(
             scored,
             DuplicateSearch(
-                now,
+                Instant.now(),
                 encoder,
                 search.works,
                 model.id,
-                fitted.same?.pack(),
-                fitted.series?.pack(),
-                now,
-                fit - compared,
+                last?.same,
+                last?.series,
+                last?.fittedAt,
+                last?.fitMillis,
             ),
             search.rarity,
         )
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs, {} of them kept, " +
-                "in {} ms " +
-                "(reading {}, comparing {}, fitting {}, scoring {}, writing {}); a model of one work {}, of one " +
-                "series {}",
+                "in {} ms (reading {}, comparing {}, scoring {}, writing {}); by a model of one work of the " +
+                "answers {}, of one series {}",
             type.id,
             search.works,
             search.sides.size,
@@ -160,47 +158,37 @@ class Duplicates(
             System.currentTimeMillis() - started,
             read,
             compared - read,
-            fit - compared,
-            score - fit,
+            score - compared,
             System.currentTimeMillis() - started - score,
-            fitted.same != null,
-            fitted.series != null,
+            kept.learnt,
+            kept.series != null,
         )
     }
 
     /**
      * The pairs the [search] finds by the [model]'s models as the last fitting left them ([kept]) — of none yet, its
-     * prior —, on the card when there is one, and every pair answered on ([said]); its share told as it goes.
+     * prior —, on the card when there is one, and every pair answered on ([said]), with their chances by those models;
+     * its share told as it goes.
      */
-    private fun found(
-        search: TypeSearch,
-        said: Said,
-        model: PairModel,
-        kept: PairChances?,
-    ) =
-        search.found(
-            said,
-            model,
-            listOfNotNull(kept?.same ?: model.prior(), kept?.series),
-            cards.getIfAvailable()?.cublas(),
-        ) { share ->
+    private fun found(search: TypeSearch, said: Said, model: PairModel, kept: PairChances) =
+        search.found(said, model, kept, cards.getIfAvailable()?.cublas()) { share ->
             tasks.progress(READ + share * (COMPARED - READ))
         }
 
     /**
-     * Of the likeliest pair of every work [found], those a model of the answers gives a chance of 1 % at least — its
-     * scale calibrated on the answers — and every pair answered on ([said]): of a million works most are plainly two
-     * works (user, 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet ([kept]), every pair.
+     * Of the likeliest pair of every work [found], those the models of the answers give a chance of 1 % at least —
+     * their scale calibrated on the answers — and every pair answered on ([said]): of a million works most are plainly
+     * two works (user, 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet ([learnt]), every pair.
      */
     private fun likely(
-        found: Collection<DuplicateCandidate>,
+        found: Collection<FoundCandidate>,
         said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
-        kept: PairChances?,
-    ): List<DuplicateCandidate> =
-        if (kept?.learnt != true) found.toList()
+        learnt: Boolean,
+    ): List<FoundCandidate> =
+        if (!learnt) found.toList()
         else
-            found.filter { c ->
-                c.pair in said || kept.same(c) >= LEAST_CHANCE || (kept.series(c) ?: 0.0) >= LEAST_CHANCE
+            found.filter { f ->
+                f.candidate.pair in said || f.same >= LEAST_CHANCE || (f.series ?: 0.0) >= LEAST_CHANCE
             }
 
     /**

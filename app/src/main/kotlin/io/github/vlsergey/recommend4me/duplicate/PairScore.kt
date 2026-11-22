@@ -41,25 +41,24 @@ class PairScore(
             )
 
         /**
-         * The scores of the [pairs] of a search by the models of one work [same] and of one series [series], the user's
-         * words [said], what their works have alike ([match]: of the works as the search read them), and what every
-         * sort says of them as things stand: the sizes the search compared, where the user's answers change, the works'
-         * predictions as the [index] of the list keeps them and the user's marks of interest.
+         * The scores of the [pairs] of a search by their chances as it made them, the user's words [said], what their
+         * works have alike ([match]: of the works as the search read them), and what every sort says of them as things
+         * stand: the sizes the search compared, where the user's answers change, the works' predictions as the [index]
+         * of the list keeps them and the user's marks of interest.
          */
         internal fun of(
             type: TypeStore,
             index: ListIndex,
-            pairs: Collection<DuplicateCandidate>,
+            pairs: Collection<FoundCandidate>,
             said: Said,
-            same: FittedPairModel,
-            series: FittedPairModel?,
             match: WholeMatch,
-        ): (DuplicateCandidate) -> PairScore {
-            val doubt = PairDoubt.of(pairs, said, { same.chance(it.layers) }, { series?.chance(it.layers) })
+        ): (FoundCandidate) -> PairScore {
+            val doubt = PairDoubt.of(pairs, said)
             val worth = PairWorth.of(type, index)
-            return { c ->
-                val chance = same.chance(c.layers)
-                val ofSeries = series?.chance(c.layers)
+            return { f ->
+                val c = f.candidate
+                val chance = f.same
+                val ofSeries = f.series
                 val size = sizeOf(c)
                 PairScore(
                     chance,
@@ -106,25 +105,21 @@ internal class PairDoubt(private val same: Double, private val series: Double) {
 
         fun logit(chance: Double): Double = chance.coerceIn(LEAST, 1 - LEAST).let { ln(it / (1 - it)) }
 
-        /** Where the answers [said] on the [pairs] change, by their chances of one work [same] and of one series. */
-        fun of(
-            pairs: Collection<DuplicateCandidate>,
-            said: Said,
-            same: (DuplicateCandidate) -> Double,
-            series: (DuplicateCandidate) -> Double?,
-        ): PairDoubt {
-            val answered = pairs.filter { it.pair in said }
+        /** Where the answers [said] on the [pairs] change, by their chances of one work and of one series. */
+        internal fun of(pairs: Collection<FoundCandidate>, said: Said): PairDoubt {
+            val answered = pairs.filter { it.candidate.pair in said }
             fun between(yes: List<Double>, no: List<Double>) =
                 if (yes.isEmpty() || no.isEmpty()) 0.0 else (yes.average() + no.average()) / 2
+            fun word(f: FoundCandidate) = said[f.candidate.pair]
             val ofSame =
                 between(
-                    answered.filter { said[it.pair] == DuplicateAnswer.SAME }.map { logit(same(it)) },
-                    answered.filter { said[it.pair] == DuplicateAnswer.DIFFERENT }.map { logit(same(it)) },
+                    answered.filter { word(it) == DuplicateAnswer.SAME }.map { logit(it.same) },
+                    answered.filter { word(it) == DuplicateAnswer.DIFFERENT }.map { logit(it.same) },
                 )
             val ofSeries =
                 between(
-                    answered.filter { said[it.pair] == DuplicateAnswer.SERIES }.mapNotNull { series(it)?.let(::logit) },
-                    answered.filter { said[it.pair] != DuplicateAnswer.SERIES }.mapNotNull { series(it)?.let(::logit) },
+                    answered.filter { word(it) == DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
+                    answered.filter { word(it) != DuplicateAnswer.SERIES }.mapNotNull { it.series?.let(::logit) },
                 )
             return PairDoubt(ofSame, ofSeries)
         }

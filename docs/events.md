@@ -258,7 +258,7 @@ flowchart LR
 | `chooseFacetCast` | — | searchFieldModelAnew |
 | `chooseFacetMethod` | — | searchFieldModelAnew |
 | `chooseInterestScorer` | — | fitGradeModels |
-| `choosePairMethod` | — | searchDuplicates |
+| `choosePairMethod` | — | fitDuplicateModel, searchDuplicates |
 | `chooseScorer` | — | fitGradeModels |
 | `chooseUniverseCharacters` | WorkChangeEvent | — |
 | `chooseUniverseClass` | WorkChangeEvent | — |

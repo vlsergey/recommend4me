@@ -15,8 +15,8 @@ private val log = LoggerFactory.getLogger(PairFitting::class.java)
 /**
  * THE FITTING OF THE MODELS OF THE PAIRS on the user's answers, of the pairs kept as they are: a few seconds after the
  * last answer ([afterAnswer]), or at once when the user asks ([now]) — in the queue of the computations, ahead of the
- * background's works: the user asked for it, and the pairs are shown in its order as soon as it is kept. Every search
- * fits them besides ([Duplicates]).
+ * background's works: the user asked for it, and the pairs are shown in its order as soon as it is kept. The one
+ * fitting there is: a search is led by the models it keeps and fits none ([Duplicates]).
  */
 @Component
 class PairFitting(

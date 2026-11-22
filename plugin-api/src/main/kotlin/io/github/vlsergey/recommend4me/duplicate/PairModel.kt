@@ -66,7 +66,10 @@ class Lexical(val alike: Float, val within: Float, val holding: Float) {
     }
 }
 
-/** A model of pairs fitted: how likely a pair of [PairLayers] is of its kind — one work, one series. */
+/**
+ * A model of pairs fitted: how likely a pair of [PairLayers] is of its kind — one work, one series. The chances of the
+ * millions of pairs a search keeps are asked of many threads at once.
+ */
 interface FittedPairModel {
     fun chance(layers: PairLayers): Double
 
@@ -118,11 +121,4 @@ interface PairModel {
         card: Cublas?,
         progress: (Double) -> Unit = {},
     ): List<FoundPair>
-
-    /**
-     * The [models] just fitted, told of the works of the [search] they were fitted after: what a search by them will do
-     * — of a model that plans what a pair needs, its plan — told to the log at once, not at the next search (user,
-     * 2026-11-18). Nothing of a model that plans nothing.
-     */
-    fun fitted(search: PairSearch, models: List<FittedPairModel>) {}
 }
