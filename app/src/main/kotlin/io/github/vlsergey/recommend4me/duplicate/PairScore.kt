@@ -60,21 +60,25 @@ class PairScore(
                 val chance = f.same
                 val ofSeries = f.series
                 val size = sizeOf(c)
+                // The word on the pair looked up once: the derived are of the pairs with a word
+                val pair = c.pair
+                val word = said[pair]
+                val sought = worth.sought(c)
                 PairScore(
                     chance,
                     ofSeries,
-                    said[c.pair],
-                    c.pair in said.derived,
-                    match.authors(c.pair),
-                    match.title(c.pair),
+                    word,
+                    word != null && pair in said.derived,
+                    match.authors(f),
+                    match.title(f),
                     arrayOf(
                         size * chance,
                         ofSeries?.let { size * it },
                         doubt.ofSame(chance),
                         ofSeries?.let(doubt::ofSeries),
-                        worth.sought(c, DuplicateSort.FORMULA) * chance,
-                        worth.sought(c, DuplicateSort.INTEREST) * chance,
-                        worth.sought(c, DuplicateSort.GRADE) * chance,
+                        sought.formula * chance,
+                        sought.interest * chance,
+                        sought.grade * chance,
                     ),
                 )
             }
@@ -136,28 +140,36 @@ internal class PairWorth(
     private val predicted: Map<String, Map<String, Predicted>>,
     private val marks: Map<String, Map<String, Boolean>>,
 ) {
-    fun sought(c: DuplicateCandidate, sort: DuplicateSort): Double {
-        val first = of(c.first, sort)
-        val second = of(c.second, sort)
+    /** What the sorts of the formula, of interest and of the grade say of the pair [c]: each work looked up once. */
+    fun sought(c: DuplicateCandidate): Sought {
+        val first = of(c.first)
+        val second = of(c.second)
         return when (c.foundFor) {
             DuplicateCandidate.FIRST -> first
             DuplicateCandidate.SECOND -> second
-            else -> maxOf(first, second)
+            else ->
+                Sought(
+                    maxOf(first.formula, second.formula),
+                    maxOf(first.interest, second.interest),
+                    maxOf(first.grade, second.grade),
+                )
         }
     }
 
-    private fun of(key: ItemKey, sort: DuplicateSort): Double {
-        val p = predicted[key.source]?.get(key.id) ?: return 0.0
+    /** What a sort says of a work: of the formula, the grade times the chance of interest. */
+    class Sought(val formula: Double, val interest: Double, val grade: Double)
+
+    private fun of(key: ItemKey): Sought {
+        val p = predicted[key.source]?.get(key.id) ?: return NONE
         val grade = p.score.coerceAtLeast(0.0)
         val interest = Interest.chance(marks[key.source]?.get(key.id), p.interest) ?: 1.0
-        return when (sort) {
-            DuplicateSort.INTEREST -> interest
-            DuplicateSort.GRADE -> grade
-            else -> grade * interest
-        }
+        return Sought(grade * interest, interest, grade)
     }
 
     companion object {
+        /** What the sorts say of a work not predicted. */
+        private val NONE = Sought(0.0, 0.0, 0.0)
+
         /**
          * Of every source of the [type] its predictions as the index of the list keeps them ([index]) and the user's
          * marks of interest: a search's reading.

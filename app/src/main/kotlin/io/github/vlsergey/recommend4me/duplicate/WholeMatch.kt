@@ -1,36 +1,39 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.item.ItemKey
+import java.util.stream.IntStream
 
 /**
  * WHAT TWO WORKS OF A PAIR HAVE WHOLLY ALIKE, as the user may choose the pairs by: the authors — the same normalized
  * authors, every one, none counted by a word "partly one" — and the title — the same, as the pair shows it (the user's
  * over the site's), apart from the case and the spaces around. Of a work of no normalized author, no authors alike. Of
- * the works as the search read them ([sides]: of the index of the list), nothing read again; of a work the search did
- * not read — one of no title — nothing alike.
+ * the works as the search read them ([sides]: of the index of the list), nothing read again, a pair by the places of
+ * its works the search found it of ([FoundCandidate]). Every work's title and authors made comparable once, as the
+ * search begins to score: of every pair, a work's key looked up among a site's and its title and authors made anew took
+ * 9 s of the 2.6 million pairs of the books (2026-11-22).
  */
 internal class WholeMatch(sides: List<SearchSide>) {
-    private val bySource = sides.associateBy { it.store.id }
-
-    /** Whether the two works of the [pair] have the same normalized authors, one at least. */
-    fun authors(pair: Pair<ItemKey, ItemKey>): Boolean {
-        val first = authorsOf(pair.first) ?: return false
-        return first.isNotEmpty() && first == authorsOf(pair.second)
+    /** Of every site, every work's title in lower case, the spaces around gone. */
+    private val titles = sides.map { side ->
+        arrayOfNulls<String>(side.titleTexts.size).also { out ->
+            IntStream.range(0, out.size).parallel().forEach { out[it] = side.titleTexts[it].trim().lowercase() }
+        }
     }
 
-    /** Whether the two works of the [pair] have the same title. */
-    fun title(pair: Pair<ItemKey, ItemKey>): Boolean {
-        val first = titleOf(pair.first) ?: return false
-        return first == titleOf(pair.second)
+    /** Of every site, every work's normalized authors, each once, ascending. */
+    private val authors = sides.map { side ->
+        arrayOfNulls<LongArray>(side.authors.size).also { out ->
+            IntStream.range(0, out.size).parallel().forEach {
+                out[it] = side.authors[it].distinct().sorted().toLongArray()
+            }
+        }
     }
 
-    private fun authorsOf(key: ItemKey): Set<Long>? = at(key)?.let { (side, i) -> side.authors[i].toHashSet() }
-
-    private fun titleOf(key: ItemKey): String? = at(key)?.let { (side, i) -> side.titleTexts[i].trim().lowercase() }
-
-    /** The side of the work [key] and its place in it; none of a work not read. */
-    private fun at(key: ItemKey): Pair<SearchSide, Int>? {
-        val side = bySource[key.source] ?: return null
-        return side.ids.binarySearch(key.id).takeIf { it >= 0 }?.let { side to it }
+    /** Whether the two works of the pair [f] have the same normalized authors, one at least. */
+    fun authors(f: FoundCandidate): Boolean {
+        val first = authors[f.site][f.item]!!
+        return first.isNotEmpty() && first.contentEquals(authors[f.otherSite][f.other])
     }
+
+    /** Whether the two works of the pair [f] have the same title. */
+    fun title(f: FoundCandidate): Boolean = titles[f.site][f.item] == titles[f.otherSite][f.other]
 }

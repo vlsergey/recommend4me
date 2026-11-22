@@ -12,9 +12,18 @@ import java.util.stream.IntStream
 /**
  * A pair a search found ([candidate]) with its chances by the models the search was led by: of one work ([same]), and
  * of one series ([series]; none without a model of one) — made once, with its layers, as the search made the pair: what
- * it is kept by and kept with, no model fitted after the search scoring it again.
+ * it is kept by and kept with, no model fitted after the search scoring it again. Its works by their places in the
+ * search: its first the [site]'s [item]-th, its second the [otherSite]'s [other]-th ([PairSearch.sites]).
  */
-internal class FoundCandidate(val candidate: DuplicateCandidate, val same: Double, val series: Double?)
+internal class FoundCandidate(
+    val candidate: DuplicateCandidate,
+    val same: Double,
+    val series: Double?,
+    val site: Int,
+    val item: Int,
+    val otherSite: Int,
+    val other: Int,
+)
 
 /**
  * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
@@ -70,7 +79,7 @@ private constructor(
         val made = arrayOfNulls<FoundCandidate>(pairs.size)
         IntStream.range(0, pairs.size).parallel().forEach { k ->
             val (pair, f) = pairs[k]
-            made[k] = chances.of(candidate(pair.first, pair.second, f.site, f.item, f.otherSite, f.other))
+            made[k] = chances.of(pair, f.site, f.item, f.otherSite, f.other)
         }
         val found = HashMap<Pair<ItemKey, ItemKey>, FoundCandidate>(pairs.size * 2)
         pairs.forEachIndexed { k, (pair, _) ->
@@ -79,17 +88,59 @@ private constructor(
         said.keys
             .filter { it !in found }
             .forEach { pair ->
-                placeOf(pair)?.let { p ->
-                    found[pair] = chances.of(candidate(pair.first, pair.second, p.a, p.i, p.b, p.j))
-                }
+                placeOf(pair)?.let { p -> found[pair] = chances.of(pair, p.a, p.i, p.b, p.j) }
             }
         return found
     }
 
-    /** The pair [c] with its chances by these models, of its layers made once. */
-    private fun PairChances.of(c: DuplicateCandidate): FoundCandidate {
+    /**
+     * The [pair] of the [a]-th site's [i]-th work and the [b]-th's [j]-th with its chances by these models, of its
+     * layers made once.
+     */
+    private fun PairChances.of(pair: Pair<ItemKey, ItemKey>, a: Int, i: Int, b: Int, j: Int): FoundCandidate {
+        val c = candidate(pair.first, pair.second, a, i, b, j)
         val layers = c.layers
-        return FoundCandidate(c, same.chance(layers), series?.chance(layers))
+        val straight = pair.first.source == sides[a].store.id && pair.first.id == sides[a].ids[i]
+        return if (straight) FoundCandidate(c, same.chance(layers), series?.chance(layers), a, i, b, j)
+        else FoundCandidate(c, same.chance(layers), series?.chance(layers), b, j, a, i)
+    }
+
+    /**
+     * The [pairs] in the order of their keys — of the first work, then of the second, each by its site's source, then
+     * its id — of the places of their works: counted out by their first works, the sites by their sources ascending and
+     * every site's works ascending as read, the few of one first work by their second. 2.6 million pairs compared by
+     * the strings of their keys, object after object, took 7 to 11 s (2026-11-22).
+     */
+    fun inKeyOrder(pairs: List<FoundCandidate>): List<FoundCandidate> {
+        val start = IntArray(sides.size)
+        var works = 0
+        sides.indices
+            .sortedBy { sides[it].store.id }
+            .forEach { a ->
+                start[a] = works
+                works += sides[a].ids.size
+            }
+        val firstOf = IntArray(pairs.size) { start[pairs[it].site] + pairs[it].item }
+        val secondOf = IntArray(pairs.size) { start[pairs[it].otherSite] + pairs[it].other }
+        val from = IntArray(works + 1)
+        firstOf.forEach { from[it + 1]++ }
+        for (w in 1..works) from[w] += from[w - 1]
+        val next = from.copyOf()
+        val order = IntArray(pairs.size)
+        firstOf.forEachIndexed { k, w -> order[next[w]++] = k }
+        // The pairs of one first work, by the second: a few at most
+        for (w in 0 until works) {
+            for (p in from[w] + 1 until from[w + 1]) {
+                val k = order[p]
+                var q = p
+                while (q > from[w] && secondOf[order[q - 1]] > secondOf[k]) {
+                    order[q] = order[q - 1]
+                    q--
+                }
+                order[q] = k
+            }
+        }
+        return List(pairs.size) { pairs[order[it]] }
     }
 
     private fun key(site: Int, item: Int) = ItemKey(sides[site].store.id, sides[site].ids[item])

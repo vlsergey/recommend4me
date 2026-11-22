@@ -125,11 +125,13 @@ class Duplicates(
         val found = found(search, said, model, kept)
         val compared = System.currentTimeMillis() - started
         tasks.progress(COMPARED)
-        ChanceSpread.of(found.values, kept.learnt)?.let { log.info("{}: {}", type.id, it) }
+        ChanceSpread.of(found.values, search.sides.map { it.ids.size }, kept.learnt)?.let {
+            log.info("{}: {}", type.id, it)
+        }
         val likely = likely(found.values, said, kept.learnt)
         val scores = PairScore.of(type, indexes.of(type.id), likely, said, WholeMatch(search.sides))
         // The pairs scored before they are written: the writing told apart from what it writes
-        val scored = likely.map { it.candidate to scores(it) }
+        val scored = search.inKeyOrder(likely).map { it.candidate to scores(it) }
         val score = System.currentTimeMillis() - started
         type.duplicates.replace(
             scored,

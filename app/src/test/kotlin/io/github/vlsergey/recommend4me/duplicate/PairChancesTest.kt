@@ -20,7 +20,7 @@ class PairChancesTest {
 
     /** The [pairs] as a search finds them: of one work by the title, of one series by [series]. */
     private fun found(pairs: List<DuplicateCandidate>, series: (DuplicateCandidate) -> Double? = { null }) = pairs.map {
-        FoundCandidate(it, byTitle.chance(it.layers), series(it))
+        FoundCandidate(it, byTitle.chance(it.layers), series(it), 0, 0, 1, 0)
     }
 
     @Test
