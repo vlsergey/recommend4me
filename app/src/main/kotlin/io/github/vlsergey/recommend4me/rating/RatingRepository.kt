@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 data class Rating(val itemId: String, val version: String, val grade: Int, val ratedAt: Instant)
 
@@ -131,7 +132,17 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
             }
     }
 
-    fun all(): List<Rating> = seen(WORK_RATING.GRADE.isNotNull.and(SITE_WORK.SOURCE.eq(source)))
+    /**
+     * Every grade of the source's items: the items of the graded works alone looked up by their works, not every item
+     * of the source joined to the grades (2026-11-23: a portion of the writing of the list's index read a million and a
+     * half items of ficbook so, 15 % of its time with the marks of interest).
+     */
+    fun all(): List<Rating> {
+        val graded = WORK_RATING.`as`("graded")
+        val works = DSL.select(graded.WORK).from(graded).where(graded.GRADE.isNotNull)
+        val ofSource = SITE_WORK.SOURCE.eq(source).and(SITE_WORK.NORMALIZED.`in`(works))
+        return seen(WORK_RATING.GRADE.isNotNull.and(ofSource))
+    }
 
     /**
      * The grades of the items [ids]: by their ids up to a [BATCH] of them; of more, every grade read and picked from.

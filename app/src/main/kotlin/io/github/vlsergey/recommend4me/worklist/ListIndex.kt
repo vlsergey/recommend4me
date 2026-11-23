@@ -102,6 +102,8 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
 
     /** The rows of every source not among [sources] removed: of a source the application no longer has. */
     fun keepSources(sources: Set<String>) = lock.withLock {
+        // Of no such source, nothing: not every table gone through to remove nothing, a writing's every portion
+        if (writing.selectDistinct(ITEM.SOURCE).from(ITEM).fetch { it.value1() }.all { it in sources }) return@withLock
         val others = ITEM.SOURCE.notIn(sources)
         OTHERS.forEach { (table, key) ->
             writing.deleteFrom(table).where(key.`in`(DSL.select(ITEM.ITEM_KEY).from(ITEM).where(others))).execute()

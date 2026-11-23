@@ -58,7 +58,8 @@ class ItemChanges(private val db: DSLContext) {
             when {
                 cursor == null -> DSL.noCondition()
                 cursor.at == null -> at.isNull.and(ITEM.ITEM_ID.gt(cursor.id)).or(at.isNotNull)
-                else -> at.gt(cursor.at).or(at.eq(cursor.at).and(ITEM.ITEM_ID.gt(cursor.id)))
+                // A range of the index of the dates the reading begins at, not a pass of every item before the cursor
+                else -> at.ge(cursor.at).and(at.gt(cursor.at).or(ITEM.ITEM_ID.gt(cursor.id)))
             }
         return db.select(ITEM.ITEM_ID, at)
             .from(ITEM)

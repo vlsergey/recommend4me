@@ -39,9 +39,11 @@ class WorkChanges(private val db: DSLContext) {
      */
     fun after(sources: Collection<String>, cursor: WorkCursor?, limit: Int): List<WorkCursor> {
         val at = NORMALIZED_WORK.CHANGED_AT
+        // A range of the index of the dates the reading begins at, not a condition it reads every work by (2026-11-23:
+        // "is not null", "after or at the same date" took a pass of every work, nine of a hundred of a writing's time)
         val after =
-            if (cursor == null) at.isNotNull
-            else at.gt(cursor.at).or(at.eq(cursor.at).and(NORMALIZED_WORK.ID.gt(cursor.id)))
+            if (cursor == null) at.ge(Instant.EPOCH)
+            else at.ge(cursor.at).and(at.gt(cursor.at).or(NORMALIZED_WORK.ID.gt(cursor.id)))
         return db.select(NORMALIZED_WORK.ID, at)
             .from(NORMALIZED_WORK)
             .where(

@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 /** The user's word on whether a work is interesting to read at all, and when it was said. */
 data class InterestMark(val itemId: String, val interesting: Boolean, val markedAt: Instant)
@@ -53,8 +54,17 @@ class InterestRepository(private val db: DSLContext, private val source: String,
             .from(SITE_WORK)
             .join(i)
             .on(i.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(items ?: SITE_WORK.SOURCE.eq(source))
+            .where(items ?: everyMarked())
             .fetch { InterestMark(it.value1()!!, it.value2()!!, it.value3()!!) }
+    }
+
+    /**
+     * The source's items of the marked works: looked up by their works, not every item of the source joined to the
+     * marks (2026-11-23: a portion of the writing of the list's index read a million and a half items of ficbook so).
+     */
+    private fun everyMarked(): Condition {
+        val marked = WORK_INTEREST.`as`("marked")
+        return SITE_WORK.SOURCE.eq(source).and(SITE_WORK.NORMALIZED.`in`(DSL.select(marked.WORK).from(marked)))
     }
 
     private companion object {
