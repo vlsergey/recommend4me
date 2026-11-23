@@ -64,10 +64,10 @@ class TagNormalization(private val stores: Stores, private val events: Applicati
     fun siteFacetOf(s: SourceStore, facet: String): String? =
         s.schema.facets.firstOrNull { it.key == facet }?.examplesFrom
 
-    /** Every site's tag not bound yet bound now; how many. */
-    fun bindNew(): Int {
-        val scope = scope() ?: return 0
-        return bind(scope) { s, f -> s.items.valueUses(f).keys }
+    /** Every site's tag not bound yet bound now. */
+    fun bindNew() {
+        val scope = scope() ?: return
+        bind(scope) { s, f -> s.items.valueUses(f).keys }
     }
 
     /**
@@ -82,7 +82,11 @@ class TagNormalization(private val stores: Stores, private val events: Applicati
         val f = source?.let { siteFacetOf(it, scope.facet) }
         if (source == null || f == null) return
         val keys = source.items.facetsOf(event.ids).values.flatMap { it[f].orEmpty() }.toSet()
-        if (keys.isNotEmpty()) bind(scope) { s, _ -> if (s.id == source.id) keys else emptySet() }
+        // What their site told of the tags bound anew is done of them now: of the works written alone — a binding
+        // of the queue's is of the tags it changed itself
+        if (keys.isNotEmpty())
+            bind(scope) { s, _ -> if (s.id == source.id) keys else emptySet() }
+                .forEach { (of, bound) -> events.publishEvent(SiteTagBindingChangeEvent(of, bound.toSet())) }
     }
 
     /** The synonyms a site named bound at once: the tags' names and vectors made of them next. */
@@ -96,10 +100,10 @@ class TagNormalization(private val stores: Stores, private val events: Applicati
     /**
      * The site's tags [keysOf] gives of every source bound, the ones not bound yet — of whichever type: a name of a
      * site of games and of one of books one tag — and every synonym not bound yet of a site's tag bound; how many. One
-     * at a time: two at once would make two tags of one name.
+     * at a time: two at once would make two tags of one name. The sites' tags bound anew, by source.
      */
     @Synchronized
-    private fun bind(scope: TagScope, keysOf: (SourceStore, String) -> Set<String>): Int {
+    private fun bind(scope: TagScope, keysOf: (SourceStore, String) -> Set<String>): Map<String, List<String>> {
         val bound = scope.tags.bindings()
         val sites = scope.sources.mapNotNull { s -> siteFacetOf(s, scope.facet)?.let { s to it } }
         val fresh =
@@ -111,14 +115,13 @@ class TagNormalization(private val stores: Stores, private val events: Applicati
         val synonymsLeft = synonyms.any { (source, of) ->
             of.any { (synonym, key) -> SiteTagRef(source, synonym) !in bound && SiteTagRef(source, key) in bound }
         }
-        if (fresh.isEmpty() && !synonymsLeft) return 0
+        if (fresh.isEmpty() && !synonymsLeft) return emptyMap()
         // The names of the sites' tags read only for the tags new: a synonym is bound by its tag, not by a name
         val names = if (fresh.isEmpty()) emptyMap() else sites.associate { (s, f) -> s.id to s.names(f) }
         val binding = Binding(scope, bound, names, synonyms)
         val made = binding.fresh(fresh) + binding.synonyms()
         if (made > 0) log.info("{} tags of the sites bound to normalized tags", made)
-        fresh.forEach { (source, keys) -> events.publishEvent(SiteTagBindingChangeEvent(source, keys.toSet())) }
-        return made
+        return fresh
     }
 
     /**

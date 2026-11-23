@@ -205,7 +205,6 @@ flowchart LR
     e_SiteItemWriteEvent --> w_renameFandoms
     e_SiteTagBindingChangeEvent --> w_relateTagsBySites
     e_SiteTagParentChangeEvent --> w_relateTagsBySites
-    e_SiteTagSynonymChangeEvent --> e_SiteTagBindingChangeEvent
     e_SiteTagSynonymChangeEvent --> w_encodeTagNames
     e_SiteTagSynonymChangeEvent --> w_nameTags
     e_SiteTagSynonymChangeEvent --> w_relateTagsBySites
@@ -268,7 +267,6 @@ flowchart LR
     w_makeSiteItemSetVectors --> e_WorkSetVectorFillEvent
     w_makeSiteItemSetVectors --> w_fitSetDirections
     w_makeWorkManners --> e_WorkMannerChangeEvent
-    w_nameTags --> e_SiteTagBindingChangeEvent
     w_nameTags --> w_countTags
     w_relateTagsBySites --> e_TagChangeEvent
     w_relateTagsBySites --> e_WorkChangeEvent
