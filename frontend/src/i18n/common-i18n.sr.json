@@ -30,6 +30,8 @@
   "App.listTotal": "Radova na spisku: {{count}}",
   "App.noSources": "Nema nijednog izvora: instalirajte dodatak sajta i ponovo pokrenite aplikaciju.",
   "App.notResponding": "Aplikacija ne odgovara: {{error}}",
+  "App.resetFilters": "Poništi filtere",
+  "App.resetFiltersHint": "Ukloni filtere sajtova, vrednosti i brojeva; kartica, pretraga i redosled ostaju",
   "App.resort": "Predviđanja su ažurirana — ponovo sortiraj",
   "App.searchPlaceholder": "Pretraga po smislu i rečima: „svemir i romansa“, ime autora…",
   "App.settings": "Podešavanja",

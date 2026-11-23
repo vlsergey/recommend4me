@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { KeyboardIcon, LayoutGridIcon, ListIcon, Loader2Icon, RefreshCcwIcon, SettingsIcon, TelescopeIcon } from "lucide-react";
+import { FilterXIcon, KeyboardIcon, LayoutGridIcon, ListIcon, Loader2Icon, RefreshCcwIcon, SettingsIcon, TelescopeIcon } from "lucide-react";
 import type { ContentTypeInfo, ItemView } from "@/api/client";
 import { CaptureDialog } from "@/capture/CaptureDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { pluginNamespacesOf, useTypes } from "@/contenttype/types";
-import { FacetFilters, NOTHING_HIDDEN, validSelection, type FacetSelection } from "@/facet/FacetFilters";
+import { FacetFilters, isFiltered, NOTHING_HIDDEN, validSelection, type FacetSelection } from "@/facet/FacetFilters";
 import { usePluginNamespaces } from "@/i18n/usePluginNamespaces";
 import { NumberFilters, validRanges, type NumberRanges } from "@/number/NumberFilters";
 import { ItemBoard, type Layout, type ListState } from "@/item/ItemBoard";
@@ -112,6 +112,16 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   const [hiddenSources, setHiddenSources] = usePref<string[]>(`hiddenSources:${type.id}`, []);
   const [storedRanges, setRanges] = usePref<NumberRanges>(`ranges:${type.id}`, {});
   const ranges = useMemo(() => validRanges(type, storedRanges), [type, storedRanges]);
+  // Every filter of the list taken off at once — the sites, the facets' values, the numbers' ranges; the view, the search
+  // and the order are not filters and stay
+  const [resets, setResets] = useState(0);
+  const filtered = hiddenSources.length > 0 || isFiltered(facets) || Object.keys(ranges).length > 0;
+  const resetFilters = () => {
+    setHiddenSources([]);
+    setFacets(NOTHING_HIDDEN);
+    setRanges({});
+    setResets(resets + 1);
+  };
   // The line searched, told by the line of the search once the typing pauses ([SearchLine]): what is typed is the
   // line's own, a letter not drawing the whole screen anew
   const [search, setSearch] = useState("");
@@ -275,7 +285,11 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
           <ErrorBoundary compact resetKey={type.id} title={t("App.failed.filters")}>
             <SourceFilter type={type} hidden={hiddenSources} onChange={setHiddenSources} />
             <FacetFilters type={type.id} value={facets} onChange={setFacets} />
-            <NumberFilters type={type} value={storedRanges} onChange={setRanges} />
+            {/* Drawn anew by a reset: a field holding what is no number, never sent, is emptied too */}
+            <NumberFilters key={resets} type={type} value={storedRanges} onChange={setRanges} />
+            <Button variant="ghost" size="sm" disabled={!filtered} onClick={resetFilters} title={t("App.resetFiltersHint")}>
+              <FilterXIcon /> {t("App.resetFilters")}
+            </Button>
           </ErrorBoundary>
 
           <div className="ml-auto flex items-center gap-1">

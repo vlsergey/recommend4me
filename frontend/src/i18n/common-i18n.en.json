@@ -30,6 +30,8 @@
   "App.listTotal": "Works in the list: {{count}}",
   "App.noSources": "There is no source: install a site's plugin and restart the application.",
   "App.notResponding": "The application does not respond: {{error}}",
+  "App.resetFilters": "Reset filters",
+  "App.resetFiltersHint": "Clear the filters of sites, values and numbers; the tab, the search and the order stay",
   "App.resort": "Predictions updated — sort again",
   "App.searchPlaceholder": "Search by meaning and words: “space and romance”, an author's name…",
   "App.settings": "Settings",
