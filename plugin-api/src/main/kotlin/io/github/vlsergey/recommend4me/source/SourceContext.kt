@@ -136,9 +136,17 @@ interface ItemFacetStore {
     /**
      * The other names the site gives facet values — the synonyms of a tag of ficbook — by the value's key: each synonym
      * (its key to its name) a value of its own, named, and the same thing as the value — a site's tag bound to the tag
-     * the value is. The synonyms given before of the values given are replaced.
+     * the value is. [whole]: the synonyms given are every synonym of the values, those given before replaced; not — a
+     * page listing some of them, AO3's three hundred most used —, added to theirs.
      */
-    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>)
+    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>, whole: Boolean = true)
+
+    /**
+     * The values the site puts facet values under — the metatags of a tag of AO3 — by the value's key: the keys of the
+     * values above it. [whole]: every value above each, those given before replaced, a value given none under none; not
+     * — a page of the value above listing those under it —, added to theirs.
+     */
+    fun setFacetValueParents(facet: String, parents: Map<String, Collection<String>>, whole: Boolean = true)
 
     /** The keys of the item's values of every facet. */
     fun facets(itemId: String): Map<String, List<String>>

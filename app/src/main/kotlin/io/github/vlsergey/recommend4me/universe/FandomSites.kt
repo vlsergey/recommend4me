@@ -36,6 +36,12 @@ class FandomSites(private val db: DSLContext) {
             }
             .toMap()
 
+    /** The sites' fandoms bound to the normalized fandom [id], by the index of the fandoms. */
+    fun sitesOf(id: Long): List<SiteFandomRef> =
+        db.select(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY).from(FANDOM_SITE).where(FANDOM_SITE.FANDOM.eq(id)).fetch {
+            SiteFandomRef(it.value1()!!, it.value2()!!)
+        }
+
     /** The normalized fandom [site] is bound to; null of one not bound yet. */
     fun fandomOf(site: SiteFandomRef): Long? =
         db.select(FANDOM_SITE.FANDOM)

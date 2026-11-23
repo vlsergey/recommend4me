@@ -2,13 +2,11 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
-import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_SYNONYM
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /**
- * THE DICTIONARY OF THE FACETS' VALUES of one source, as its source database holds it: what the site names every value,
- * what it says the value means, and which keys are synonyms of which.
+ * THE DICTIONARY OF THE FACETS' VALUES of one source, as its source database holds it: what the site names every value
+ * and what it says the value means. Which are synonyms of which, and under which: [FacetValueRelations].
  */
 interface FacetDictionary {
     /**
@@ -42,19 +40,9 @@ interface FacetDictionary {
 
     /** What the site says the values [keys] of a facet mean: key to description. */
     fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String>
-
-    /**
-     * The synonyms of the facet's values [synonyms] gives — value key to synonym key to its name — written in place of
-     * those the values had; each synonym named. A synonym is of one value: given of another, it is of that one now. One
-     * writer at a time, as of the names.
-     */
-    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>)
-
-    /** Every synonym of the facet's values: the synonym's key to the value's key. */
-    fun facetSynonyms(facet: String): Map<String, String>
 }
 
-/** The [FacetDictionary] of the source database [db]; one writer at a time of its names, descriptions and synonyms. */
+/** The [FacetDictionary] of the source database [db]; one writer at a time of its names and descriptions. */
 internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDictionary {
 
     @Synchronized
@@ -167,38 +155,6 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             }
             .toMap()
     }
-
-    @Synchronized
-    override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
-        if (synonyms.isEmpty()) return
-        val s = FACET_VALUE_SYNONYM
-        db.transaction { c ->
-            val tx = DSL.using(c)
-            tx.deleteFrom(s)
-                .where(s.FACET.eq(facet), s.VALUE_KEY.`in`(synonyms.keys.map { it.take(VALUE_KEY_LENGTH) }))
-                .execute()
-            synonyms.forEach { (key, of) ->
-                of.keys
-                    .filter { it != key }
-                    .forEach { synonym ->
-                        tx.insertInto(s)
-                            .set(s.FACET, facet)
-                            .set(s.SYNONYM_KEY, synonym.take(VALUE_KEY_LENGTH))
-                            .set(s.VALUE_KEY, key.take(VALUE_KEY_LENGTH))
-                            .onDuplicateKeyUpdate()
-                            .set(s.VALUE_KEY, key.take(VALUE_KEY_LENGTH))
-                            .execute()
-                    }
-            }
-        }
-        nameFacetValues(facet, synonyms.values.fold(emptyMap()) { all, names -> all + names })
-    }
-
-    override fun facetSynonyms(facet: String): Map<String, String> =
-        db.select(FACET_VALUE_SYNONYM.SYNONYM_KEY, FACET_VALUE_SYNONYM.VALUE_KEY)
-            .from(FACET_VALUE_SYNONYM)
-            .where(FACET_VALUE_SYNONYM.FACET.eq(facet))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     private companion object {
         /** The longest description of a value the table holds (`VARCHAR(4000)`). */

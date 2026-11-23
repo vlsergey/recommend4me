@@ -30,7 +30,7 @@ import org.jsoup.nodes.Element
 /**
  * Reads the pages of archiveofourown.org and writes what they say: the cards of a list (a tag, a search, a user's works
  * and bookmarks, a series, a collection, the history), a work's header with its chapters, the table of contents, the
- * comments shown.
+ * comments shown, and a tag's own page ([Ao3TagPage]).
  */
 class Ao3Pages(private val context: SourceContext) {
 
@@ -45,6 +45,7 @@ class Ao3Pages(private val context: SourceContext) {
         touched += cards(doc, page.capturedAt)
         // A series' own page: after the cards, whose works it lists
         Ao3Series.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
+        if (TAG_PAGE.matches(path)) Ao3TagPage(items).read(doc)
         WORK.matchEntire(path)?.let { m ->
             val id = m.groupValues[1]
             when (m.groupValues[2]) {
@@ -280,6 +281,9 @@ class Ao3Pages(private val context: SourceContext) {
         /** A work's address: "/works/<id>", "/works/<id>/chapters/<chapter>", "/works/<id>/navigate". */
         private val WORK = Regex("/works/(\\d+)(?:/chapters/\\d+|/(navigate))?/?")
         private val CHAPTER = Regex("/works/\\d+/chapters/(\\d+)")
+
+        /** A tag's own page, not the list of its works: "/tags/<name>". */
+        private val TAG_PAGE = Regex("/tags/[^/]+/?")
 
         /** The number of a chapter in a menu and a table of contents: "1. Argument". */
         private val NUMBERED = Regex("^\\d+\\.\\s*")

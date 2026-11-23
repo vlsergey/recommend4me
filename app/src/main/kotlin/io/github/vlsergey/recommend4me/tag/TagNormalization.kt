@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -46,7 +47,7 @@ class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val face
  * then on the user binds it: merges tags, takes one out.
  */
 @Component
-class TagNormalization(private val stores: Stores) {
+class TagNormalization(private val stores: Stores, private val events: ApplicationEventPublisher) {
 
     /** The facet of the layer learnt from the sites' tags of a source; null for a source without one. */
     private fun layerOf(s: SourceStore): String? =
@@ -116,6 +117,7 @@ class TagNormalization(private val stores: Stores) {
         val binding = Binding(scope, bound, names, synonyms)
         val made = binding.fresh(fresh) + binding.synonyms()
         if (made > 0) log.info("{} tags of the sites bound to normalized tags", made)
+        fresh.forEach { (source, keys) -> events.publishEvent(SiteTagBindingChangeEvent(source, keys.toSet())) }
         return made
     }
 
@@ -145,6 +147,11 @@ class TagNormalization(private val stores: Stores) {
         }
         private val boundNow = HashMap<SiteTagRef, Long>()
 
+        /** The synonyms of every site's tag, by the site and the tag: made at the first tag new, of none else. */
+        private val synonymsFor: Map<String, Map<String, List<String>>> by lazy {
+            synonyms.mapValues { (_, of) -> of.entries.groupBy({ it.value }, { it.key }) }
+        }
+
         private fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
 
         private fun bind(ref: SiteTagRef, id: Long) {
@@ -161,14 +168,21 @@ class TagNormalization(private val stores: Stores) {
         }
 
         /**
-         * The tag the site's tag [key] of [source] is bound to: a synonym of a tag bound already is that tag; else by
-         * its name — the one tag of its name of the same site, or a new one: a tag of another site of its name is
-         * another till the user merges them (user, 2026-11-13).
+         * The tag the site's tag [key] of [source] is bound to: a synonym of a tag bound already is that tag, a tag
+         * whose synonyms are bound to exactly one tag that one; else by its name — the one tag of its name of the same
+         * site, or a new one: a tag of another site of its name is another till the user merges them (user,
+         * 2026-11-13).
          */
         private fun tagOf(source: String, key: String): Long {
             val written = (namesOf.getValue(source)[key] ?: key).trim()
             val name = source to LayerValues.keyOf(written)
             return synonyms[source]?.get(key)?.let { idOf(SiteTagRef(source, it)) }
+                ?: synonymsFor[source]
+                    ?.get(key)
+                    .orEmpty()
+                    .mapNotNull { idOf(SiteTagRef(source, it)) }
+                    .distinct()
+                    .singleOrNull()
                 ?: byName[name]?.singleOrNull()
                 ?: scope.tags.create().also {
                     byName.getOrPut(name) { HashSet() } += it

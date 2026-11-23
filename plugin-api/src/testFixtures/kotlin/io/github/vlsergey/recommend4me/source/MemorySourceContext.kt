@@ -17,6 +17,8 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     val facetDescriptions = HashMap<String, MutableMap<String, String>>()
     /** Of every facet, the synonyms of its values: a synonym's key to the value's key. */
     val facetSynonyms = HashMap<String, MutableMap<String, String>>()
+    /** Of every facet, the values its values are under: a value's key to the keys above it. */
+    val facetParents = HashMap<String, MutableMap<String, Set<String>>>()
     val numbers = HashMap<String, MutableMap<String, Double>>()
     val texts = HashMap<String, MutableMap<String, String>>()
     val pictures = HashMap<String, List<String?>>()
@@ -81,11 +83,26 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
             override fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> =
                 this@MemorySourceContext.facetDescriptions[facet].orEmpty().filterKeys { it in keys }
 
-            override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
+            override fun setFacetValueSynonyms(
+                facet: String,
+                synonyms: Map<String, Map<String, String>>,
+                whole: Boolean,
+            ) {
                 val own = facetSynonyms.getOrPut(facet) { HashMap() }
-                own.values.removeAll { it in synonyms.keys }
+                if (whole) own.values.removeAll { it in synonyms.keys }
                 synonyms.forEach { (key, of) -> of.keys.forEach { own[it] = key } }
                 nameFacetValues(facet, synonyms.values.fold(emptyMap()) { all, names -> all + names })
+            }
+
+            override fun setFacetValueParents(
+                facet: String,
+                parents: Map<String, Collection<String>>,
+                whole: Boolean,
+            ) {
+                val own = facetParents.getOrPut(facet) { HashMap() }
+                parents.forEach { (key, above) ->
+                    own[key] = above.filter { it != key }.toSet() + (if (whole) emptySet() else own[key].orEmpty())
+                }
             }
 
             override fun facets(itemId: String): Map<String, List<String>> = facets[itemId].orEmpty()

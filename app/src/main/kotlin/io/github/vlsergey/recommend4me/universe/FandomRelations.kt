@@ -38,6 +38,12 @@ class FandomRelations(private val db: DSLContext) {
             it.value1()!! to it.value2()!!
         }
 
+    /** Whether the user told [a] and [b] apart. */
+    fun apart(a: Long, b: Long): Boolean {
+        val (first, other) = FandomRepository.pair(a, b)
+        return db.fetchExists(FANDOM_DISTINCT, pairRow(first, other))
+    }
+
     fun tellApart(a: Long, b: Long, now: Instant) {
         val (first, other) = FandomRepository.pair(a, b)
         val said = pairRow(first, other)

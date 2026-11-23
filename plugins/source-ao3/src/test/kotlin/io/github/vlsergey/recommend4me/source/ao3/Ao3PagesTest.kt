@@ -234,6 +234,95 @@ class Ao3PagesTest {
     }
 
     @Test
+    fun `a fandom's tag gives its synonyms and the metatags it is under, the list of its works none`() {
+        val context = MemorySourceContext()
+        val mdzs = "魔道祖师 - 墨香铜臭 | Modao Zushi - Moxiang Tongxiu"
+        val url = "https://archiveofourown.org/tags/${Ao3Tags.path(mdzs)}"
+        assertEquals(emptyList(), capture(context, url, "fandom.html"))
+        assertEquals(mapOf(mdzs to ""), context.facetDescriptions["fandom"].orEmpty())
+        assertEquals(
+            listOf("Grandmaster of Demonic Cultivation", "Mo Dao Zu Shi", "魔道祖師").associateWith { mdzs },
+            context.facetSynonyms["fandom"].orEmpty(),
+        )
+        // The metatag alone: not the category of the fandoms, "Books & Literature", nor its child tags
+        assertEquals(mapOf(mdzs to setOf("$mdzs & Related Fandoms")), context.facetParents["fandom"].orEmpty())
+        // The fandom asked of the browser by the address the page is read by
+        assertEquals(listOf(url), source.describing("fandom", listOf(mdzs)).map { it.url })
+
+        // The list of the fandom's works is no page of the tag
+        val works = MemorySourceContext()
+        source.capture(CapturedPage("$url/works", page("fandom.html"), now), works)
+        assertTrue(works.facetSynonyms.isEmpty() && works.facetParents.isEmpty())
+        // A tag of a category of no facet — a character — tells nothing
+        val other = MemorySourceContext()
+        val character = page("fandom.html").replace("the Fandom Category", "the Character Category")
+        source.capture(CapturedPage(url, character, now), other)
+        assertTrue(other.facetDescriptions.isEmpty() && other.facetSynonyms.isEmpty() && other.facetParents.isEmpty())
+    }
+
+    @Test
+    fun `a tag's page gives its synonyms and the tags right above and under it, a synonym's page its tag`() {
+        val context = MemorySourceContext()
+        val url = "https://archiveofourown.org/tags/Angst"
+        source.capture(
+            CapturedPage(
+                url,
+                tagPage(
+                    "Angst",
+                    "Additional Tags",
+                    """<div class="synonym listbox group"><h3 class="heading">Tags with the same meaning</h3>
+                    <ul class="tags commas index group"><li><a class="tag" href="/tags/Sad">Sad</a></li></ul></div>
+                    <div class="meta listbox group"><h3 class="heading">Metatags:</h3><ul class="tags tree index">
+                    <li><a class="tag" href="/tags/Emotions">Emotions</a></li>
+                    <li><ul class="tags tree index"><li><a class="tag" href="/tags/Feelings">Feelings</a></li></ul></li>
+                    </ul></div>
+                    <div class="sub listbox group"><h3 class="heading">Subtags:</h3><ul class='tags tree index'>
+                    <li><a class="tag" href="/tags/Hurt*s*Comfort">Hurt/Comfort</a><ul class='tags tree index'>
+                    <li><a class="tag" href="/tags/Whump">Whump</a></li></ul></li></ul></div>""",
+                ),
+                now,
+            ),
+            context,
+        )
+        // Keyed by their names in lower case, as the works give the tags; named as the site writes them
+        assertEquals(mapOf("sad" to "angst"), context.facetSynonyms["tag"].orEmpty())
+        // Its metatag right above it, its subtag right under it: those further are of the tags between
+        assertEquals(
+            mapOf("angst" to setOf("emotions"), "hurt/comfort" to setOf("angst")),
+            context.facetParents["tag"].orEmpty(),
+        )
+        assertEquals("Hurt/Comfort", context.facetNames["tag"]?.get("hurt/comfort"))
+
+        // A synonym's page: the tag it was merged into, besides the synonyms the tag's own page named
+        source.capture(
+            CapturedPage(
+                "https://archiveofourown.org/tags/angsty",
+                tagPage(
+                    "angsty",
+                    "Additional Tags",
+                    """<div class="merger module"><h3 class="heading">Mergers</h3><p>angsty has been made a synonym of
+                    <a class="tag" href="/tags/Angst">Angst</a>. Works and bookmarks tagged with angsty will show up in
+                    Angst's filter.</p></div>""",
+                ),
+                now,
+            ),
+            context,
+        )
+        assertEquals(mapOf("sad" to "angst", "angsty" to "angst"), context.facetSynonyms["tag"].orEmpty())
+        // A tag asked of the browser by its key: the site finds a tag by its name whatever the case
+        assertEquals(
+            listOf("https://archiveofourown.org/tags/angst"),
+            source.describing("tag", listOf("angst")).map { it.url },
+        )
+    }
+
+    /** A tag's page as the site makes it ("tags/show"): its heading, its category's line and its [lists]. */
+    private fun tagPage(name: String, category: String, lists: String) =
+        """<html><body><div id="main" class="tags-show region" role="main"><div class="tag home profile">
+        <div class="primary header module"><h2 class="heading">$name</h2></div>
+        <p>This tag belongs to the $category Category.</p>$lists</div></div></body></html>"""
+
+    @Test
     fun `a summary whose text is not found is left as it was, a summary the work has not is none`() {
         val context = MemorySourceContext()
         val url = "https://archiveofourown.org/works/$saints?view_full_work=true"

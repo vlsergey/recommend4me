@@ -23,6 +23,7 @@ import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.TextRole
+import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.universe.CatalogueLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
@@ -90,9 +91,10 @@ class Ao3 : Source {
 
     /**
      * 2: the category a standard direction, with ficbook's. 3: the warnings among the site's tags. 4: the series' own
-     * pages, the number of a work in its series.
+     * pages, the number of a work in its series. 5: a tag's own page — of a fandom, an additional tag, a warning —, its
+     * synonyms, metatags and subtags.
      */
-    override val parserVersion = 4
+    override val parserVersion = 5
 
     /** Its own changes of the values kept: the direction made a standard one, the warnings tags. */
     override val migrations = listOf("classpath:db/ao3")
@@ -157,6 +159,14 @@ class Ao3 : Source {
             FANDOM -> "$BASE/tags/${Ao3Tags.path(key)}/works"
             else -> null
         }
+
+    /**
+     * A fandom and a tag by the tag's own page, which tells its synonyms and the tags above and under it
+     * ([Ao3TagPage]); the page of its works tells none of it. A tag is keyed by its name in lower case: the site finds
+     * its tags by their names whatever the case.
+     */
+    override fun describing(facet: String, tags: List<String>): List<WantedPage> =
+        if (facet != FANDOM && facet != TAG) emptyList() else tags.map { WantedPage("$BASE/tags/${Ao3Tags.path(it)}") }
 
     /** An author of the site by their own page, "https://archiveofourown.org/users/Login". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)

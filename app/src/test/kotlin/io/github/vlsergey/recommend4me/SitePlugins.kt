@@ -178,6 +178,13 @@ class SitePlugins {
              * A series' page: "<title>|<description>|<id>,<id>", its every work in order, the series in the address.
              */
             const val SERIES = "https://site.example/series/"
+
+            /**
+             * A page of a value of a facet — a fandom, a tag — as AO3's of its tags:
+             * "<synonym>,…|<parent>,…|<child>,…", the keys of the values its site says are other names of it (some of
+             * them), of those right above it (all) and of some of those right under it; "<facet>/<key>" in the address.
+             */
+            const val WORDS = "https://site.example/words/"
         }
 
         override val contentType = "books"
@@ -187,6 +194,7 @@ class SitePlugins {
         private val describes = "$homepage/tags/"
         private val synonymsOf = "$homepage/synonyms/"
         private val seriesOf = "$homepage/series/"
+        private val wordsOf = "$homepage/words/"
 
         /** A character's tag on the site, as the catalogue states it. */
         override val catalogueProperties = mapOf("fake" to setOf("P1"))
@@ -208,7 +216,7 @@ class SitePlugins {
                 universeLine = "pairings",
             )
         override val modes = setOf(SourceMode.BROWSER)
-        override val capturePatterns = listOf(Regex("${Regex.escape(homepage)}/(work|tags|synonyms|series)/.*"))
+        override val capturePatterns = listOf(Regex("${Regex.escape(homepage)}/(work|tags|synonyms|series|words)/.*"))
 
         override fun itemUrl(itemId: String) = "$homepage/work/$itemId"
 
@@ -237,6 +245,10 @@ class SitePlugins {
                     emptyList()
                 }
                 page.url.startsWith(seriesOf) -> series(page, context)
+                page.url.startsWith(wordsOf) -> {
+                    words(page, context)
+                    emptyList()
+                }
                 else -> listOf(work(page, context))
             }
 
@@ -255,6 +267,19 @@ class SitePlugins {
                 )
             )
             return works
+        }
+
+        /** A value's page: some of its other names, every value right above it, some right under it. */
+        private fun words(page: CapturedPage, context: SourceContext) {
+            val (facet, key) = page.url.removePrefix(wordsOf).split('/', limit = 2)
+            val (synonyms, parents, children) =
+                page.html.split('|').map { line -> line.split(',').filter { it.isNotBlank() } }
+            val items = context.items
+            if (synonyms.isNotEmpty())
+                items.setFacetValueSynonyms(facet, mapOf(key to synonyms.associateWith { it }), whole = false)
+            items.setFacetValueParents(facet, mapOf(key to parents))
+            if (children.isNotEmpty())
+                items.setFacetValueParents(facet, children.associateWith { listOf(key) }, whole = false)
         }
 
         /** A page of a tag's other names: each a tag of its own of the same thing. */

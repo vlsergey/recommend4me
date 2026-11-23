@@ -1,6 +1,10 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.item.SiteTagParentChangeEvent
 import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
+import io.github.vlsergey.recommend4me.universe.SiteFandomParentChangeEvent
+import io.github.vlsergey.recommend4me.universe.SiteFandomSynonymChangeEvent
+import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import java.time.Instant
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
@@ -44,11 +48,30 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
     override fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> =
         store.items.facetDescriptions(facet, keys)
 
-    override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
+    /**
+     * The synonyms written; of the fandoms, those told anew told on — bound to the universe of their fandom — of any
+     * other facet, that its synonyms changed, with those told anew: the site's tags of them to bind.
+     */
+    override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>, whole: Boolean) {
         if (synonyms.isEmpty()) return
-        write { store.items.setFacetValueSynonyms(facet, synonyms) }
-        events.publishEvent(SiteTagSynonymChangeEvent(store.id, facet))
+        val told = write { store.items.setFacetValueSynonyms(facet, synonyms, whole) }
+        if (facet != fandomFacet) events.publishEvent(SiteTagSynonymChangeEvent(store.id, facet, told))
+        else if (told.isNotEmpty()) events.publishEvent(SiteFandomSynonymChangeEvent(store.id, told))
     }
+
+    /** The parents written; those told anew told on: of the fandoms their universes, of the tags their tags related. */
+    override fun setFacetValueParents(facet: String, parents: Map<String, Collection<String>>, whole: Boolean) {
+        if (parents.isEmpty()) return
+        val told = write { store.items.setFacetValueParents(facet, parents, whole) }
+        if (told.isEmpty()) return
+        events.publishEvent(
+            if (facet == fandomFacet) SiteFandomParentChangeEvent(store.id, told)
+            else SiteTagParentChangeEvent(store.id, facet, told)
+        )
+    }
+
+    /** The source's facet of the sites' fandoms; none of a source without one. */
+    private val fandomFacet = UniverseFacet.fandomFacet(store.schema)
 
     /**
      * The values of a standard facet with a closed list of them

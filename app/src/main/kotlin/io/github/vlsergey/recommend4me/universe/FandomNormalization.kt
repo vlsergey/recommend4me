@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -17,15 +18,21 @@ private val log = LoggerFactory.getLogger(FandomNormalization::class.java)
 
 /**
  * EVERY SITE'S FANDOM IS BOUND TO A NORMALIZED FANDOM ([FandomRepository]). A site's fandom seen first is bound to the
- * normalized fandom the sites' fandoms of its name are bound to — "Гарри Поттер" of one site and of another one
- * universe — when there is exactly one such; else to a new normalized fandom of its own. From then on the user binds
- * it: merges fandoms, takes one out.
+ * normalized fandom its site says it is one with — a synonym of a fandom bound, or one whose synonyms are bound to
+ * exactly one — else to the normalized fandom the sites' fandoms of its name are bound to — "Гарри Поттер" of one site
+ * and of another one universe — when there is exactly one such; else to a new normalized fandom of its own. What its
+ * site told of it besides is done then ([SiteFandomBindingChangeEvent]). From then on the user binds it: merges
+ * fandoms, takes one out.
  *
  * What a fandom without a name of the user's or of an entry is shown by is worked out here too
  * ([FandomRepository.calculatedName]): the name of its sites' fandom of the most works.
  */
 @Component
-class FandomNormalization(private val stores: Stores, private val tasks: Tasks) {
+class FandomNormalization(
+    private val stores: Stores,
+    private val tasks: Tasks,
+    private val events: ApplicationEventPublisher,
+) {
 
     // What the last run of the application left undone of it: planned again by the queue at its start, of the fandoms
     // the queue kept
@@ -59,8 +66,11 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
         if (keys.isEmpty()) return
         // The names of the fandoms bound to alone worked out again: of every fandom, a batch of a dump's import a pass
         // over every value of every site, slower with every work it added (user, 2026-11-17)
-        val touched = bind(fandoms, sites()) { s, _ -> if (s.id == event.source) keys else emptySet() }
+        val (touched, bound) = bind(fandoms, sites()) { s, _ -> if (s.id == event.source) keys else emptySet() }
         if (touched.isNotEmpty()) renameLater(touched)
+        bound.groupBy({ it.source }, { it.key }).forEach { (source, of) ->
+            events.publishEvent(SiteFandomBindingChangeEvent(source, of.toSet()))
+        }
     }
 
     /**
@@ -87,20 +97,20 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
 
     /**
      * The site's fandoms [keysOf] gives of every source bound, the ones not bound yet; the normalized fandoms they were
-     * bound to. One at a time: two at once would make two fandoms of one name.
+     * bound to, and those sites' fandoms. One at a time: two at once would make two fandoms of one name.
      */
     @Synchronized
     private fun bind(
         fandoms: FandomRepository,
         sites: List<Pair<SourceStore, String>>,
         keysOf: (SourceStore, String) -> Set<String>,
-    ): Set<Long> {
+    ): Pair<Set<Long>, List<SiteFandomRef>> {
         val bound = fandoms.sites.bindings()
         val fresh =
             sites
                 .associate { (s, f) -> s to (f to keysOf(s, f).filter { SiteFandomRef(s.id, it) !in bound }) }
                 .filterValues { it.second.isNotEmpty() }
-        if (fresh.isEmpty()) return emptySet()
+        if (fresh.isEmpty()) return emptySet<Long>() to emptyList()
         val names = sites.associate { (s, f) -> s.id to s.items.facetNames(f) }
         // The normalized fandoms every name is bound to, of every site
         val byName = HashMap<String, MutableSet<Long>>()
@@ -110,11 +120,14 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
         val now = Instant.now()
         val made = HashSet<Long>()
         fresh.forEach { (s, of) ->
-            of.second.forEach { key ->
+            val (facet, keys) = of
+            val said = SaidOne(s, facet, keys, fandoms)
+            keys.forEach { key ->
                 val written = (names[s.id]?.get(key) ?: key).trim()
                 val name = LayerValues.keyOf(written)
                 val id =
-                    byName[name]?.singleOrNull()
+                    said.universeOf(key)
+                        ?: byName[name]?.singleOrNull()
                         ?: fandoms.create(now, calculatedName = written).also {
                             byName.getOrPut(name) { HashSet() } += it
                         }
@@ -127,7 +140,20 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
             fresh.values.sumOf { it.second.size },
             made.size,
         )
-        return made
+        return made to fresh.flatMap { (s, of) -> of.second.map { SiteFandomRef(s.id, it) } }
+    }
+
+    /**
+     * What the site of [s] says its fandoms [keys] are one with — of its facet [facet] — read for them at once: a
+     * synonym of a fandom bound is of its universe, a fandom whose synonyms are bound to exactly one universe of it.
+     */
+    private class SaidOne(s: SourceStore, facet: String, keys: Collection<String>, fandoms: FandomRepository) {
+        private val synonymOf = s.items.synonymsOf(facet, keys)
+        private val synonyms = s.items.synonymsFor(facet, keys)
+        private val bound = fandoms.sites.bindingsOf(s.id, synonymOf.values + synonyms.values.flatten())
+
+        fun universeOf(key: String): Long? =
+            synonymOf[key]?.let(bound::get) ?: synonyms[key].orEmpty().mapNotNull(bound::get).distinct().singleOrNull()
     }
 
     /**
