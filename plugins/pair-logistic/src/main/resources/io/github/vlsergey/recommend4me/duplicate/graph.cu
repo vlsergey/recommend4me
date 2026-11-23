@@ -312,9 +312,14 @@ __device__ void warp_pair_scores(int u, int j, int lane, WORKS_PARAMS, float* z,
 // models in turn, each its likeliest of those left — a model finding every pair alike likely taking no neighbour of
 // another's. Of a neighbour's neighbour only those new to one of the two (F, of the step before: a neighbour new to
 // u, or a neighbour of it new to it) — the rest were candidates of the step before, and lost. Written to G2[u], which
-// of them are new to F2[u]; how many are new added to changed[0], how many pairs were scored to changed[1]
+// of them are new to F2[u], every model's chance of each to P2[u]; how many are new added to changed[0], how many
+// pairs were scored to changed[1]. When kept, the chances of the neighbours are those of the step before (P[u]), not
+// scored anew; and a work of no new candidate keeps its neighbours, in their order: of the same candidates of the
+// same chances, the models in turn take the same (2026-11-23: of every step, the neighbours scored anew were 24 million
+// pairs of the books, the works of no new candidate most of the last steps)
 extern "C" __global__ void descend(
-    const int* G, const unsigned char* F, int* G2, unsigned char* F2, unsigned long long* changed, WORKS_PARAMS
+    const int* G, const unsigned char* F, const float* P, int* G2, unsigned char* F2, float* P2, int kept,
+    unsigned long long* changed, WORKS_PARAMS
 ) {
     __shared__ int ids[CANDIDATES];
     __shared__ float chances[CANDIDATES * MAX_MODELS];
@@ -322,6 +327,8 @@ extern "C" __global__ void descend(
     __shared__ float bestScore[BLOCK];
     __shared__ int bestAt[BLOCK];
     __shared__ int chosen[K];
+    __shared__ int chosenAt[K];
+    __shared__ bool fresh;
     int u = blockIdx.x;
     if (u >= n) return;
     for (int c = threadIdx.x; c < CANDIDATES; c += blockDim.x) {
@@ -343,13 +350,33 @@ extern "C" __global__ void descend(
         if (!taken[c]) for (int d = 0; d < c && !again[r]; d++) if (ids[d] == ids[c]) again[r] = true;
     }
     __syncthreads();
-    for (int c = threadIdx.x, r = 0; c < CANDIDATES; c += blockDim.x, r++) if (again[r]) taken[c] = true;
+    if (threadIdx.x == 0) fresh = false;
     __syncthreads();
+    for (int c = threadIdx.x, r = 0; c < CANDIDATES; c += blockDim.x, r++) {
+        if (again[r]) taken[c] = true;
+        else if (c >= K && !taken[c]) fresh = true;
+    }
+    __syncthreads();
+    // No new candidate: the neighbours kept as they are
+    if (kept && !fresh) {
+        if (threadIdx.x < K) {
+            size_t at = (size_t) u * K + threadIdx.x;
+            G2[at] = G[at];
+            F2[at] = 0;
+            for (int m = 0; m < models; m++) P2[at * models + m] = P[at * models + m];
+        }
+        return;
+    }
+    // The neighbours' chances of the step before
+    if (kept)
+        for (int c = threadIdx.x; c < K; c += blockDim.x)
+            if (!taken[c])
+                for (int m = 0; m < models; m++) chances[c * MAX_MODELS + m] = P[((size_t) u * K + c) * models + m];
     // A warp a candidate: its rows read together
     float z[MAX_MODELS];
     unsigned long long count = 0;
     int lane = threadIdx.x & 31;
-    for (int c = threadIdx.x >> 5; c < CANDIDATES; c += blockDim.x >> 5)
+    for (int c = (kept ? K : 0) + (threadIdx.x >> 5); c < CANDIDATES; c += blockDim.x >> 5)
         if (!taken[c]) {
             warp_pair_scores(u, ids[c], lane, WORKS_ARGS, z, chances + c * MAX_MODELS);
             count++;
@@ -386,14 +413,20 @@ extern "C" __global__ void descend(
         }
         int pick = bestAt[0];
         int id = pick >= 0 ? ids[pick] : -1;
-        if (threadIdx.x == 0) chosen[round] = id;
+        if (threadIdx.x == 0) {
+            chosen[round] = id;
+            chosenAt[round] = pick;
+        }
         __syncthreads();
         if (id >= 0) for (int c = threadIdx.x; c < CANDIDATES; c += blockDim.x) if (ids[c] == id) taken[c] = true;
         __syncthreads();
     }
     if (threadIdx.x < K) {
         int id = chosen[threadIdx.x];
+        int pick = chosenAt[threadIdx.x];
         G2[(size_t) u * K + threadIdx.x] = id;
+        for (int m = 0; m < models; m++)
+            P2[((size_t) u * K + threadIdx.x) * models + m] = pick >= 0 ? chances[pick * MAX_MODELS + m] : NO_SCORE;
         bool known = false;
         for (int k = 0; k < K; k++) if (G[(size_t) u * K + k] == id) known = true;
         F2[(size_t) u * K + threadIdx.x] = !known && id >= 0;

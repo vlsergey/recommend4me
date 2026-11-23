@@ -33,7 +33,12 @@ internal object GraphSearch {
     /** The neighbours of a work in the graph (`K` of `graph.cu`). */
     const val K = 16
 
-    fun search(search: PairSearch, models: List<Logistic.Laid>, card: Cublas): Likeliest? {
+    /**
+     * The search by the graph of the [models] on the [card]; [keeps]: whether a step of the descent keeps the chances
+     * of the neighbours of the one before and the neighbours of a work of no new candidate ([Descent]) — the same graph
+     * as of every neighbour scored anew, tested so.
+     */
+    fun search(search: PairSearch, models: List<Logistic.Laid>, card: Cublas, keeps: Boolean = true): Likeliest? {
         val all = AllWorks.of(search) ?: return null
         return card.lock.withLock {
             val kernels = kernels(card) ?: error("the kernels of the graph were not made")
@@ -51,7 +56,7 @@ internal object GraphSearch {
                 // The graph of the likeliest by the models (user, 2026-11-18, of a graph of the titles alone: "you made
                 // that up yourself"), begun of the works of one author and of one title, not of works at random
                 val seeds = Seeds.of(all, ofAuthors, titles)
-                val graph = Descent(all.count, seeds, works, kernels, room).run()
+                val graph = Descent(models.size, seeds, works, kernels, room, keeps).run()
                 val descended = System.currentTimeMillis()
                 val found = scored(all, onCard, graph, extra, works, models.size, kernels, room)
                 log.info(
@@ -142,7 +147,9 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
                     all.authors.entries.size +
                     all.passed.entries.size +
                     4 * n) * Int.SIZE_BYTES
-            val graph = n * GraphSearch.K * (2L * Int.SIZE_BYTES + 2) + n * models * 2L * Float.SIZE_BYTES
+            val graph =
+                n * GraphSearch.K * (2L * Int.SIZE_BYTES + 2 + 2L * models * Float.SIZE_BYTES) +
+                    n * models * 2L * Float.SIZE_BYTES
             return rows + lists + graph
         }
     }
@@ -266,14 +273,22 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
  * step.
  */
 internal class Descent(
-    private val n: Int,
+    /** The models scoring a pair. */
+    private val models: Int,
     /** Of every work, its first neighbours: the rest of its K at random. */
     private val seeds: Lists,
     /** What a pair is scored by ([AllOnCard.scoring]). */
     private val works: List<Any>,
     private val kernels: CudaKernels,
     private val room: CardRoom,
+    /**
+     * Whether a step keeps the chances of the neighbours of the one before, and a work of no new candidate as it is.
+     */
+    private val keeps: Boolean,
 ) {
+    /** The works. */
+    private val n = seeds.at.size - 1
+
     fun run(): Cublas.DeviceBytes {
         val k = GraphSearch.K
         val random = Random(SEED)
@@ -287,6 +302,9 @@ internal class Descent(
         // Which neighbours are new: at first every one
         var fresh = room.marks(BooleanArray(n * k) { true })
         var nextFresh = room.bytes(n.toLong() * k)
+        // Every model's chance of every neighbour
+        var chances = room.bytes(n.toLong() * k * models * Float.SIZE_BYTES)
+        var nextChances = room.bytes(n.toLong() * k * models * Float.SIZE_BYTES)
         // How many neighbours are new, how many pairs were scored
         val changed = room.bytes(2L * Long.SIZE_BYTES)
         val back = room.pinned(2L * Long.SIZE_BYTES)
@@ -297,7 +315,17 @@ internal class Descent(
             kernels.launch(
                 "descend",
                 n.toLong() * CudaKernels.BLOCK,
-                *(listOf(graph, fresh, next, nextFresh, changed) + works).toTypedArray(),
+                *(listOf(
+                        graph,
+                        fresh,
+                        chances,
+                        next,
+                        nextFresh,
+                        nextChances,
+                        if (keeps && step > 1) 1 else 0,
+                        changed,
+                    ) + works)
+                    .toTypedArray(),
             )
             changed.download(back, 2L * Long.SIZE_BYTES)
             val ints = back.ints(0, 4)
@@ -305,6 +333,7 @@ internal class Descent(
             val pairs = (ints[2].toLong() and LOW) or (ints[3].toLong() shl Int.SIZE_BITS)
             graph = next.also { next = graph }
             fresh = nextFresh.also { nextFresh = fresh }
+            chances = nextChances.also { nextChances = chances }
             steps += "$count of $pairs pairs in ${System.currentTimeMillis() - began} ms"
             if (count < n.toLong() * k / SETTLED) break
         }

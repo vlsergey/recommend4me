@@ -5,15 +5,35 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * THE SEARCH BY A GRAPH keeps of every work pairs of works of the search, never the work itself nor one answered on —
- * and of nearly every work and model the likeliest pair every pair's search finds, or one as likely.
+ * and of nearly every work and model the likeliest pair every pair's search finds, or one as likely; the same of a
+ * descent keeping the chances of the neighbours of a step as of one scoring them anew.
  */
 class GraphSearchTest {
+
+    @Test
+    fun `a descent keeping the chances of the neighbours finds what one scoring them anew does`() {
+        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
+        assumeTrue(dir != null, "no CUDA libraries")
+        val card = Cublas.open(dir!!)
+        assumeTrue(card != null, "no cuBLAS to run on")
+        val search = RandomSearches.search(Random(7))
+        val alike = PairSearch(search.sites.take(2), search.families, search.familyOf, search.sizes, search.answered)
+        val laid = RandomSearches.models().map { it.laid(alike.families) }
+        fun found(keeps: Boolean) =
+            assertNotNull(GraphSearch.search(alike, laid, card!!, keeps)).found().map {
+                listOf(it.site, it.item, it.otherSite, it.other, it.kinds)
+            }
+        val anew = found(keeps = false)
+        assertTrue(anew.size >= alike.sites.sumOf { it.count }, "a work of no pair")
+        assertEquals(anew, found(keeps = true))
+    }
 
     @Test
     fun `of nearly every work the graph keeps the likeliest pair, never itself nor one answered on`() {
