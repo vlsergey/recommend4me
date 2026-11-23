@@ -154,12 +154,7 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
                 </a>
                 <span className="ml-2 text-xs text-muted-foreground tabular-nums">{Math.round(s.similarity * 100)}%</span>
                 <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
-                  {s.sites.map((site) => (
-                    <span key={`${site.source}/${site.key}`} title={sourceTitle(site.source)}>
-                      {sourceShort(site.source)}: <SiteFandomName site={site} />
-                      {site.description && <span> — {site.description}</span>}
-                    </span>
-                  ))}
+                  <RowSites sites={s.sites} />
                   <span className="tabular-nums">· {s.works == null ? t("UniverseCard.worksUncounted") : t("UniverseCard.works", { count: s.works })}</span>
                   {(relation === "DESCENDANT" || relation === "ANCESTOR") && <span>· {t(`SimilarUniverses.relation.${relation}`)}</span>}
                 </div>
@@ -198,5 +193,36 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
         </AsyncButton>
       )}
     </section>
+  );
+}
+
+/** How many sites' fandoms a row shows folded: a universe merged of many would make its row taller than the screen. */
+const SITES_FOLDED = 3;
+
+/**
+ * The sites' fandoms of a row's universe: the first [SITES_FOLDED], "N more" unfolding the rest, "fold" folding
+ * them back.
+ */
+function RowSites({ sites }: { sites: SimilarUniverse["sites"] }) {
+  const { t } = useTranslation("universe");
+  const [whole, setWhole] = useState(false);
+  const hidden = sites.length - SITES_FOLDED;
+  // Folding one fandom away saves no line: "1 more" would take its place
+  const folds = hidden > 1;
+  const shown = folds && !whole ? sites.slice(0, SITES_FOLDED) : sites;
+  return (
+    <>
+      {shown.map((site) => (
+        <span key={`${site.source}/${site.key}`} title={sourceTitle(site.source)}>
+          {sourceShort(site.source)}: <SiteFandomName site={site} />
+          {site.description && <span> — {site.description}</span>}
+        </span>
+      ))}
+      {folds && (
+        <button type="button" className="text-primary underline-offset-2 hover:underline" title={whole ? undefined : t("SimilarUniverses.moreSitesHint")} onClick={() => setWhole(!whole)}>
+          {whole ? t("SimilarUniverses.fewerSites") : t("SimilarUniverses.moreSites", { n: hidden })}
+        </button>
+      )}
+    </>
   );
 }
