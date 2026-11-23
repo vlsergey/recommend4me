@@ -2,6 +2,8 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_DISTINCT
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_PARENT
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 
@@ -26,10 +28,12 @@ class FandomRelations(private val db: DSLContext) {
             .set(FANDOM_PARENT.PARENT, parent)
             .set(FANDOM_PARENT.LINKED_AT, now)
             .execute()
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(FandomRepository.value(child)), now)
     }
 
     fun unlink(child: Long, parent: Long) {
         db.deleteFrom(FANDOM_PARENT).where(FANDOM_PARENT.CHILD.eq(child), FANDOM_PARENT.PARENT.eq(parent)).execute()
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(FandomRepository.value(child)), Instant.now())
     }
 
     /** Every pair the user told apart, the smaller id first. */

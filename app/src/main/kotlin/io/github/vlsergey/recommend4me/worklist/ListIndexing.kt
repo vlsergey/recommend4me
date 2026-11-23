@@ -112,7 +112,8 @@ class ListIndexing(
         }
 
     /** Whether anything of the [type] changed after where its index stands: what a start plans its writing of. */
-    fun pending(type: TypeStore): Boolean = ListChanges.any(type, ListCursors(indexes.of(type.id)))
+    fun pending(type: TypeStore): Boolean =
+        indexes.of(type.id).let { ListChanges.any(type, ListCursors(it)) || ListDictionary.any(type, it) }
 
     /**
      * The next portion of what changed of the content type [typeId] after where its index stands written to it, where
@@ -127,16 +128,21 @@ class ListIndexing(
         val before = type.sources.associate { it.id to cursors.held(it.id) }
         val clusters = works.of(type)
         val portion = ListChanges.next(type, clusters, cursors, PORTION, started.toEpochMilli())
+        // The documents a change of the dictionaries reaches, compared with what their drafts make now
+        val dictionary = ListDictionary.next(type, index, PORTION)
+        val named = HashMap<String, Set<String>>(portion.named)
+        dictionary.named.forEach { (source, ids) -> named.merge(source, ids) { a, b -> a + b } }
+        val more = portion.more || dictionary.more
         val gathered = System.currentTimeMillis()
         val changed = HashSet<WorkDatum>()
         var written = 0
-        portion.named.forEach { (sourceId, ids) ->
+        named.forEach { (sourceId, ids) ->
             type.source(sourceId)?.let { s ->
                 ids.chunked(PORTION).forEach { written += writeNamed(s, it.toSet(), index, clusters, changed) }
             }
         }
         // The documents of the items gone, as every change is written
-        val gone = if (portion.more) 0 else type.sources.sumOf { removeGone(it, index) }
+        val gone = if (more) 0 else type.sources.sumOf { removeGone(it, index) }
         val replaced = System.currentTimeMillis()
         portion.items.forEach { (source, at) -> cursors.set(source, at) }
         portion.written.forEach { (source, at) -> cursors.written(source, at) }
@@ -154,12 +160,12 @@ class ListIndexing(
             committed - started.toEpochMilli(),
             written,
             gone,
-            if (portion.more) ", more left" else "",
+            if (more) ", more left" else "",
             gathered - started.toEpochMilli(),
             replaced - gathered,
             committed - replaced,
         )
-        return portion.more
+        return more
     }
 
     /**

@@ -16,8 +16,9 @@ private val log = LoggerFactory.getLogger(FandomEditing::class.java)
 /**
  * THE USER'S WORD ON THE UNIVERSES — THE NORMALIZED FANDOMS: the user merges universes — binds the sites' fandoms of
  * one to another — takes a site's fandom out to a universe of its own, puts universes under others, tells two apart,
- * names one. The word is written and answered at once; every work of the sites' fandoms is drafted again after it
- * ([io.github.vlsergey.recommend4me.draft.LayerDrafts]), told by the dictionary's change ([UniverseChangeEvent]).
+ * names one. The word is written and answered at once, the universes it changed dated
+ * ([io.github.vlsergey.recommend4me.draft.DictionaryChanges]): the works drafted by them are read again by the index of
+ * the list, their drafts made as they are read ([io.github.vlsergey.recommend4me.draft.WorkDrafts]).
  */
 @Service
 class FandomEditing(
@@ -67,16 +68,14 @@ class FandomEditing(
 
     /**
      * The merged universe [from] gone: the user's answers on it moved to [into] in every source — of a work answered on
-     * both the newest standing — and it removed; the works whose answers moved told, and those drafted with it —
-     * drafted again at once by what they are told, never left naming a universe that is no more till every work of the
-     * source is drafted again in the queue.
+     * both the newest standing — and it removed; the works whose answers moved told. Their drafts are made as they are
+     * read, of the dictionary as it is: none names a universe that is no more.
      */
     private fun merged(from: Long, into: Long) {
         val gone = FandomRepository.value(from)
         sources().forEach { s ->
             val moved = s.corrections.moveFacetValues(UniverseFacet.KEY, listOf(gone), FandomRepository.value(into))
-            val told = moved + s.drafts.itemsOf(UniverseFacet.KEY, gone)
-            if (told.isNotEmpty()) events.publishEvent(WorkChangeEvent(s.id, told.toList()))
+            if (moved.isNotEmpty()) events.publishEvent(WorkChangeEvent(s.id, moved.toList()))
         }
     }
 

@@ -6,6 +6,8 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.U
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE_CHARACTER_PROPERTY
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE_CLASS
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE_PROPERTY
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import io.github.vlsergey.recommend4me.universe.TextsByLanguage.encode
 import io.github.vlsergey.recommend4me.universe.TextsByLanguage.encodeAll
 import java.time.Instant
@@ -39,6 +41,7 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
             writeCharacterStatements(t, catalogue, entry.id, characters)
             writeCharacterClasses(t, catalogue, entry.id, characters)
             writeClasses(t, catalogue, classes)
+            changed(t, catalogue, entry, now)
         }
     }
 
@@ -51,8 +54,21 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
             val t = tx.dsl()
             writeUniverse(t, catalogue, entry, properties, now)
             writeStatements(t, catalogue, entry)
+            changed(t, catalogue, entry, now)
         }
     }
+
+    /**
+     * The universes bound to the [entry] told changed ([DictionaryChanges]): what its statements and its characters
+     * draft of their works is read anew.
+     */
+    private fun changed(t: DSLContext, catalogue: String, entry: UniverseEntry, now: Instant) =
+        DictionaryChanges(t)
+            .values(
+                DictionaryKind.UNIVERSE,
+                FandomEntries(t).fandomsOf(UniverseKey(catalogue, entry.id)).map(FandomRepository::value),
+                now,
+            )
 
     /** The universe's own row: its texts, the languages and the [properties] it was asked in and for. */
     private fun writeUniverse(

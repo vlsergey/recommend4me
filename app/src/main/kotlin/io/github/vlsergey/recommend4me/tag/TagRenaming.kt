@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.tag
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.background.Background
-import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
@@ -73,12 +72,14 @@ class TagRenaming(
     /**
      * The tags changed by the user's word: THE WORD WRITTEN AND ANSWERED AT ONCE — the marking waits for nothing that
      * computes (user, 2026-10-16): the names and the counts of every tag worked out again in the queue of the
-     * computations after the quiet ([schedule]), shown on the counts kept till then; their works read again — their
-     * chances, their search — and the model of the grades trained again.
+     * computations after the quiet ([schedule]), shown on the counts kept till then; the model of the grades trained
+     * again. Their works are found by the changes of the dictionary the writes dated
+     * ([io.github.vlsergey.recommend4me.draft.DictionaryChanges]), never named here.
      */
-    fun changed(scope: TagScope, items: Collection<ItemKey>) {
+    fun changed(scope: TagScope) {
         schedule("tags")
-        tags.told(scope, items)
+        // No work named: the tags changed alone told
+        tags.told(scope, emptyList())
     }
 
     /**

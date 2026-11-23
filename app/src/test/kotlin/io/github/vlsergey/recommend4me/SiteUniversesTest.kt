@@ -12,12 +12,14 @@ import io.github.vlsergey.recommend4me.api.model.UniverseName
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.api.model.UniverseRelation
 import io.github.vlsergey.recommend4me.api.model.UniverseRelationRequest
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.universe.SiteFandomRef
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import kotlin.test.assertEquals
@@ -153,10 +155,11 @@ class SiteUniversesTest : SiteTestBase() {
         assertTrue(universes.listUniverses().body!!.none { it.value == lotr })
         assertEquals(hp, universeOf("lotr"))
         assertEquals(3, universes.getUniverse(hp).body!!.sites.size)
-        // A work of the fandom merged no answer was on drafted again at once, not left naming a universe that is no
-        // more till the background drafts every work
+        // A work of the fandom merged no answer was on drafted of the dictionary as it is, never naming a universe
+        // that is no more; its document of the list written anew by the change of the dictionary, no other work told
         assertEquals("The Lord of the Rings", valueOf("h5", "universe", hp)?.draftedFrom)
         assertNull(valueOf("h5", "universe", lotr))
+        assertListed("h5", hp, lotr)
         assertTrue(
             stores.source(site)!!.corrections.facetsOf("h3").any { it.facet == "universe" && it.key == hp },
             "h3 ${stores.source(site)!!.corrections.facetsOf("h3")}",
@@ -167,7 +170,6 @@ class SiteUniversesTest : SiteTestBase() {
         assertNotEquals(hp, ring)
         universes.relateUniverses(UniverseRelationRequest(hp, ring, UniverseRelation.CHILD))
         assertEquals(listOf(hp), universes.getUniverse(ring).body!!.parents)
-        inBackground { layerDrafts.redraftPlanned() }
         assertNotNull(valueOf("h3", "universe", ring)?.draftedFrom)
         assertNotNull(valueOf("h3", "universe", hp))
         // A word on the two in place of the word before; one under a universe of its own descendants refused: a loop
@@ -589,5 +591,16 @@ class SiteUniversesTest : SiteTestBase() {
         this.universeEntries.nameUniverseEntry("fake", "U2", LocalName(""))
         assertEquals("Pilot", characterName())
         assertNull(fleet().propertyEntries.single().localName)
+    }
+
+    /**
+     * The document of the work [id] in the index of the list, once the index is written of what changed, holds the
+     * universe [has] and not [hasNot].
+     */
+    private fun assertListed(id: String, has: String, hasNot: String) {
+        inBackground { listIndexing.writeWaiting("books") }
+        val key = ItemKey(site, id)
+        val listed = ListFacetValues.of(listIndexes.of("books"), listOf(key))[key]?.get(UniverseFacet.KEY).orEmpty()
+        assertTrue(has in listed && hasNot !in listed, "$id in the list: $listed")
     }
 }

@@ -34,7 +34,6 @@ class TagEditing(
         val a = scope.existing(tag)
         val b = scope.existing(other)
         if (a == null || b == null) return null
-        val before = tags.itemsOf(scope, facet, listOf(tag, other))
         val now = Instant.now()
         // What was said of the two taken back and the new word said, all or nothing: a refusal leaves them as they were
         scope.tags.transaction { t ->
@@ -55,7 +54,7 @@ class TagEditing(
         }
         if (relation == TagRelation.MERGED) moveMergedAnswers(scope, facet)
         log.info("{}: tag {} is {} to {}", scope.id, other, relation, tag)
-        renaming.changed(scope, before)
+        renaming.changed(scope)
         return tags.one(scope, facet, tag)
     }
 
@@ -91,14 +90,13 @@ class TagEditing(
      * it was. The user's answers stay with the tags they were given on. Returns the tag it is bound to now.
      */
     fun bind(scope: TagScope, facet: String, site: SiteTagRef, tag: String?): NamedTag? {
-        val was = scope.tags.bindings()[site]
+        val was = scope.tags.bindingsOf(site.source, listOf(site.tag))[site.tag]
         val known = tag?.let(scope::existing)
         if (was == null || (tag != null && known == null)) return null
-        val before = tags.itemsOf(scope, facet, listOfNotNull(TagRepository.key(was), tag))
         // A new tag of its own and the site's tag bound to it, both or neither
         val to = scope.tags.transaction { t -> (known ?: t.create()).also { t.bind(site, it, Instant.now()) } }
         log.info("{}: {} of {} bound to tag {}, was {}", scope.id, site.tag, site.source, to, was)
-        renaming.changed(scope, before)
+        renaming.changed(scope)
         return tags.one(scope, facet, TagRepository.key(to))
     }
 

@@ -119,7 +119,6 @@ class TagEntries(
         val upper = existing?.let(scope::existing)
         if (null in ids || (existing != null && upper == null)) return null
         val read = entryOf(catalogueOf(catalogue), entry)
-        val before = tags.itemsOf(scope, facet, children + listOfNotNull(existing))
         val now = Instant.now()
         // The tag, its entry and its place above the children, all or nothing; the catalogue asked before
         val id =
@@ -139,7 +138,7 @@ class TagEntries(
             read.id,
             children,
         )
-        renaming.changed(scope, before)
+        renaming.changed(scope)
         return tags.one(scope, facet, TagRepository.key(id))
     }
 

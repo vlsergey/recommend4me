@@ -3,6 +3,9 @@ package io.github.vlsergey.recommend4me.tag
 import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_TAG
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_TAG
+import io.github.vlsergey.recommend4me.draft.DictionaryChange
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -120,6 +123,7 @@ class TagRepository(private val db: DSLContext) {
             .set(SITE_TAG.NORMALIZED, id)
             .set(SITE_TAG.BOUND_AT, now)
             .execute()
+        DictionaryChanges(db).changed(listOf(DictionaryChange(DictionaryKind.TAG, site.source, site.tag)), now)
     }
 
     // --- The user's word on one tag ---

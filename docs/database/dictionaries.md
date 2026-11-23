@@ -4,6 +4,7 @@
 
 | Table | What it holds |
 |---|---|
+| `dictionary_change` | a change of a dictionary the works are drafted by, as it was written: a universe or a tag whose meaning to its works changed, or a site's fandom or tag bound anew (`source`, its key on the site); the index of the list writes anew the documents having it, from the last change it took |
 | `normalized_tag` | a tag of the user's: its id, the name the user gave it, whether it is ignored, whether it keeps its works out of the library (`keeps_out`: a work any site tags with it, or with a tag under it, is not kept) |
 | `site_tag` | a site's tag bound to a normalized tag, with its name and works as last counted |
 | `tag_stat` | a tag's works, graded and liked among them, as last counted (its sites are those of its bindings, `site_tag`); the name worked out of its entry or its sites' tags (`calculated_name`) and the rule it was worked out by |
@@ -53,6 +54,13 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
+    dictionary_change {
+        BIGINT id PK
+        VARCHAR kind
+        VARCHAR source "null"
+        VARCHAR value_key
+        TIMESTAMPTZ changed_at
+    }
     fandom {
         BIGINT id PK
         VARCHAR name "null"
@@ -278,6 +286,7 @@ erDiagram
         VARCHAR character_id PK, FK
         VARCHAR property PK
         VARCHAR property_value PK
+        VARCHAR value_lower "null"
     }
     universe_class {
         VARCHAR catalogue PK
@@ -297,6 +306,7 @@ erDiagram
         VARCHAR universe_id PK, FK
         VARCHAR property PK
         VARCHAR property_value PK
+        VARCHAR value_lower "null"
     }
     work_facet_complete {
         BIGINT work PK, FK

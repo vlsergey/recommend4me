@@ -12,7 +12,8 @@ import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.correction.UnknownRepository
 import io.github.vlsergey.recommend4me.database.Databases
-import io.github.vlsergey.recommend4me.draft.DraftRepository
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DraftDictionary
 import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
@@ -165,10 +166,12 @@ class SourceStore(
 
     /** What is worked out of the source's facets, in the model database of its content type. */
     /**
-     * The drafts of the layer of the source's works ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]),
-     * in the model database of its content type.
+     * The dictionary of universes as the drafts of a few works read it, by their keys
+     * ([DraftDictionary][io.github.vlsergey.recommend4me.draft.DraftDictionary]); none of a content type of no
+     * universes.
      */
-    val drafts = DraftRepository(databases.model(source.contentType), source.id)
+    val draftDictionary: DraftDictionary? =
+        if (contentType.universes) DraftDictionary(databases.dictionaries.dsl) else null
 
     val suggestions = SuggestionRepository(databases.model(source.contentType), source.id)
 
@@ -321,6 +324,10 @@ class TypeStore(
         UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
+
+    /** The changes of the dictionaries the works are drafted by, as they are written. */
+    val dictionaryChanges = DictionaryChanges(databases.dictionaries.dsl)
+
     val authors = AuthorRepository(databases.dictionaries.dsl, regrouped)
 
     val models = ModelRepository(databases.model(type.id))

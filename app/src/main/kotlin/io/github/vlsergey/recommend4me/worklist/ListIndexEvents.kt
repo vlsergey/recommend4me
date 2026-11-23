@@ -8,6 +8,8 @@ import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.tag.TagChangeEvent
+import io.github.vlsergey.recommend4me.universe.UniverseChangeEvent
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -44,6 +46,16 @@ internal class ListIndexEvents(
     @EventListener
     fun chaptersWritten(event: SiteItemChapterChangeEvent) =
         indexing.itemsChanged(source(event.source), event.ids, WorkDatum.CHAPTERS, "parts")
+
+    /**
+     * The dictionary of the universes changed: the documents it reaches written anew by what their drafts make now
+     * ([ListDictionary]), of every type with universes.
+     */
+    @EventListener(UniverseChangeEvent::class)
+    fun universesChanged() = stores.types.filter { it.type.universes }.forEach { indexing.plan(it.id, "universes") }
+
+    /** The tags of the [event]'s type changed: the documents their changes reach written anew ([ListDictionary]). */
+    @EventListener fun tagsChanged(event: TagChangeEvent) = indexing.plan(event.type, "tags")
 
     /** The works' pictures analysed: what their fields, expectations and sets read. */
     @EventListener

@@ -133,7 +133,7 @@ internal class FacetRead(
         // "the site's markup is the input, the user's markup the output"): of every work the values the user said it
         // has, with what they say of the tags above and under them. What the site gives the work — of the facet
         // itself, its examples of another — and the drafts of the layer
-        // ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]) are inputs of its pairs ([examplesOf])
+        // ([WorkDrafts][io.github.vlsergey.recommend4me.draft.WorkDrafts]) are inputs of its pairs ([examplesOf])
         val drafted =
             read.drafts
                 .mapValues { (_, list) -> list.filter { it.facet == facet.key }.map { it.key } }

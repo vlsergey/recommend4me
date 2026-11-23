@@ -564,7 +564,7 @@ characters turned on or read again from the universes screen or a site's page �
 answered is kept. An entry bound to no universe any more is gone with its characters.
 
 A work of a site with fandoms has the universe of every fandom its site gives it, and every universe
-above it, as a draft (`LayerDrafts`): a value the work has, nothing to confirm; the user's answer on
+above it, as a draft (`LayerDrafting`): a value the work has, nothing to confirm; the user's answer on
 the work — the site's fandom wrong, one it forgot — stands over it. A work its site says is of no
 universe (the fandom "originals") has none of its fandoms. A source without fandoms (author.today)
 has its works' universes offered by the model, to be confirmed, as before.
@@ -611,14 +611,20 @@ From them a source drafts values of the layer (`Source.draft`): AO3 matches its 
 universes and the names of its relationship tags ("A/B", "A & B") to characters by the tag, a
 romantic pair of two matched characters to a pairing — an entry's statement finds the universes bound
 to the entry; the application adds the universe of every drafted character the dictionary has in one
-universe whose characters are read alone (`LayerDrafts`). A name matching
+universe whose characters are read alone (`LayerDrafting`). A name matching
 nothing, or several entries, drafts nothing. Every matched character is a main one: the user moves
 it to the secondary ones.
 
-The drafts are derived data, kept in the type's model database (`layer_draft`), neither the
-site's nor the user's. They are made again when a work is captured or refreshed — before the model
-reads it — and of every work of the type when the dictionary changes; the works whose
-drafts changed are read again. A draft is a value the work has (`Chance.draftedFrom`): shown with
+The drafts are derived data, neither the site's nor the user's, and kept nowhere (2026-11-23): made
+of the work's values on its sites and the dictionary where the work is read — its card, a portion of
+the models' pass, the writing of its document of the list — the dictionary read by the keys the works
+have and the statements the source asks, never whole (`WorkDrafts`, `DraftDictionary`); the index of
+the list holds what they made. A write that changes what a universe or a tag means to its works — a
+binding, a merge, a universe put under another, an entry read anew — or binds a site's value anew
+dates it (`dictionary_change`, `DictionaryChanges`), naming no work; the writing of the index takes the
+changes after the last it took and writes anew the documents holding one of the values — found in the
+index itself — those whose drafts made otherwise dated so for the stages after it (`ListDictionary`).
+A draft is a value the work has (`Chance.draftedFrom`): shown with
 the site's value it came from instead of a chance, found by the search, read by the model as a
 value of the work. The user's answers come first — a draft taken away stays taken away, whatever
 it is made of again. The model learns from a draft the user has not confirmed with less weight

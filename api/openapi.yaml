@@ -4953,7 +4953,6 @@ components:
           - compareInterestScorers
           - countFandomWorks
           - countTags
-          - draftWorkLayer
           - encodeFandomNames
           - encodeSiteItemCasts
           - encodeSiteItemChapters

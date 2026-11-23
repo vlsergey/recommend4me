@@ -7,6 +7,8 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.N
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_TAG_PARENT
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_TAG
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.TAG_OFFERS
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -53,6 +55,8 @@ class TagRelationRepository(private val db: DSLContext) {
             .distinct()
             .forEach { (child, parent) -> moved.setParent(child, parent, true, now) }
         told.filter { (a, b) -> a != b }.distinct().forEach { (a, b) -> moved.setDistinct(a, b, true, now) }
+        // The works drafted [from] are drafted [into] now
+        DictionaryChanges(tx).values(DictionaryKind.TAG, listOf(TagRepository.key(from)), now)
     }
 
     /** The merges whose answers are still to be moved, the earliest first: tag merged, tag kept. */

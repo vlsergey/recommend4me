@@ -2,6 +2,9 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_SITE
+import io.github.vlsergey.recommend4me.draft.DictionaryChange
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 
@@ -61,6 +64,7 @@ class FandomSites(private val db: DSLContext) {
             .set(FANDOM_SITE.FANDOM, id)
             .set(FANDOM_SITE.BOUND_AT, now)
             .execute()
+        changed(site, now)
     }
 
     /** The works of every site's fandom as last counted ([FandomSiteWorks]); none of one not counted yet. */
@@ -95,7 +99,12 @@ class FandomSites(private val db: DSLContext) {
         db.deleteFrom(FANDOM_SITE)
             .where(FANDOM_SITE.SOURCE.eq(site.source), FANDOM_SITE.SITE_KEY.eq(site.key))
             .execute()
+        changed(site, Instant.now())
     }
+
+    /** The works of the site's fandom [site] drafted by another universe now: told ([DictionaryChanges]). */
+    private fun changed(site: SiteFandomRef, at: Instant) =
+        DictionaryChanges(db).changed(listOf(DictionaryChange(DictionaryKind.UNIVERSE, site.source, site.key)), at)
 
     private companion object {
         /** The widest key of a site's fandom kept: the width of its column. */

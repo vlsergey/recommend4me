@@ -9,7 +9,7 @@ import io.github.vlsergey.recommend4me.universe.LayerDraft
  * ([FacetDef.examplesFrom][io.github.vlsergey.recommend4me.source.FacetDef.examplesFrom]), every normalized tag a
  * site's tag of the work is bound to, drafted from it ([LayerDraft.from]: the site's tag by its name) — a value the
  * work is given, marked so, till the user says otherwise (user, 2026-11-19: what the site says is "a source of
- * information when filling the works' fields, if the user said nothing — but not for training"). Read with the drafts
+ * information when filling the works' fields, if the user said nothing — but not for training"). Made with the drafts
  * of the layer ([WorkDrafts]), never kept: of ficbook's million works the bindings of their tags change with every
  * merge of two.
  */
@@ -38,8 +38,9 @@ internal object TagDrafts {
 }
 
 /**
- * THE DRAFTS OF THE WORKS AS THEY ARE READ: the drafts of the layer kept ([DraftRepository]) and the tags drafted of
- * the site's tags ([TagDrafts]), one list a work. What is drafted again of the layer reads the kept alone.
+ * THE DRAFTS OF THE WORKS AS THEY ARE READ, made of their site's values and the dictionaries by the keys they have,
+ * never kept: the drafts of the layer ([LayerDrafting]) and the tags drafted of the site's tags ([TagDrafts]), one list
+ * a work.
  */
 internal object WorkDrafts {
     /** Of the works [ids] of the [store], whose site's values are [site], every draft. */
@@ -47,12 +48,16 @@ internal object WorkDrafts {
         store: SourceStore,
         ids: Collection<String>,
         site: Map<String, Map<String, List<String>>> = store.items.facetsOf(ids),
-    ): Map<String, List<LayerDraft>> = merged(store.drafts.ofItems(ids), TagDrafts.of(store, site))
+    ): Map<String, List<LayerDraft>> {
+        val wanted = ids as? Set<String> ?: ids.toHashSet()
+        val own = site.filterKeys { it in wanted }
+        return merged(LayerDrafting.of(store, own), TagDrafts.of(store, own))
+    }
 
     private fun merged(
-        kept: Map<String, List<LayerDraft>>,
+        layer: Map<String, List<LayerDraft>>,
         tags: Map<String, List<LayerDraft>>,
     ): Map<String, List<LayerDraft>> =
-        if (tags.isEmpty()) kept
-        else HashMap(kept).apply { tags.forEach { (id, list) -> merge(id, list) { a, b -> (a + b).distinct() } } }
+        if (tags.isEmpty()) layer
+        else HashMap(layer).apply { tags.forEach { (id, list) -> merge(id, list) { a, b -> (a + b).distinct() } } }
 }

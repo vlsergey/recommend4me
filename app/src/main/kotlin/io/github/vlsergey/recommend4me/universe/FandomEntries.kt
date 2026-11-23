@@ -3,6 +3,8 @@ package io.github.vlsergey.recommend4me.universe
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_ENTRY
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -71,6 +73,7 @@ class FandomEntries(private val db: DSLContext) {
             .set(FANDOM_ENTRY.BOUND_AT, now)
             .execute()
         renamed(id)
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(FandomRepository.value(id)), now)
     }
 
     /**
@@ -82,6 +85,7 @@ class FandomEntries(private val db: DSLContext) {
             .where(FANDOM_ENTRY.FANDOM.eq(id), FANDOM_ENTRY.CATALOGUE.eq(key.catalogue), FANDOM_ENTRY.ENTRY.eq(key.id))
             .execute()
         renamed(id)
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(FandomRepository.value(id)), Instant.now())
         if (fandomsOf(key).isEmpty()) {
             db.deleteFrom(UNIVERSE)
                 .where(UNIVERSE.CATALOGUE.eq(key.catalogue), UNIVERSE.UNIVERSE_ID.eq(key.id))

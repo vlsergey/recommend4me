@@ -7,7 +7,7 @@ import io.github.vlsergey.recommend4me.api.model.MarkVerdict
 import io.github.vlsergey.recommend4me.api.model.MarkingOrder
 import io.github.vlsergey.recommend4me.api.model.UniverseEntryBinding
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
-import io.github.vlsergey.recommend4me.task.inBackground
+import io.github.vlsergey.recommend4me.draft.LayerDrafting
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -39,8 +39,7 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         // The universe added: its pilot is stated to be the site's "Space Pilot" — drafted a main character
         // of the work captured before, and of one captured now; the universe with it, the pilot's alone
         u2 = universes.addUniverse(UniverseRef("fake", "U2")).body!!.value
-        // The works of the source drafted again in the background, the work captured now at once
-        inBackground { layerDrafts.redraftPlanned() }
+        // The works drafted of the dictionary as it is, as they are read: the work captured before and the one now
         capture("g2|Wingmen again|space|The friends fly once more|Space Pilot & Captain")
         listOf("g1", "g2").forEach { id ->
             val pilot = assertNotNull(valueOf(id, "characters", "fake:C1"), "characters of $id: ${facetsOf(id)}")
@@ -50,10 +49,10 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         }
         // The captain has no tag of the site in the catalogue: not drafted
         assertNull(valueOf("g1", "characters", "fake:C2")?.draftedFrom)
-        // Drafted of the layer, not of the site: kept in the model's database
+        // Drafted of the layer, not of the site: made of the dictionary as the work is read, kept nowhere
         assertEquals(
             setOf(UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.UNIVERSE to u2),
-            stores.source("site")!!.drafts.ofItems(listOf("g1")).getValue("g1").map { it.facet to it.key }.toSet(),
+            drafted("g1").getValue("g1").map { it.facet to it.key }.toSet(),
         )
         val pairing = pairingOfTheDictionary()
         pairingAnswered(pairing)
@@ -159,7 +158,7 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         assertEquals("Space Pilot", valueOf("g3", "characters", "fake:C1")?.draftedFrom)
         capture("g3|Wingmen third|space|They fly a third time|Captain & Navigator")
         assertNull(valueOf("g3", "characters", "fake:C1")?.draftedFrom)
-        assertTrue(stores.source("site")!!.drafts.ofItems(listOf("g3")).values.all { it.isEmpty() })
+        assertTrue(drafted("g3").values.all { it.isEmpty() })
 
         // The user takes the pilot away: taken away it stays, whatever the dictionary does
         corrections.correctFacet("site", "g1", FacetCorrection(facet = "characters", added = false, key = "fake:C1"))
@@ -178,8 +177,11 @@ class SiteUniverseDraftsTest : SiteTestBase() {
 
         // The entry gone, the drafts of it go too — what the model learnt of it is the model's to work out again
         universes.bindUniverseEntry(UniverseEntryBinding(u2, "fake", "U2", false))
-        inBackground { layerDrafts.redraftPlanned() }
         assertNull(valueOf("g2", "universe", u2)?.draftedFrom)
-        assertTrue(stores.source("site")!!.drafts.ofItems(listOf("g1", "g2")).values.all { it.isEmpty() })
+        assertTrue(drafted("g1", "g2").values.all { it.isEmpty() })
     }
+
+    /** The drafts of the layer the works [ids] of the site are given now. */
+    private fun drafted(vararg ids: String) =
+        stores.source("site")!!.let { s -> LayerDrafting.of(s, s.items.facetsOf(ids.toList())) }
 }

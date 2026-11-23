@@ -17,7 +17,6 @@
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
 | `facet_suggester` | the fitted state of the suggester of a facet — the model the chances of a work's values are made by when the work is read, none of them kept — the values it chooses from, its scoring of them apart from their names (every value's coordinates and bias, read by a page in place of the dictionary), its calibration by the user's answers with the cutoff of the likely (`calibration`), and how it was fitted: the report of what it tried and chose, how long it took, how many works and values it learnt from |
-| `layer_draft` | a value a source drafts of a work from its own values through the dictionary of universes |
 | `search_score` | the reranker's score of a work for a line searched |
 | `search_query_shift` | the closeness of a line and a passage by meaning corrected by the user's judgments: q·p + (q·a)(b·p), the two vectors of weights of the dimensions of the text encoder's vectors; the line's vector moved by it before it is searched |
 | `search_weight` | the order of what a search finds learnt of the user's judgments: of every feature a work is found by — how close by meaning, how its words matched, the reranker's score — its weight on its own scale |
@@ -100,13 +99,6 @@ erDiagram
         DOUBLE score "null"
         DOUBLE grade_place "null"
         CLOB explanation "null"
-    }
-    layer_draft {
-        VARCHAR source PK
-        VARCHAR item_id PK
-        VARCHAR facet PK
-        VARCHAR value_key PK
-        VARCHAR site_value PK
     }
     manner_words {
         BIGINT id PK

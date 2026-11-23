@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.HierarchyOffer
 import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
-import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.item.ExplanationController
 import io.github.vlsergey.recommend4me.item.FiltersController
 import io.github.vlsergey.recommend4me.item.GradesController
@@ -101,7 +100,6 @@ abstract class SiteTestBase : BaseTest() {
     @Autowired lateinit var textTags: TextTags
     @Autowired lateinit var pairingsApi: PairingsController
     @Autowired lateinit var marking: MarkingController
-    @Autowired lateinit var layerDrafts: LayerDrafts
 
     protected fun capture(body: String) =
         captures.capturePage(CaptureRequest("https://$site.example/work/${body.substringBefore('|')}", body))

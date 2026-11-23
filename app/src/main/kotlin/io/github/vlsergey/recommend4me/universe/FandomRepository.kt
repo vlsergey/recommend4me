@@ -3,6 +3,8 @@ package io.github.vlsergey.recommend4me.universe
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_ENTRY
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_SITE
+import io.github.vlsergey.recommend4me.draft.DictionaryChanges
+import io.github.vlsergey.recommend4me.draft.DictionaryKind
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -107,6 +109,7 @@ class FandomRepository(private val db: DSLContext) {
     /** Whether the characters of the entries of the fandom [id] are read and given to its works. */
     fun characters(id: Long, read: Boolean) {
         db.update(FANDOM).set(FANDOM.CHARACTERS, read).where(FANDOM.ID.eq(id)).execute()
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(value(id)), Instant.now())
     }
 
     /**
@@ -123,6 +126,8 @@ class FandomRepository(private val db: DSLContext) {
         relations.move(from, into, now)
         db.deleteFrom(FANDOM_ENTRY).where(FANDOM_ENTRY.FANDOM.eq(from)).execute()
         db.deleteFrom(FANDOM).where(FANDOM.ID.eq(from)).execute()
+        // The works of either drafted otherwise: of [from] by [into], of [into] by what it took of [from] above it
+        DictionaryChanges(db).values(DictionaryKind.UNIVERSE, listOf(value(from), value(into)), now)
     }
 
     /** The fandom [id] gone, with whatever entries of a catalogue it had; its sites' fandoms are let go of before. */

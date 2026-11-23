@@ -258,7 +258,8 @@ internal object ListRows {
      * them: the site's, the drafts of the layer, the models' of a facet it works out ([model]: of every item, by the
      * facet's key, beyond the site's own), the user's corrections on top — what the index keeps of them: of the items
      * [ids]. The authors and the site's fandoms no filter, kept for the search of duplicates to read of the index, not
-     * of the database (user, 2026-11-18; owner, 2026-11-22).
+     * of the database (user, 2026-11-18; owner, 2026-11-22); the site's facets the tags are drafted of, for the changes
+     * of the dictionaries to find their works by ([ListDictionary]).
      */
     fun facetsOf(
         s: SourceStore,
@@ -268,7 +269,12 @@ internal object ListRows {
         answers: Map<String, List<FacetCorrection>>? = null,
     ): Map<String, Map<String, List<String>>> {
         val fandoms = UniverseFacet.fandomFacet(s.schema)
-        val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR || it.key == fandoms }
+        // The site's own facets the tags are drafted of kept too: what a change of the dictionaries finds the works by
+        val drafting = s.schema.facets.mapNotNullTo(HashSet()) { it.examplesFrom }
+        val defs =
+            s.schema.facets.filter {
+                it.filter || it.role == FacetRole.AUTHOR || it.key == fandoms || it.key in drafting
+            }
         if (defs.isEmpty()) return emptyMap()
         val site = s.items.facetsOf(ids)
         val corrections = answers ?: s.corrections.facetsOf(ids)

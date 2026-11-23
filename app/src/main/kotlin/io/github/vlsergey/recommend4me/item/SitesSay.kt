@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.model.SiteSaid
 import io.github.vlsergey.recommend4me.api.model.SiteWord
+import io.github.vlsergey.recommend4me.draft.LayerDrafting
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -31,13 +32,14 @@ class SitesSay(private val plugins: Plugins) {
         val read = members.mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
             val head = s.items.find(m.id) ?: return@mapNotNull null
+            val facets = s.items.facets(m.id)
             Member(
                 m,
                 s,
                 head.url,
-                s.items.facets(m.id),
+                facets,
                 s.items.texts(m.id),
-                s.drafts.ofItems(listOf(m.id))[m.id].orEmpty(),
+                LayerDrafting.of(s, mapOf(m.id to facets))[m.id].orEmpty(),
             )
         }
         val bySource = read.map { it.store }.distinctBy { it.id }

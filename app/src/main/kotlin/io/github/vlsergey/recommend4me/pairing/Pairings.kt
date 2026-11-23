@@ -8,18 +8,25 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import io.github.vlsergey.recommend4me.worklist.ListFacetValues
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 
 /**
  * THE PAIRINGS KNOWN, none kept of their own: every pairing the models of the sources of the types with universes know,
  * with the weight the model gives it over the works as a whole ([FacetSuggestions.weights]), and every pairing a work
- * was answered on or drafted from the site's tags — of each, its characters, their universes, and the user's words on
- * the works by it. A new pairing is but its key: marked on, it is known. The works are marked by a pairing on its
- * screen through the confirming of the marking ([Marking][io.github.vlsergey.recommend4me.marking.Marking]).
+ * was answered on or has in the index of the list — drafted from the site's tags among them — of each, its characters,
+ * their universes, and the user's words on the works by it. A new pairing is but its key: marked on, it is known. The
+ * works are marked by a pairing on its screen through the confirming of the marking
+ * ([Marking][io.github.vlsergey.recommend4me.marking.Marking]).
  */
 @Service
-class Pairings(private val stores: Stores, private val suggestions: FacetSuggestions) {
+class Pairings(
+    private val stores: Stores,
+    private val suggestions: FacetSuggestions,
+    private val indexes: ListIndexes,
+) {
 
     /** The types with universes; the dictionary of universes is every type's, read through the first. */
     private fun types(): List<TypeStore> = stores.types.filter { it.type.universes }
@@ -29,7 +36,8 @@ class Pairings(private val stores: Stores, private val suggestions: FacetSuggest
         val yes = HashMap<String, Int>()
         val no = HashMap<String, Int>()
         val unknown = HashMap<String, Int>()
-        val drafted = HashSet<String>()
+        /** The pairings the works have in the index of the list: drafted, answered, or the models' kept. */
+        val listed = HashSet<String>()
 
         /** The weight of a pairing: the largest any source's model gives it. */
         val weights = HashMap<String, Double>()
@@ -37,6 +45,9 @@ class Pairings(private val stores: Stores, private val suggestions: FacetSuggest
 
     private fun known(types: List<TypeStore>): Known {
         val out = Known()
+        types.forEach { t ->
+            out.listed += indexes.of(t.id).searching { ListFacetValues.valuesOf(it, UniverseFacets.PAIRINGS) }
+        }
         types
             .flatMap { it.sources }
             .forEach { s ->
@@ -45,7 +56,6 @@ class Pairings(private val stores: Stores, private val suggestions: FacetSuggest
                     .filter { it.facet == UniverseFacets.PAIRINGS }
                     .forEach { c -> (if (c.added) out.yes else out.no).merge(c.key, 1, Int::plus) }
                 s.unknowns.ofFacet(UniverseFacets.PAIRINGS).forEach { out.unknown.merge(it.key, 1, Int::plus) }
-                s.drafts.ofFacets(listOf(UniverseFacets.PAIRINGS)).values.flatten().forEach { out.drafted += it.key }
                 suggestions.weights(s, UniverseFacets.PAIRINGS)?.forEach { (key, w) ->
                     out.weights.merge(key, w, ::maxOf)
                 }
@@ -58,7 +68,7 @@ class Pairings(private val stores: Stores, private val suggestions: FacetSuggest
         val dictionary = types.firstOrNull() ?: return emptyList()
         val known = known(types)
         val keys =
-            (known.weights.keys + known.yes.keys + known.no.keys + known.unknown.keys + known.drafted).filter {
+            (known.weights.keys + known.yes.keys + known.no.keys + known.unknown.keys + known.listed).filter {
                 UniverseFacet.members(it) != null
             }
         return described(dictionary, keys, known).sortedBy { it.name.lowercase() }

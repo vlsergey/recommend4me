@@ -78,7 +78,6 @@ flowchart LR
     w_compareInterestScorers{{"compareInterestScorers"}}
     w_countFandomWorks{{"countFandomWorks"}}
     w_countTags{{"countTags"}}
-    w_draftWorkLayer{{"draftWorkLayer"}}
     w_encodeFandomNames{{"encodeFandomNames"}}
     w_encodeSiteItemCasts{{"encodeSiteItemCasts"}}
     w_encodeSiteItemChapters{{"encodeSiteItemChapters"}}
@@ -215,10 +214,11 @@ flowchart LR
     e_TagChangeEvent --> w_encodeTagNames
     e_TagChangeEvent --> w_fitGradeModels
     e_TagChangeEvent --> w_measureWorkSizes
+    e_TagChangeEvent --> w_writeListIndex
     e_TagTextAnswerEvent --> w_fitTagTextModel
-    e_UniverseChangeEvent --> w_draftWorkLayer
     e_UniverseChangeEvent --> w_fitFieldModels
     e_UniverseChangeEvent --> w_nameFandoms
+    e_UniverseChangeEvent --> w_writeListIndex
     e_WorkCastNameFillEvent --> w_fillWorkFields
     e_WorkChangeEvent --> w_encodeFandomNames
     e_WorkChangeEvent --> w_encodeTagNames
