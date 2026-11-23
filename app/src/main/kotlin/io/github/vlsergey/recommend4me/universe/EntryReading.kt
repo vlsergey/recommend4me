@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.background.Background
-import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
@@ -111,10 +110,7 @@ class EntryReading(
                 try {
                     val key = UniverseKey(u.catalogue, u.id)
                     read(key, universes.fandoms.entries.charactersRead(key))
-                    stores.types
-                        .filter { it.type.universes }
-                        .flatMap { it.sources }
-                        .forEach { events.publishEvent(WorkChangeEvent(it.id, emptyList())) }
+                    events.publishEvent(UniverseChangeEvent)
                 } catch (e: Exception) {
                     // A BOUNDARY: an entry asked again of its catalogue's plugin and service in the
                     // background may fail in any way; the failure is logged and the next entry asked

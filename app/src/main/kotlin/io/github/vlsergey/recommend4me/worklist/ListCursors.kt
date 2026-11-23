@@ -55,15 +55,6 @@ internal class ListCursors(private val index: ListIndex) {
     /** The documents hold every change of the normalized works up to [at], kept with the next commit. */
     fun worksWritten(at: Long) = index.stages.changed(WORKS_WRITTEN, at)
 
-    /**
-     * When the source's items were last taken from the first as every item of it changed at once ([ListChanges.next]),
-     * milliseconds; nought of never.
-     */
-    fun begun(source: String): Long = index.stages.since(begunKey(source)) ?: 0L
-
-    /** The source's items taken from the first in a writing begun [at], kept with the next commit. */
-    fun begun(source: String, at: Long) = index.stages.changed(begunKey(source), at)
-
     /** Up to when the documents of the source hold every change of its items and of their works, milliseconds. */
     fun held(source: String): Long = minOf(written(source), worksWritten())
 
@@ -82,7 +73,5 @@ internal class ListCursors(private val index: ListIndex) {
         private fun itemKey(source: String) = "${PREFIX}items:$source"
 
         private fun writtenKey(source: String) = "${PREFIX}written:$source"
-
-        private fun begunKey(source: String) = "${PREFIX}begun:$source"
     }
 }

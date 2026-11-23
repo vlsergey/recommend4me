@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.item
 
-import io.github.vlsergey.recommend4me.database.source.tables.references.EVERY_ITEM_CHANGE
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.worklist.ItemCursor
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
@@ -15,13 +14,11 @@ import org.jooq.impl.DSL
  * names at all? the index has the date it was last built, a work the date it was last changed"; "a self-evident
  * decomposition of dependencies"): of every outer kind of its data ([WorkDatum]) — what the site says of it, its
  * chapters' texts, its reviews, its pictures analysed — the date its write gave it, and of any of them the date the
- * index of the list writes it anew by ([ITEM.CHANGED_AT]); of every item of the source at once, a dictionary its values
- * are drafted by. The index of the list brings the dates into the documents, and the stages of the tasks over the works
- * take the works by the kinds they read ([io.github.vlsergey.recommend4me.worklist.StageSweeps]).
+ * index of the list writes it anew by ([ITEM.CHANGED_AT]). The index of the list brings the dates into the documents,
+ * and the stages of the tasks over the works take the works by the kinds they read
+ * ([io.github.vlsergey.recommend4me.worklist.StageSweeps]).
  */
 class ItemChanges(private val db: DSLContext) {
-    private val every = EVERY_ITEM_CHANGE
-
     /** The [datum] of the items [ids] changed [at]. */
     fun changed(ids: Collection<String>, datum: WorkDatum, at: Instant) {
         val column = columnOf(datum)
@@ -29,14 +26,6 @@ class ItemChanges(private val db: DSLContext) {
             db.update(ITEM).set(ITEM.CHANGED_AT, at).set(column, at).where(ITEM.ITEM_ID.`in`(chunk)).execute()
         }
     }
-
-    /** Every item of the source changed [at]. */
-    fun everyChanged(at: Instant) {
-        db.mergeInto(every).columns(every.ID, every.CHANGED_AT).key(every.ID).values(ONE, at).execute()
-    }
-
-    /** When every item of the source last changed at once — a dictionary its values are drafted by —; none of never. */
-    fun every(): Instant? = db.select(every.CHANGED_AT).from(every).fetchOne()?.value1()
 
     /**
      * Of the items [ids] — of every item when null — the date every outer kind of their data last changed,
@@ -82,9 +71,6 @@ class ItemChanges(private val db: DSLContext) {
     private companion object {
         /** The items written by one statement: its length, not a meaning. */
         const val BATCH = 1000
-
-        /** The key of the one row of [EVERY_ITEM_CHANGE]. */
-        const val ONE = 1
 
         /** The column of the date of every outer kind of an item's own data. */
         val COLUMNS: Map<WorkDatum, Field<Instant?>> =

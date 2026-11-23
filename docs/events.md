@@ -59,6 +59,7 @@ flowchart LR
     e_SiteTagSynonymChangeEvent["SiteTagSynonymChangeEvent"]
     e_TagChangeEvent["TagChangeEvent"]
     e_TagTextAnswerEvent["TagTextAnswerEvent"]
+    e_UniverseChangeEvent["UniverseChangeEvent"]
     e_WorkCastNameFillEvent["WorkCastNameFillEvent"]
     e_WorkChangeEvent["WorkChangeEvent"]
     e_WorkChapterWindowFillEvent["WorkChapterWindowFillEvent"]
@@ -162,19 +163,22 @@ flowchart LR
     o_start --> w_searchAuthorDuplicates
     o_start --> w_searchDuplicates
     o_start --> w_writeListIndex
-    o_universes_languages --> e_WorkChangeEvent
+    o_universes_languages --> e_UniverseChangeEvent
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
     e_FieldModelFitEvent --> w_fillWorkFields
     e_RatedWorkValueFillEvent --> w_fitGradeModels
     e_SearchJudgmentEvent --> w_fitSearchWeights
     e_SiteFandomBindingChangeEvent --> e_FandomRelationChangeEvent
+    e_SiteFandomBindingChangeEvent --> e_UniverseChangeEvent
     e_SiteFandomBindingChangeEvent --> e_WorkChangeEvent
     e_SiteFandomBindingChangeEvent --> w_renameFandoms
     e_SiteFandomParentChangeEvent --> e_FandomRelationChangeEvent
+    e_SiteFandomParentChangeEvent --> e_UniverseChangeEvent
     e_SiteFandomParentChangeEvent --> e_WorkChangeEvent
     e_SiteFandomParentChangeEvent --> w_renameFandoms
     e_SiteFandomSynonymChangeEvent --> e_FandomRelationChangeEvent
+    e_SiteFandomSynonymChangeEvent --> e_UniverseChangeEvent
     e_SiteFandomSynonymChangeEvent --> e_WorkChangeEvent
     e_SiteFandomSynonymChangeEvent --> w_renameFandoms
     e_SiteItemCastEncodeEvent --> w_fitFieldModels
@@ -212,8 +216,10 @@ flowchart LR
     e_TagChangeEvent --> w_fitGradeModels
     e_TagChangeEvent --> w_measureWorkSizes
     e_TagTextAnswerEvent --> w_fitTagTextModel
+    e_UniverseChangeEvent --> w_draftWorkLayer
+    e_UniverseChangeEvent --> w_fitFieldModels
+    e_UniverseChangeEvent --> w_nameFandoms
     e_WorkCastNameFillEvent --> w_fillWorkFields
-    e_WorkChangeEvent --> w_draftWorkLayer
     e_WorkChangeEvent --> w_encodeFandomNames
     e_WorkChangeEvent --> w_encodeTagNames
     e_WorkChangeEvent --> w_fitFieldModels
@@ -279,15 +285,15 @@ flowchart LR
 
 | Request | Events | Works |
 |---|---|---|
-| `addUniverse` | WorkChangeEvent | — |
+| `addUniverse` | UniverseChangeEvent | — |
 | `answerAuthors` | WorkGroupChangeEvent | — |
 | `answerDuplicate` | WorkGradeChangeEvent, WorkInterestChangeEvent | fitDuplicateModel |
 | `answerMarking` | WorkFieldChangeEvent | — |
 | `answerTagByText` | TagTextAnswerEvent, WorkFieldChangeEvent | — |
-| `bindSiteFandom` | FandomRelationChangeEvent, WorkChangeEvent | renameFandoms |
+| `bindSiteFandom` | FandomRelationChangeEvent, UniverseChangeEvent | renameFandoms |
 | `bindSiteTag` | TagChangeEvent, WorkChangeEvent | nameTags |
 | `bindTagEntry` | TagChangeEvent, WorkChangeEvent | — |
-| `bindUniverseEntry` | WorkChangeEvent | — |
+| `bindUniverseEntry` | UniverseChangeEvent | — |
 | `cancelJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `capturePage` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `chooseFacetCast` | — | searchFieldModelAnew |
@@ -295,9 +301,9 @@ flowchart LR
 | `chooseInterestScorer` | — | fitGradeModels |
 | `choosePairMethod` | — | fitDuplicateModel, searchDuplicates |
 | `chooseScorer` | — | fitGradeModels |
-| `chooseUniverseCharacters` | WorkChangeEvent | — |
-| `chooseUniverseClass` | WorkChangeEvent | — |
-| `chooseUniverseEntry` | WorkChangeEvent | — |
+| `chooseUniverseCharacters` | UniverseChangeEvent | — |
+| `chooseUniverseClass` | UniverseChangeEvent | — |
+| `chooseUniverseEntry` | UniverseChangeEvent | — |
 | `completeFacet` | WorkFieldChangeEvent | — |
 | `correctFacet` | TagChangeEvent, WorkChangeEvent, WorkFieldChangeEvent | nameTags |
 | `correctField` | SiteItemTextVectorChangeEvent, WorkChangeEvent | fitGradeModels, writeWorkValues |
@@ -321,17 +327,17 @@ flowchart LR
 | `measurePartWorth` | — | measurePartWorth |
 | `measureWeighing` | — | weighParts |
 | `nameTag` | TagChangeEvent, WorkChangeEvent | — |
-| `nameUniverse` | FandomRelationChangeEvent, WorkChangeEvent | renameFandoms |
-| `nameUniverseEntry` | WorkChangeEvent | — |
+| `nameUniverse` | FandomRelationChangeEvent, UniverseChangeEvent | renameFandoms |
+| `nameUniverseEntry` | UniverseChangeEvent | — |
 | `rateItem` | WorkGradeChangeEvent | — |
 | `refreshItem` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemTextVectorChangeEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | writeWorkValues |
 | `refreshTagEntries` | TagChangeEvent, WorkChangeEvent | — |
-| `refreshUniverse` | WorkChangeEvent | — |
+| `refreshUniverse` | UniverseChangeEvent | — |
 | `relateTags` | TagChangeEvent, WorkChangeEvent | nameTags |
-| `relateUniverses` | FandomRelationChangeEvent, WorkChangeEvent | renameFandoms |
+| `relateUniverses` | FandomRelationChangeEvent, UniverseChangeEvent, WorkChangeEvent | renameFandoms |
 | `removeItem` | SiteItemRemoveEvent | — |
-| `resetUniverseClass` | WorkChangeEvent | — |
-| `resetUniverseEntry` | WorkChangeEvent | — |
+| `resetUniverseClass` | UniverseChangeEvent | — |
+| `resetUniverseEntry` | UniverseChangeEvent | — |
 | `searchAuthorDuplicates` | — | searchAuthorDuplicates |
 | `searchDuplicates` | — | searchDuplicates |
 | `searchFacetModel` | — | searchFieldModelAnew |

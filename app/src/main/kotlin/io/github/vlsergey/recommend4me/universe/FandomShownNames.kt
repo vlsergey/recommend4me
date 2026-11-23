@@ -17,8 +17,7 @@ private val log = LoggerFactory.getLogger(FandomShownNames::class.java)
  * the first entry of the catalogue it is bound to in the user's languages, else the one worked out of its sites'
  * fandoms ([FandomNames.computed]) — a page of the list names its universes by their ids alone ([FandomNames.of]).
  * Worked out again in the queue of the computations after a quiet, of every universe at once, the changed alone
- * written: on the start, on a change of the dictionary (told as every work of a source changed), and as works come and
- * bind new fandoms.
+ * written: on the start, on a change of the dictionary ([UniverseChangeEvent]), and as works come and bind new fandoms.
  */
 @Component
 class FandomShownNames(private val stores: Stores, private val tasks: Tasks) {
@@ -28,7 +27,9 @@ class FandomShownNames(private val stores: Stores, private val tasks: Tasks) {
         tasks.resumption.resumes(WORK.what) { _, reason -> plan(reason) }
     }
 
-    @EventListener fun itemsChanged(event: WorkChangeEvent) = plan(if (event.ids.isEmpty()) "universes" else "items")
+    @EventListener(WorkChangeEvent::class) fun itemsChanged() = plan("items")
+
+    @EventListener(UniverseChangeEvent::class) fun universesChanged() = plan("universes")
 
     private fun plan(reason: String) {
         if (stores.types.none { it.type.universes }) return

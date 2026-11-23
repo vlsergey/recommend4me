@@ -1,7 +1,5 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.item.WorkChangeEvent
-import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -25,16 +23,16 @@ class Universes(
     private val reading: EntryReading,
     private val events: ApplicationEventPublisher,
 ) {
-    /** The one dictionary, and every source of every type that has universes: what reads it. */
-    private class Scope(val universes: UniverseRepository, val sources: List<SourceStore>) {
+    /** The one dictionary of the types that have universes. */
+    private class Scope(val universes: UniverseRepository) {
         val fandoms: FandomRepository
             get() = universes.fandoms
     }
 
     private fun scope(): Scope {
-        val types = stores.types.filter { it.type.universes }
-        val first = types.firstOrNull() ?: throw NoSuchElementException("No type has universes")
-        return Scope(first.universes, types.flatMap { it.sources })
+        val first =
+            stores.types.firstOrNull { it.type.universes } ?: throw NoSuchElementException("No type has universes")
+        return Scope(first.universes)
     }
 
     /**
@@ -54,7 +52,7 @@ class Universes(
         val made =
             scope.fandoms.transaction { f -> f.create(now, characters = true).also { f.entries.bind(it, key, now) } }
         log.info("The entry {} made the universe {}, its characters read", key.value, made)
-        dictionaryChanged(scope)
+        dictionaryChanged()
         return made
     }
 
@@ -71,7 +69,7 @@ class Universes(
             scope.fandoms.entries.bind(fandom, key, Instant.now())
         } else scope.fandoms.entries.unbind(fandom, key)
         log.info("The universe {} {} the entry {}", fandom, if (bound) "bound to" else "no more bound to", key.value)
-        dictionaryChanged(scope)
+        dictionaryChanged()
     }
 
     /**
@@ -83,7 +81,7 @@ class Universes(
         scope.fandoms.rowsOf(listOf(fandom))[fandom] ?: throw NoSuchElementException("No universe $fandom")
         scope.fandoms.characters(fandom, read)
         log.info("The characters of the universe {} {}", fandom, if (read) "read" else "no more read")
-        if (read) readOf(fandom) else dictionaryChanged(scope)
+        if (read) readOf(fandom) else dictionaryChanged()
     }
 
     /** The entries of the universe [fandom] read again of the catalogue, their characters too when it reads them. */
@@ -93,7 +91,7 @@ class Universes(
         scope.fandoms.entries.of(fandom).forEach { key ->
             reading.read(key, scope.fandoms.entries.charactersRead(key))
         }
-        dictionaryChanged(scope)
+        dictionaryChanged()
     }
 
     /**
@@ -109,7 +107,7 @@ class Universes(
             UniverseFacet.valueOf(catalogueId, id),
             name?.trim()?.takeIf { it.isNotEmpty() } ?: "as the catalogue names it",
         )
-        dictionaryChanged(scope)
+        dictionaryChanged()
     }
 
     /** The user's word on a class of the entry's entries — kept, left out, or null: as the catalogue says. */
@@ -117,7 +115,7 @@ class Universes(
         val scope = scope()
         scope.universes.findEntry(catalogueId, id) ?: throw NoSuchElementException("No entry $catalogueId:$id")
         scope.universes.entries.chooseClass(catalogueId, id, cls, included)
-        dictionaryChanged(scope)
+        dictionaryChanged()
     }
 
     /** The user's word on one entry of the entry — kept, left out, or null: as its classes say. */
@@ -125,11 +123,9 @@ class Universes(
         val scope = scope()
         scope.universes.findEntry(catalogueId, id) ?: throw NoSuchElementException("No entry $catalogueId:$id")
         scope.universes.entries.chooseEntry(catalogueId, id, character, included)
-        dictionaryChanged(scope)
+        dictionaryChanged()
     }
 
-    /** The dictionary is what the model chooses from: every source that reads it is worked out again. */
-    private fun dictionaryChanged(scope: Scope) {
-        scope.sources.forEach { events.publishEvent(WorkChangeEvent(it.id, emptyList())) }
-    }
+    /** The dictionary is what the model chooses from: what reads it is worked out again ([UniverseChangeEvent]). */
+    private fun dictionaryChanged() = events.publishEvent(UniverseChangeEvent)
 }

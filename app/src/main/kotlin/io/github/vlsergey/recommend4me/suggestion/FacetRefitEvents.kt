@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
+import io.github.vlsergey.recommend4me.universe.UniverseChangeEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -33,18 +34,25 @@ internal class FacetRefitEvents(private val refits: FacetRefits, private val sto
     /** The names of the works' casts encoded: the models of the characters and pairings read them. */
     @EventListener fun castNamesEncoded(event: SiteItemCastEncodeEvent) = ofLearnt(event.source, event.ids, "castNames")
 
+    /**
+     * The dictionary of the universes changed — what the models of the characters and the universes choose from —:
+     * every source of a type with universes refitted.
+     */
+    @EventListener(UniverseChangeEvent::class)
+    fun universesChanged() =
+        stores.types.filter { it.type.universes }.flatMap { it.sources }.forEach { refits.changed(it.id, "universes") }
+
     /** The user's answer on a work's value: what the models of the facets learn from. */
     @EventListener fun answered(event: WorkFieldChangeEvent) = refits.changed(event.source, "answer")
 
     /**
      * The items [ids] of the [source] changed, for the [reason]: the refit planned when one of them is of a work the
-     * user answered on or rated — of no ids, the source whole, always.
+     * user answered on or rated.
      */
     private fun ofLearnt(source: String, ids: Collection<String>, reason: String) {
         val s = stores.source(source) ?: return
         val learnt =
-            ids.isEmpty() ||
-                s.corrections.facetsOf(ids).values.any { it.isNotEmpty() } ||
+            s.corrections.facetsOf(ids).values.any { it.isNotEmpty() } ||
                 s.ratings.ofItems(ids).isNotEmpty() ||
                 s.interest.ofItems(ids).isNotEmpty()
         if (learnt) refits.changed(source, reason)

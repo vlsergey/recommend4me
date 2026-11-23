@@ -36,8 +36,9 @@ data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>)
  * work again by the date of what it reads ([StageSweeps]); a document other than written with its dates alike by what
  * is drafted of it — a dictionary its values are drafted by — dated so ([WorkDatum.DATA]). Where the writing stands
  * moves with every portion, kept with the commit ([ListCursors]); of an index current as of nought, every item is taken
- * from the first. The documents of the items gone from their source removed as every change is written; the passes over
- * the works told what changed ([WorkDocumentWriteEvent]).
+ * from the first. A dictionary changed names no item: what is drafted of it anew tells the works it changed. The
+ * documents of the items gone from their source removed as every change is written; the passes over the works told what
+ * changed ([WorkDocumentWriteEvent]).
  *
  * Nothing is named in the queue: what changed is read of the databases when the work runs, and a stop loses nothing.
  */
@@ -52,11 +53,12 @@ class ListIndexing(
     private val plugins: Plugins,
 ) {
     /**
-     * The [datum] of the items [ids] of the source [s] changed — of none, every item of it: dated
+     * The [datum] of the items [ids] of the source [s] changed: dated
      * ([io.github.vlsergey.recommend4me.item.ItemChanges]), the writing planned for the [reason] the interface words.
      */
     fun itemsChanged(s: SourceStore, ids: Collection<String>, datum: WorkDatum, reason: String) {
-        if (ids.isEmpty()) s.changes.everyChanged(Instant.now()) else s.changes.changed(ids, datum, Instant.now())
+        if (ids.isEmpty()) return
+        s.changes.changed(ids, datum, Instant.now())
         plan(s.type, reason)
     }
 

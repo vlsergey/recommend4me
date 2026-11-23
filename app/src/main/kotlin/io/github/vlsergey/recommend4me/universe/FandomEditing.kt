@@ -17,7 +17,7 @@ private val log = LoggerFactory.getLogger(FandomEditing::class.java)
  * THE USER'S WORD ON THE UNIVERSES — THE NORMALIZED FANDOMS: the user merges universes — binds the sites' fandoms of
  * one to another — takes a site's fandom out to a universe of its own, puts universes under others, tells two apart,
  * names one. The word is written and answered at once; every work of the sites' fandoms is drafted again after it
- * ([io.github.vlsergey.recommend4me.draft.LayerDrafts]), told by a change of the works of every source.
+ * ([io.github.vlsergey.recommend4me.draft.LayerDrafts]), told by the dictionary's change ([UniverseChangeEvent]).
  */
 @Service
 class FandomEditing(
@@ -146,12 +146,12 @@ class FandomEditing(
 
     /**
      * The universes [renamed] named anew of their sites' fandoms, in the queue — the request does not wait for their
-     * works counted — and every source of the universes told: its works are drafted again, and read again by what they
-     * are named and found by.
+     * works counted — and the dictionary's change told ([UniverseChangeEvent]): the works are drafted again, those
+     * whose drafts changed read again.
      */
     private fun changed(renamed: List<Long>) {
         if (renamed.isNotEmpty()) normalization.renameLater(renamed)
-        sources().forEach { events.publishEvent(WorkChangeEvent(it.id, emptyList())) }
+        events.publishEvent(UniverseChangeEvent)
         events.publishEvent(FandomRelationChangeEvent)
     }
 }

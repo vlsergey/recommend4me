@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component
  * the vectors goes over its works ([io.github.vlsergey.recommend4me.textvector.TextVectors]): of every work of its turn
  * whose document holds other vectors of its texts than its source keeps — made by the turn, or as the user opened the
  * work — the document written anew with them, everything else of it as written: its stages and the dates of what they
- * made. A document of a change the index has not written yet — of its item, of its work, or of every item of its source
- * — is left to that writing, which reads the vectors with the rest: written here, the change would come into the index
- * past the stages that take the works by it ([StageSweeps.written]). Nothing planned, nothing told: the stage dates the
- * vectors it made as the other stages date what they make ([StageSweeps.made]).
+ * made. A document of a change the index has not written yet — of its item or of its work — is left to that writing,
+ * which reads the vectors with the rest: written here, the change would come into the index past the stages that take
+ * the works by it ([StageSweeps.written]). Nothing planned, nothing told: the stage dates the vectors it made as the
+ * other stages date what they make ([StageSweeps.made]).
  */
 @Component
 class ListVectors(private val works: Works, private val indexes: ListIndexes, private val plugins: Plugins) {
@@ -25,12 +25,9 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
     fun bring(type: TypeStore, keys: Collection<ItemKey>): Int {
         val encoder = plugins.textEncoder()?.id ?: return 0
         val index = indexes.of(type.id)
-        val cursors = ListCursors(index)
         val clusters = lazy { works.of(type) }
         return keys.groupBy({ it.source }, { it.id }).entries.sumOf { (sourceId, ids) ->
-            val s = type.source(sourceId)
-            val every = s?.changes?.every()?.toEpochMilli() ?: 0L
-            if (s == null || every > cursors.written(s.id)) 0 else bring(s, ids, encoder, index, clusters)
+            type.source(sourceId)?.let { bring(it, ids, encoder, index, clusters) } ?: 0
         }
     }
 

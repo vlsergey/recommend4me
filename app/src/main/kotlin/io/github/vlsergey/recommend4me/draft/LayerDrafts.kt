@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.universe.DictionaryLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
+import io.github.vlsergey.recommend4me.universe.UniverseChangeEvent
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
@@ -31,9 +32,9 @@ private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
  * ([FandomRepository][io.github.vlsergey.recommend4me.universe.FandomRepository]) and every universe above it.
  *
  * Made again when the work is captured or refreshed — before anything reads it — and, of every work of the type, when
- * the dictionary or the universes change and on start — these in the background, in the queue of the computations
- * ([Tasks]), never on the thread of the start or of a request: the works whose drafts changed are then read again as
- * any changed work is.
+ * the dictionary of the universes changes ([UniverseChangeEvent]) and on start — these in the background, in the queue
+ * of the computations ([Tasks]), never on the thread of the start or of a request: the works whose drafts changed are
+ * then read again as any changed work is.
  *
  * A draft is a value the work is given, marked so
  * ([Chance.draftedFrom][io.github.vlsergey.recommend4me.suggestion.Chance.draftedFrom]); the user's answers override
@@ -54,17 +55,13 @@ class LayerDrafts(
 
     /**
      * After the sites' tags are bound ([TagNormalization][io.github.vlsergey.recommend4me.tag.TagNormalization]),
-     * before the model reads the works: the works written drafted at once — a few, before anything reads them. Every
-     * work of the source — the dictionary changed — drafted in the background.
+     * before the model reads the works: the works written drafted at once — a few, before anything reads them.
      */
     @Order(ORDER)
     @EventListener
     fun itemsChanged(event: WorkChangeEvent) {
         val store = stores.source(event.source)?.takeIf(::drafts) ?: return
-        if (event.ids.isEmpty()) {
-            redraftLater(store.id, "dictionary")
-            return
-        }
+        if (event.ids.isEmpty()) return
         val lookup = DictionaryLookup.load(stores.typeOf(store.id).universes)
         // Of many works one streamed pass, not a thousand at a time: each IN of a thousand is a scan in H2
         val facets = store.items.facetsOf(event.ids)
@@ -74,6 +71,10 @@ class LayerDrafts(
         val names = keys.mapValues { (facet, values) -> store.items.facetNames(facet, values) }
         redraft(store, lookup, event.ids, facets, names, store.drafts.ofItems(event.ids))
     }
+
+    /** The dictionary of the universes changed: every work of every source that drafts drafted in the background. */
+    @EventListener(UniverseChangeEvent::class)
+    fun universesChanged() = stores.sources.filter(::drafts).forEach { redraftLater(it.id, "dictionary") }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
