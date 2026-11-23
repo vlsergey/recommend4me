@@ -108,9 +108,7 @@ internal object ListQuery {
     ): Pair<Int, List<ItemKey>> {
         if (relevance.isEmpty()) return 0 to emptyList()
         val found =
-            relevance.keys.chunked(ListIndex.BATCH).flatMap { chunk ->
-                ListWorks.found(db, where.and(ITEM.ITEM_KEY.`in`(chunk.map { it.toString() })))
-            }
+            ListAmong.of(db, relevance.keys.map { it.toString() }) { ListWorks.found(db, where.and(ListIndex.AMONG)) }
         val best =
             found
                 .groupBy { it.work }

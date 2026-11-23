@@ -17,10 +17,10 @@ object ListFacetValues {
         val out = HashMap<ItemKey, LinkedHashMap<String, MutableList<String>>>()
         val v = ITEM_VALUE
         index.searching { db ->
-            keys.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+            ListAmong.of(db, keys.map { it.toString() }) {
                 db.select(v.ITEM_KEY, v.FACET, v.VALUE_KEY)
                     .from(v)
-                    .where(v.ITEM_KEY.`in`(chunk.map { it.toString() }))
+                    .where(ListAmong.keyIn(v.ITEM_KEY))
                     .orderBy(v.ITEM_KEY, v.FACET, v.POS)
                     .fetch { r ->
                         out.getOrPut(ItemKey.parse(r.value1()!!)) { LinkedHashMap() }

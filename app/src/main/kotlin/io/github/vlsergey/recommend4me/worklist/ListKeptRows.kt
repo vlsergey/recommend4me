@@ -103,14 +103,14 @@ object ListKeptRows {
 
     /** Of the items [ids] of the [source], their rows as the [db] holds them; an item of none left out. */
     fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, KeptRow> {
+        if (ids.isEmpty()) return emptyMap()
         val out = HashMap<String, KeptRow>()
-        ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
-            val keys = chunk.map { ItemKey(source, it).toString() }
-            val facets = facetsOf(db, keys)
-            val numbers = numbersOf(db, keys)
-            val texts = textsOf(db, keys)
-            val vectors = vectorsOf(db, keys)
-            db.select(COLUMNS).from(ITEM).where(ITEM.ITEM_KEY.`in`(keys)).fetch { r ->
+        ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
+            val facets = facetsOf(db)
+            val numbers = numbersOf(db)
+            val texts = textsOf(db)
+            val vectors = vectorsOf(db)
+            db.select(COLUMNS).from(ITEM).where(ListIndex.AMONG).fetch { r ->
                 val key = r.get(ITEM.ITEM_KEY)!!
                 out[ItemKey.parse(key).id] =
                     KeptRow(
@@ -134,13 +134,13 @@ object ListKeptRows {
         return out
     }
 
-    /** Of the items [keys], their facets' values in their order. */
-    private fun facetsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, List<String>>> {
+    /** Of the items of the block ([ListAmong]), their facets' values in their order. */
+    private fun facetsOf(db: DSLContext): Map<String, Map<String, List<String>>> {
         val out = HashMap<String, LinkedHashMap<String, MutableList<String>>>()
         val v = ITEM_VALUE
         db.select(v.ITEM_KEY, v.FACET, v.VALUE_KEY)
             .from(v)
-            .where(v.ITEM_KEY.`in`(keys))
+            .where(ListAmong.keyIn(v.ITEM_KEY))
             .orderBy(v.ITEM_KEY, v.FACET, v.POS)
             .fetch { r ->
                 out.getOrPut(r.value1()!!) { LinkedHashMap() }.getOrPut(r.value2()!!) { ArrayList() } += r.value3()!!
@@ -148,31 +148,31 @@ object ListKeptRows {
         return out
     }
 
-    /** Of the items [keys], their numbers. */
-    private fun numbersOf(db: DSLContext, keys: List<String>): Map<String, Map<String, Double>> {
+    /** Of the items of the block ([ListAmong]), their numbers. */
+    private fun numbersOf(db: DSLContext): Map<String, Map<String, Double>> {
         val out = HashMap<String, HashMap<String, Double>>()
         val n = ITEM_NUMBER
-        db.select(n.ITEM_KEY, n.NUMBER_ID, n.CONTENT).from(n).where(n.ITEM_KEY.`in`(keys)).fetch { r ->
+        db.select(n.ITEM_KEY, n.NUMBER_ID, n.CONTENT).from(n).where(ListAmong.keyIn(n.ITEM_KEY)).fetch { r ->
             out.getOrPut(r.value1()!!) { HashMap() }[r.value2()!!] = r.value3()!!
         }
         return out
     }
 
-    /** Of the items [keys], their texts held whole. */
-    private fun textsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, String>> {
+    /** Of the items of the block ([ListAmong]), their texts held whole. */
+    private fun textsOf(db: DSLContext): Map<String, Map<String, String>> {
         val out = HashMap<String, HashMap<String, String>>()
         val t = ITEM_TEXT
-        db.select(t.ITEM_KEY, t.TEXT_KEY, t.CONTENT).from(t).where(t.ITEM_KEY.`in`(keys)).fetch { r ->
+        db.select(t.ITEM_KEY, t.TEXT_KEY, t.CONTENT).from(t).where(ListAmong.keyIn(t.ITEM_KEY)).fetch { r ->
             out.getOrPut(r.value1()!!) { HashMap() }[r.value2()!!] = r.value3()!!
         }
         return out
     }
 
-    /** Of the items [keys], the vectors of their texts by the fields of their encoders. */
-    private fun vectorsOf(db: DSLContext, keys: List<String>): Map<String, Map<String, ByteArray>> {
+    /** Of the items of the block ([ListAmong]), the vectors of their texts by the fields of their encoders. */
+    private fun vectorsOf(db: DSLContext): Map<String, Map<String, ByteArray>> {
         val out = HashMap<String, HashMap<String, ByteArray>>()
         val u = ITEM_VECTOR
-        db.select(u.ITEM_KEY, u.ENCODER, u.TEXT_KEY, u.VEC).from(u).where(u.ITEM_KEY.`in`(keys)).fetch { r ->
+        db.select(u.ITEM_KEY, u.ENCODER, u.TEXT_KEY, u.VEC).from(u).where(ListAmong.keyIn(u.ITEM_KEY)).fetch { r ->
             out.getOrPut(r.value1()!!) { HashMap() }[ListTexts.vectorField(r.value2()!!, r.value3()!!)] = r.value4()!!
         }
         return out

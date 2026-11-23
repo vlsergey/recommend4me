@@ -15,12 +15,13 @@ import org.jooq.DSLContext
 object ListModelValues {
     /** Of the items [ids] of the [source]: item to facet to values; an item of none, or of no row, left out. */
     fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, Map<String, List<String>>> {
+        if (ids.isEmpty()) return emptyMap()
         val out = HashMap<String, HashMap<String, MutableList<String>>>()
         val m = ITEM_MODEL
-        ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+        ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             db.select(m.ITEM_KEY, m.FACET, m.VALUE_KEY)
                 .from(m)
-                .where(m.ITEM_KEY.`in`(chunk.map { ItemKey(source, it).toString() }))
+                .where(ListAmong.keyIn(m.ITEM_KEY))
                 .orderBy(m.ITEM_KEY, m.FACET, m.POS)
                 .fetch { r ->
                     out.getOrPut(ItemKey.parse(r.value1()!!).id) { HashMap() }.getOrPut(r.value2()!!) { ArrayList() } +=

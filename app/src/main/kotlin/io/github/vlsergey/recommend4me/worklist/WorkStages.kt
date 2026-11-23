@@ -143,14 +143,11 @@ class WorkStages(private val at: Map<WorkStage, Long>) {
             index.written { db ->
                 val out = HashMap<String, WorkStages>()
                 val columns = WorkStage.entries.map { it.column }
-                ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
-                    db.select(listOf(ITEM.ITEM_KEY) + columns)
-                        .from(ITEM)
-                        .where(ITEM.ITEM_KEY.`in`(chunk.map { ItemKey(source, it).toString() }))
-                        .fetch { r ->
-                            out[ItemKey.parse(r.get(ITEM.ITEM_KEY)!!).id] =
-                                WorkStages(WorkStage.entries.associateWith { r.get(it.column) ?: 0L })
-                        }
+                ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
+                    db.select(listOf(ITEM.ITEM_KEY) + columns).from(ITEM).where(ListIndex.AMONG).fetch { r ->
+                        out[ItemKey.parse(r.get(ITEM.ITEM_KEY)!!).id] =
+                            WorkStages(WorkStage.entries.associateWith { r.get(it.column) ?: 0L })
+                    }
                 }
                 out
             }

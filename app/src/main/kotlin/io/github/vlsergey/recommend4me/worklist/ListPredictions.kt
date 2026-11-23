@@ -20,11 +20,12 @@ object ListPredictions {
 
     /** Of the items [ids] of the [source], their predictions as the [db] holds them; an item of none left out. */
     fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, Predicted> {
+        if (ids.isEmpty()) return emptyMap()
         val out = HashMap<String, Predicted>()
-        ids.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
+        ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             db.select(ITEM.ITEM_KEY, ITEM.PREDICTION, ITEM.MODEL_INTEREST)
                 .from(ITEM)
-                .where(ITEM.ITEM_KEY.`in`(chunk.map { ItemKey(source, it).toString() }), ITEM.PREDICTION.isNotNull)
+                .where(ListIndex.AMONG, ITEM.PREDICTION.isNotNull)
                 .fetch { put(out, it) }
         }
         return out
@@ -87,14 +88,11 @@ object ListPredictions {
 
     /** Of the items [ids] of the [source], those graded as the [db] holds them. */
     private fun gradedOf(db: DSLContext, source: String, ids: Collection<String>): Set<String> =
-        ids.chunked(ListIndex.BATCH)
-            .flatMap { chunk ->
-                db.select(ITEM.ITEM_KEY)
-                    .from(ITEM)
-                    .where(ITEM.ITEM_KEY.`in`(chunk.map { ItemKey(source, it).toString() }), ITEM.GRADED.isTrue)
-                    .fetch { ItemKey.parse(it.value1()!!).id }
+        ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
+            db.select(ITEM.ITEM_KEY).from(ITEM).where(ListIndex.AMONG, ITEM.GRADED.isTrue).fetchSet {
+                ItemKey.parse(it.value1()!!).id
             }
-            .toSet()
+        }
 
     private fun put(out: MutableMap<String, Predicted>, r: Record3<String?, Double?, Double?>) {
         out[ItemKey.parse(r.value1()!!).id] = Predicted(r.value2()!!, r.value3())

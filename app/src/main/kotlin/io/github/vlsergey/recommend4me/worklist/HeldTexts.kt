@@ -38,9 +38,8 @@ object HeldTexts {
     fun of(db: DSLContext, keys: Collection<ItemKey>, fields: List<String>): Map<ItemKey, Map<String, ByteArray>> {
         if (keys.isEmpty()) return emptyMap()
         val out = HashMap<ItemKey, HashMap<String, ByteArray>>()
-        keys.distinct().chunked(ListIndex.BATCH).forEach { chunk ->
-            val asked = chunk.map { it.toString() }
-            read(db, fields, { it.`in`(asked) }) { key, k, value ->
+        ListAmong.of(db, keys.map { it.toString() }) {
+            read(db, fields, ListAmong::keyIn) { key, k, value ->
                 out.getOrPut(ItemKey.parse(key)) { HashMap() }[fields[k]] = value
             }
         }
