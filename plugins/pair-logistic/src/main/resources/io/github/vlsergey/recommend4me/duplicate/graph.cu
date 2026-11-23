@@ -2,7 +2,9 @@
 // finds them likely, by everything a search compares them by (pair_scores): of every work, of every model its share of
 // the K neighbours, the likeliest by that model, found by descent (descend: of a work's neighbours' neighbours); of
 // every work its neighbours, theirs and its other candidates then scored by every model (scored), the likeliest of
-// every model kept.
+// every model kept. Both kernels bounded to fill a multiprocessor of the card (BLOCKS_A_MULTIPROCESSOR, given as they
+// are compiled: CudaKernels.blocks), their registers fitted to it: waiting for the works' rows, a multiprocessor of
+// more blocks has more to go on with.
 
 #define BLOCK 256
 #define MAX_MODELS 4
@@ -317,7 +319,7 @@ __device__ void warp_pair_scores(int u, int j, int lane, WORKS_PARAMS, float* z,
 // scored anew; and a work of no new candidate keeps its neighbours, in their order: of the same candidates of the
 // same chances, the models in turn take the same (2026-11-23: of every step, the neighbours scored anew were 24 million
 // pairs of the books, the works of no new candidate most of the last steps)
-extern "C" __global__ void descend(
+extern "C" __global__ void __launch_bounds__(BLOCK, BLOCKS_A_MULTIPROCESSOR) descend(
     const int* G, const unsigned char* F, const float* P, int* G2, unsigned char* F2, float* P2, int kept,
     unsigned long long* changed, WORKS_PARAMS
 ) {
@@ -438,7 +440,7 @@ extern "C" __global__ void descend(
 // candidates (extraAt[u] .. extraAt[u + 1] of extra), all but itself and those the user answered on (passAt[u] ..
 // passAt[u + 1] of pass), every model's score of the pair (pair_scores). Of every model the highest, of equal ones the
 // work first in the numbering, at best[u][model] (-1: none), its score at scores[u][model]
-extern "C" __global__ void scored(
+extern "C" __global__ void __launch_bounds__(BLOCK, BLOCKS_A_MULTIPROCESSOR) scored(
     const int* G, const int* extraAt, const int* extra, const int* passAt, const int* pass, int* best, float* scores,
     WORKS_PARAMS
 ) {

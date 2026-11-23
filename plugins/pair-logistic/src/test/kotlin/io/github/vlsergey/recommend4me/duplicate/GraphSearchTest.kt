@@ -18,6 +18,19 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 class GraphSearchTest {
 
     @Test
+    fun `the kernels of the graph fill a multiprocessor of the card`() {
+        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
+        assumeTrue(dir != null, "no CUDA libraries")
+        val card = Cublas.open(dir!!)
+        assumeTrue(card != null, "no cuBLAS to run on")
+        val kernels = assertNotNull(GraphSearch.kernels(card!!))
+        GraphSearch.BOUNDED.forEach { name ->
+            val fit = kernels.fit(name)
+            assertEquals(kernels.blocks, fit.blocks, "$name: $fit of ${kernels.blocks}")
+        }
+    }
+
+    @Test
     fun `a descent keeping the chances of the neighbours finds what one scoring them anew does`() {
         val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
         assumeTrue(dir != null, "no CUDA libraries")

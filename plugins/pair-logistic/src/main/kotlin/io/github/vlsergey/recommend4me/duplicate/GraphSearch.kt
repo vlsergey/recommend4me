@@ -21,14 +21,21 @@ internal object GraphSearch {
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null
 
+    /** The kernels of the graph compiled for the [card], once; told to the log, what the card made of each. */
     @Synchronized
-    private fun kernels(card: Cublas): CudaKernels? {
+    internal fun kernels(card: Cublas): CudaKernels? {
         if (compiledFor !== card) {
             compiledFor = card
-            compiled = card.kernels(RowsOnCard.source("graph.cu"), NAMES)
+            compiled =
+                card.kernels(RowsOnCard.source("graph.cu"), NAMES)?.also { k ->
+                    log.info("the kernels of the graph: {}", BOUNDED.joinToString { "$it ${k.fit(it)}" })
+                }
         }
         return compiled
     }
+
+    /** The kernels bounded to fill a multiprocessor ([CudaKernels.blocks]). */
+    val BOUNDED = listOf("descend", "scored")
 
     /** The neighbours of a work in the graph (`K` of `graph.cu`). */
     const val K = 16

@@ -19,12 +19,20 @@ private val log = LoggerFactory.getLogger(CudaKernels::class.java)
  * (`nvrtc64_120_0`, beside the runtime's libraries) for the card's own architecture, loaded by the runtime
  * (`cudaLibraryLoadData`) and launched on its default stream — after the products asked for before them, before those
  * asked for after. Called through the foreign function interface of the JDK, as cuBLAS is. Made by [Cublas.kernels];
- * one thread at a time, as the products.
+ * one thread at a time, as the products. The source is given `BLOCKS_A_MULTIPROCESSOR`, the [blocks] of the card: a
+ * kernel bounded so (`__launch_bounds__(BLOCK, BLOCKS_A_MULTIPROCESSOR)`) is compiled to fill a multiprocessor, of
+ * whatever card.
  */
 class CudaKernels
 private constructor(
-    private val cudaLaunchKernel: MethodHandle,
+    private val runtime: Nvrtc,
     private val functions: Map<String, MemorySegment>,
+    /**
+     * The blocks of [BLOCK] a multiprocessor of the card holds at most: of its threads, no more than its blocks
+     * (2026-11-23: the descent of the graph of the duplicates ran on 2 of the 6 of an RTX 5080, of 118 registers a
+     * thread the compiler chose itself, 21 s; bounded to fill it, 10.6 s).
+     */
+    val blocks: Int,
 ) {
     /**
      * The kernel [name] over [threads] threads, [BLOCK] a block, of [args] in the order of its parameters: a
@@ -64,21 +72,55 @@ private constructor(
                     it.set(ValueLayout.JAVA_INT, 4, 1)
                     it.set(ValueLayout.JAVA_INT, 8, 1)
                 }
-            val status = cudaLaunchKernel.invokeExact(function, grid, block, pointers, 0L, MemorySegment.NULL) as Int
+            val status = runtime.launch.invokeExact(function, grid, block, pointers, 0L, MemorySegment.NULL) as Int
             check(status == 0) { "the kernel $name was not launched: CUDA error $status" }
         }
     }
 
+    /**
+     * What the card made of the kernel [name] as it was compiled: the registers of a thread, the bytes of a thread kept
+     * beside them in the card's memory (arrays a thread indexes, and the registers spilled), the blocks of [BLOCK] a
+     * multiprocessor runs at once — what a kernel's bounds (`__launch_bounds__`) are tested by.
+     */
+    fun fit(name: String): Fit {
+        val function = functions[name] ?: error("no kernel $name")
+        return Arena.ofConfined().use { a ->
+            val attributes = a.allocate(FUNCTION_ATTRIBUTES)
+            val read = runtime.attributes.invokeExact(attributes, function) as Int
+            check(read == 0) { "no attributes of the kernel $name: CUDA error $read" }
+            val blocks = a.allocate(ValueLayout.JAVA_INT)
+            val counted = runtime.occupancy.invokeExact(blocks, function, BLOCK, 0L) as Int
+            check(counted == 0) { "no occupancy of the kernel $name: CUDA error $counted" }
+            Fit(
+                attributes.get(ValueLayout.JAVA_INT, REGISTERS_AT),
+                attributes.get(ValueLayout.JAVA_LONG, LOCAL_BYTES_AT),
+                blocks.get(ValueLayout.JAVA_INT, 0),
+            )
+        }
+    }
+
+    /** What the card made of a kernel ([fit]). */
+    class Fit(val registers: Int, val localBytes: Long, val blocks: Int) {
+        override fun toString() = "$registers registers, $localBytes local bytes, $blocks blocks a multiprocessor"
+    }
+
     companion object {
+        /** cudaFuncAttributes: room for all of it; its local bytes (a size_t) and registers (an int) where they are. */
+        private const val FUNCTION_ATTRIBUTES = 256L
+        private const val LOCAL_BYTES_AT = 16L
+        private const val REGISTERS_AT = 28L
+
         /** Threads of a block: a kernel's shared sums are made for as many. */
         const val BLOCK = 256
 
         /** CUDA's dim3: three unsigned ints, handed over by value. */
         private val DIM3 = MemoryLayout.structLayout(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
 
-        /** The device attributes of the compute capability. */
+        /** The device attributes of the compute capability, and of the threads and the blocks of a multiprocessor. */
         private const val MAJOR = 75
         private const val MINOR = 76
+        private const val THREADS_A_MULTIPROCESSOR = 39
+        private const val BLOCKS_A_MULTIPROCESSOR = 106
 
         /** The compute capability as NVRTC numbers its architectures: the major version in tens, the minor in ones. */
         private const val TENS = 10
@@ -90,15 +132,18 @@ private constructor(
             return Arena.ofConfined().use { a ->
                 val (major, minor) = nvrtc.capability(a)
                 val target = nvrtc.target(a, major * TENS + minor)
-                val functions = nvrtc.load(a, nvrtc.ptx(a, source, target), names)
+                val blocks = nvrtc.blocks(a)
+                val functions = nvrtc.load(a, nvrtc.ptx(a, source, target, blocks), names)
                 log.info(
-                    "{} kernels of their own compiled for the card, compute_{} (the card {}.{})",
+                    "{} kernels of their own compiled for the card, compute_{} (the card {}.{}, {} blocks a " +
+                        "multiprocessor)",
                     names.size,
                     target,
                     major,
                     minor,
+                    blocks,
                 )
-                CudaKernels(nvrtc.launch, functions)
+                CudaKernels(nvrtc, functions, blocks)
             }
         }
 
@@ -157,6 +202,14 @@ private constructor(
                 "cudaLaunchKernel",
                 FunctionDescriptor.of(int, address, DIM3, DIM3, address, long, address),
             )
+        val attributes: MethodHandle =
+            handleOf(runtime, "cudaFuncGetAttributes", FunctionDescriptor.of(int, address, address))
+        val occupancy: MethodHandle =
+            handleOf(
+                runtime,
+                "cudaOccupancyMaxActiveBlocksPerMultiprocessor",
+                FunctionDescriptor.of(int, address, address, int, long),
+            )
 
         private fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor): MethodHandle =
             linker.downcallHandle(lookup.find(name).orElseThrow { IllegalStateException("no $name") }, descriptor)
@@ -175,6 +228,19 @@ private constructor(
         }
 
         /**
+         * The blocks of [BLOCK] a multiprocessor of the card holds at most: of its threads, no more than its blocks.
+         */
+        fun blocks(a: Arena): Int {
+            val value = a.allocate(int)
+            ok(getDevice.invokeExact(value) as Int, "no device")
+            val device = value.get(int, 0)
+            ok(attribute.invokeExact(value, THREADS_A_MULTIPROCESSOR, device) as Int, "no threads of a multiprocessor")
+            val threads = value.get(int, 0)
+            ok(attribute.invokeExact(value, BLOCKS_A_MULTIPROCESSOR, device) as Int, "no blocks of a multiprocessor")
+            return minOf(threads / BLOCK, value.get(int, 0)).coerceAtLeast(1)
+        }
+
+        /**
          * The card's own architecture [arch] if the compiler knows it; else the newest it knows — the driver compiles
          * that code for the card as it loads it.
          */
@@ -188,8 +254,11 @@ private constructor(
             else supported.filter { it < arch }.maxOrNull() ?: error("NVRTC knows no architecture up to $arch")
         }
 
-        /** The PTX of [source] compiled for the architecture [target], in memory kept for the process's life. */
-        fun ptx(a: Arena, source: String, target: Int): MemorySegment {
+        /**
+         * The PTX of [source] compiled for the architecture [target], given the [blocks] of a multiprocessor, in memory
+         * kept for the process's life.
+         */
+        fun ptx(a: Arena, source: String, target: Int, blocks: Int): MemorySegment {
             val program = a.allocate(address)
             ok(
                 create.invokeExact(
@@ -204,7 +273,8 @@ private constructor(
             )
             val prog = program.get(address, 0)
             try {
-                val options = listOf("--gpu-architecture=compute_$target", "--std=c++17")
+                val options =
+                    listOf("--gpu-architecture=compute_$target", "--std=c++17", "-DBLOCKS_A_MULTIPROCESSOR=$blocks")
                 val optionPointers = a.allocate(address, options.size.toLong())
                 options.forEachIndexed { k, o -> optionPointers.setAtIndex(address, k.toLong(), a.allocateFrom(o)) }
                 val compiled = compileProgram.invokeExact(prog, options.size, optionPointers) as Int
