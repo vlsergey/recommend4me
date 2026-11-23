@@ -1,8 +1,8 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.database.scanned
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
-import io.github.vlsergey.recommend4me.database.streamed
 import java.sql.ResultSet
 import org.jooq.DSLContext
 
@@ -99,13 +99,14 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
     }
 
     /**
-     * Every row of the table [sql] reads, handed to [row] as it is read: the table's own rows in the order they are
-     * kept, no condition and no order of a key — by JDBC, lazily ([streamed]). A table keyed by text keeps its rows by
-     * a number of its own: a reading by its key, or by a facet, takes them a row at a time by that number, a seek of
-     * the disk each (2026-11-23: the descriptions of every site's fandom by their keys, 6 s of every request of the
-     * universes alike); read whole, they come page after page.
+     * Every row of the table [sql] reads, handed to [row]: the table's own rows in the order they are kept, no
+     * condition and no order of a key — by JDBC, not jOOQ's records. A table keyed by text keeps its rows by a number
+     * of its own: a reading by its key, or by a facet, takes them a row at a time by that number, a seek of the disk
+     * each (2026-11-23: the descriptions of every site's fandom by their keys, 6 s of every request of the universes
+     * alike); read whole, they come page after page. Read whole by the statement, not lazily: a lazy reading of H2 as
+     * the site's pages write the table lost a part of the file under it ("Chunk not found").
      */
-    private fun scan(sql: String, row: (ResultSet) -> Unit) = db.streamed(sql, emptyList(), row)
+    private fun scan(sql: String, row: (ResultSet) -> Unit) = db.scanned(sql, row)
 
     override fun facetNames(facet: String): Map<String, String> = namesInOnePass(facet, null)
 

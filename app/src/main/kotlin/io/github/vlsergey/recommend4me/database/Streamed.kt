@@ -25,3 +25,15 @@ fun DSLContext.streamed(sql: String, params: List<Any>, row: (ResultSet) -> Unit
         c.createStatement().use { it.execute("SET LAZY_QUERY_EXECUTION FALSE") }
     }
 }
+
+/**
+ * EVERY ROW OF [sql] HANDED TO [row], by JDBC alone, the statement executed whole before the first — not lazily: a lazy
+ * reading of H2 as other connections write the same table lost a part of the file under it ("Chunk not found",
+ * 2026-11-23); the rows taken of the driver [FETCH] at a time.
+ */
+fun DSLContext.scanned(sql: String, row: (ResultSet) -> Unit) = connection { c ->
+    c.prepareStatement(sql).use { s ->
+        s.fetchSize = FETCH
+        s.executeQuery().use { r -> while (r.next()) row(r) }
+    }
+}
