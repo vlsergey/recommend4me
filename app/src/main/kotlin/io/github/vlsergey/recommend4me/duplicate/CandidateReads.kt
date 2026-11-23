@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUP
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Condition
 import org.jooq.DSLContext
+import org.jooq.Field
 import org.jooq.impl.DSL
 
 /**
@@ -54,48 +55,48 @@ class CandidateReads internal constructor(private val db: DSLContext) {
 
     /**
      * The candidates of which either work is among the [items]: of one work's items, say. Those of them as the first
-     * work, and as the second: of a site's works, a list of them a query.
+     * work and as the second in one query: the table, of no index, is a pass of its columns a query.
      */
     fun ofItems(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        val asSecond =
-            items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                ids.chunked(BATCH).flatMap { read(c.OTHER_SOURCE.eq(source).and(c.OTHER_ITEM_ID.`in`(it))) }
-            }
-        return (firstOf(items) + asSecond).distinctBy { it.pair }
+        if (items.isEmpty()) return emptyList()
+        return read(keyIn(c.SOURCE, c.ITEM_ID, items).or(keyIn(c.OTHER_SOURCE, c.OTHER_ITEM_ID, items)))
     }
 
-    /** The candidates the [items] are the first works of: of a site's works, a list of them a query. */
+    /** The candidates the [items] are the first works of, in one query. */
     private fun firstOf(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        return items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-            ids.chunked(BATCH).flatMap { read(c.SOURCE.eq(source).and(c.ITEM_ID.`in`(it))) }
-        }
+        return if (items.isEmpty()) emptyList() else read(keyIn(c.SOURCE, c.ITEM_ID, items))
     }
 
-    /** The user's word on every pair of [pairs] as kept with it ([PairScore]): of a pair of none, none. */
+    /**
+     * The user's word on every pair of [pairs] as kept with it ([PairScore]): of a pair of none, none. The answered
+     * candidates of their first works read in one query, the pairs asked picked of them: a query a pair was a pass of
+     * the table a pair — 642 of them 11 s of a page of the authors' offers (2026-11-24).
+     */
     fun wordsOf(pairs: Collection<Pair<ItemKey, ItemKey>>): Said {
         val c = DUPLICATE_CANDIDATE
         val words = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         val derived = HashSet<Pair<ItemKey, ItemKey>>()
-        pairs.distinct().forEach { pair ->
-            db.select(c.ANSWER, c.ANSWER_DERIVED)
-                .from(c)
-                .where(
-                    c.SOURCE.eq(pair.first.source),
-                    c.ITEM_ID.eq(pair.first.id),
-                    c.OTHER_SOURCE.eq(pair.second.source),
-                    c.OTHER_ITEM_ID.eq(pair.second.id),
-                    c.ANSWER.isNotNull,
-                )
-                .fetchOne()
-                ?.let { r ->
-                    words[pair] = DuplicateAnswer.valueOf(r.value1()!!)
-                    if (r.value2()!!) derived += pair
+        if (pairs.isEmpty()) return Said(words, derived)
+        val asked = pairs.toHashSet()
+        db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED)
+            .from(c)
+            .where(c.ANSWER.isNotNull, keyIn(c.SOURCE, c.ITEM_ID, asked.map { it.first }))
+            .fetch()
+            .forEach { r ->
+                val pair = ItemKey(r.value1()!!, r.value2()!!) to ItemKey(r.value3()!!, r.value4()!!)
+                if (pair in asked) {
+                    words[pair] = DuplicateAnswer.valueOf(r.value5()!!)
+                    if (r.value6()!!) derived += pair
                 }
-        }
+            }
         return Said(words, derived)
     }
+
+    /** Of the works [items], those whose key is the [source] and the [id]: of every site its works a list. */
+    private fun keyIn(source: Field<String?>, id: Field<String?>, items: Collection<ItemKey>): Condition =
+        DSL.or(items.groupBy({ it.source }, { it.id }).map { (s, ids) -> source.eq(s).and(id.`in`(ids.distinct())) })
 
     /**
      * The candidates the user's word is on as the search or the last answer left it, with the word: what the models of
@@ -186,9 +187,6 @@ class CandidateReads internal constructor(private val db: DSLContext) {
     }
 
     private companion object {
-        /** The keys read by one query at most: a list of keys in a query, not a meaning. */
-        const val BATCH = 500
-
         const val FETCH = 5000
     }
 }
