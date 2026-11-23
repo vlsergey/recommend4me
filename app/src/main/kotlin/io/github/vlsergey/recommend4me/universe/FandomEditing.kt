@@ -121,10 +121,11 @@ class FandomEditing(
         val was = fandoms.sites.fandomOf(site)
         if (was == null || (universe != null && !fandoms.exists(universe))) return null
         val now = Instant.now()
-        // A new universe of its own and the site's fandom bound to it — put under the one it leaves, when [under] — all
-        // or nothing
+        // A new universe of its own named by the site's fandom at once, not by its id till the queue names it (user,
+        // 2026-11-23) — and the site's fandom bound to it, put under the one it leaves when [under] — all or nothing
+        val named = if (universe == null) normalization.nameOf(site) else null
         val to = fandoms.transaction { f ->
-            (universe ?: f.create(now)).also {
+            (universe ?: f.create(now, calculatedName = named)).also {
                 f.sites.bind(site, it, now)
                 if (universe == null && under) f.relations.link(it, was, now)
             }

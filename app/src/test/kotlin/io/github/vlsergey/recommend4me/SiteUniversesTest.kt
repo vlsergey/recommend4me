@@ -168,6 +168,7 @@ class SiteUniversesTest : SiteTestBase() {
         // A site's fandom taken out is a universe of its own; put under another, its works are of the other too
         val ring = universes.bindSiteFandom(SiteFandomBinding(site, "lotr")).body!!.value
         assertNotEquals(hp, ring)
+        namedAtOnce(ring, "The Lord of the Rings")
         universes.relateUniverses(UniverseRelationRequest(hp, ring, UniverseRelation.CHILD))
         assertEquals(listOf(hp), universes.getUniverse(ring).body!!.parents)
         assertNotNull(valueOf("h3", "universe", ring)?.draftedFrom)
@@ -189,13 +190,25 @@ class SiteUniversesTest : SiteTestBase() {
         universes.relateUniverses(UniverseRelationRequest(hp, ofHp, UniverseRelation.MERGED))
         assertEquals(hp, universeOf("hp-movies"))
 
-        // A name of the user's over the site's
+        namedAndDescribed(hp)
+
+        // An original work has no universe of its fandom
+        capture("h4|Mine|magic|My own world||x4|originals:Originals")
+        assertTrue(
+            facetsOf("h4").find { it.facet == "universe" }?.propertyValues.orEmpty().none { it.draftedFrom != null }
+        )
+    }
+
+    /**
+     * What the universe [hp] of the site's fandoms "hp" and "hp-movies" is shown by: a name of the user's over the
+     * site's, and what the site says each fandom is of — none of a page that said nothing.
+     */
+    private fun namedAndDescribed(hp: String) {
         universes.nameUniverse(UniverseName(hp, "Мир ГП"))
         assertEquals("Мир ГП", universes.getUniverse(hp).body!!.name)
         universes.nameUniverse(UniverseName(hp, null))
         assertEquals("Harry Potter", universes.getUniverse(hp).body!!.name)
 
-        // What the site says each fandom is of stands with it; a page that said nothing gives none
         stores
             .source(site)!!
             .items
@@ -203,12 +216,15 @@ class SiteUniversesTest : SiteTestBase() {
         val said = universes.getUniverse(hp).body!!.sites.associate { it.key to it.description }
         assertEquals("By J. K. Rowling's books", said["hp"])
         assertNull(said["hp-movies"])
+    }
 
-        // An original work has no universe of its fandom
-        capture("h4|Mine|magic|My own world||x4|originals:Originals")
-        assertTrue(
-            facetsOf("h4").find { it.facet == "universe" }?.propertyValues.orEmpty().none { it.draftedFrom != null }
-        )
+    /**
+     * The [universe] a site's fandom was taken out to is shown by the fandom's [name] at once — on its page and in the
+     * list — not by its id till the queue names it (user, 2026-11-23).
+     */
+    private fun namedAtOnce(universe: String, name: String) {
+        assertEquals(name, universes.getUniverse(universe).body!!.name)
+        assertEquals(name, universes.listUniverses().body!!.single { it.value == universe }.name)
     }
 
     @Test

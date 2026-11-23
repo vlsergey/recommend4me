@@ -50,6 +50,15 @@ class FandomNormalization(
     private fun fandoms(): FandomRepository? = stores.types.firstOrNull { it.type.universes }?.universes?.fandoms
 
     /**
+     * The name its site gives the site's fandom [site], as a universe of it alone is named
+     * ([FandomRepository.calculatedName]) — its key of a fandom the site names not; none of a source with no fandoms.
+     */
+    fun nameOf(site: SiteFandomRef): String? =
+        sites()
+            .firstOrNull { it.first.id == site.source }
+            ?.let { (s, facet) -> (s.items.facetNames(facet, listOf(site.key))[site.key] ?: site.key).trim() }
+
+    /**
      * The site's fandoms of the works [event] names bound at once, before anything reads the works: a work captured is
      * read with its universes.
      */
