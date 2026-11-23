@@ -40,13 +40,11 @@ internal object GraphSearch {
             CardRoom.of(card, AllOnCard.need(all, models.size)).use { room ->
                 val started = System.currentTimeMillis()
                 val onCard = AllOnCard(all, room, kernels)
-                // Of every work the works of an author one with its: every one a candidate
                 val titles = Titles.of(all)
-                val ofAuthors = Lists.of(sameAuthor(all))
+                val ofAuthors = WorksAlike.ofAuthors(all)
                 // Of every work the works of an author one with its, and those of the very same title: every one a
                 // candidate, however many works are near it by the graph
-                val extra =
-                    Lists.of(List(all.count) { u -> (ofAuthors.of(u) + titles.sameAs(u)).distinct().toIntArray() })
+                val extra = WorksAlike.candidates(ofAuthors, titles.same)
                 val learnt = System.currentTimeMillis()
                 // What a pair is scored by, of every work: the descent and the scoring alike
                 val works = onCard.scoring(models, room)
@@ -71,41 +69,6 @@ internal object GraphSearch {
                 found
             }
         }
-    }
-
-    /**
-     * Of every work, the other works of an author one with its, by the kin of its authors: of every author its works,
-     * then of every work those of its kin, sorted, each once — the works side by side.
-     */
-    private fun sameAuthor(all: AllWorks): List<IntArray> {
-        val authors = (all.authors.entries.maxOrNull() ?: -1) + 1
-        val count = IntArray(authors + 1)
-        all.authors.entries.forEach { count[it + 1]++ }
-        for (a in 0 until authors) count[a + 1] += count[a]
-        val works = IntArray(all.authors.entries.size)
-        val filled = count.copyOf(authors)
-        for (u in 0 until all.count) for (q in all.authors.at[u] until all.authors.at[u + 1]) {
-            works[filled[all.authors.entries[q]]++] = u
-        }
-        return (0 until all.count)
-            .toList()
-            .parallelStream()
-            .map { u ->
-                var size = 0
-                for (q in all.kin.at[u] until all.kin.at[u + 1]) {
-                    val a = all.kin.entries[q]
-                    if (a < authors) size += count[a + 1] - count[a]
-                }
-                val out = IntArray(size)
-                var at = 0
-                for (q in all.kin.at[u] until all.kin.at[u + 1]) {
-                    val a = all.kin.entries[q]
-                    if (a < authors) for (p in count[a] until count[a + 1]) out[at++] = works[p]
-                }
-                out.sort()
-                out.distinct().filter { it != u }.toIntArray()
-            }
-            .toList()
     }
 
     /** Of every work its neighbours, theirs and its [extra] candidates scored by every model, the likeliest kept. */
@@ -374,91 +337,23 @@ internal class Descent(
 internal object Seeds {
     fun of(all: AllWorks, ofAuthors: Lists, titles: Titles): Lists {
         val k = GraphSearch.K
-        return Lists.of(
-            List(all.count) { u ->
-                val own = LinkedHashSet<Int>()
-                for (q in ofAuthors.at[u] until minOf(ofAuthors.at[u + 1], ofAuthors.at[u] + k / 2)) {
-                    own += ofAuthors.entries[q]
-                }
-                // The works of the same title
-                titles.sameAs(u).take(k - own.size).forEach { own += it }
-                own.toIntArray()
+        val same = titles.same
+        val at = IntArray(all.count + 1)
+        val entries = IntArray(all.count * k)
+        var size = 0
+        for (u in 0 until all.count) {
+            val from = size
+            for (q in ofAuthors.at[u] until minOf(ofAuthors.at[u + 1], ofAuthors.at[u] + k / 2)) {
+                entries[size++] = ofAuthors.entries[q]
             }
-        )
+            // The works of the same title, those of an author one with it once
+            val taken = size - from
+            for (q in same.at[u] until minOf(same.at[u + 1], same.at[u] + k - taken)) {
+                val v = same.entries[q]
+                if ((from until size).none { entries[it] == v }) entries[size++] = v
+            }
+            at[u + 1] = size
+        }
+        return Lists(at, entries.copyOf(size))
     }
 }
-
-/**
- * THE WORKS OF THE VERY SAME TITLE: of every work the hash of its title's trigrams, the works of one hash one title —
- * of a title many works bear, the [MOST] nearest it in the order of the hashes. [shared] the titles several works bear,
- * [largest] the most works of one.
- */
-internal class Titles
-private constructor(
-    private val hashes: LongArray,
-    private val order: IntArray,
-    private val place: IntArray,
-) {
-    val shared: Int
-    val largest: Int
-
-    init {
-        var groups = 0
-        var most = 0
-        var from = 0
-        while (from < order.size) {
-            var to = from + 1
-            while (to < order.size && hashes[order[to]] == hashes[order[from]]) to++
-            if (to - from > 1) groups++
-            most = maxOf(most, to - from)
-            from = to
-        }
-        shared = groups
-        largest = most
-    }
-
-    /** The other works of the [u]-th one's title, the nearest first, [MOST] at most. */
-    fun sameAs(u: Int): IntArray {
-        val out = ArrayList<Int>()
-        var step = 1
-        while (out.size < MOST && step <= MOST) {
-            var any = false
-            for (at in intArrayOf(place[u] - step, place[u] + step)) {
-                if (at in order.indices && hashes[order[at]] == hashes[u]) {
-                    out += order[at]
-                    any = true
-                }
-            }
-            if (!any) break
-            step++
-        }
-        return out.toIntArray()
-    }
-
-    companion object {
-        /** The works of one title taken of a work at most. */
-        const val MOST = 256
-
-        private const val HASH_START = 1125899906842597L
-        private const val HASH_PRIME = 31L
-
-        fun of(all: AllWorks): Titles {
-            val hashes = LongArray(all.count)
-            all.sites.forEachIndexed { a, s ->
-                val row = FloatArray(s.width)
-                for (i in 0 until s.count) {
-                    s.titles.take(i, row)
-                    var h = HASH_START
-                    row.forEach { h = h * HASH_PRIME + java.lang.Float.floatToIntBits(it) }
-                    hashes[all.start[a] + i] = h
-                }
-            }
-            val order = (0 until all.count).sortedWith(compareBy({ hashes[it] }, { it })).toIntArray()
-            val place = IntArray(all.count).also { p -> order.forEachIndexed { at, u -> p[u] = at } }
-            return Titles(hashes, order, place)
-        }
-    }
-}
-
-/** The [u]-th row's entries. */
-internal fun Lists.of(u: Int): IntArray = entries.copyOfRange(at[u], at[u + 1])

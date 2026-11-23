@@ -16,9 +16,19 @@ internal object RandomSearches {
     const val VALUES = 60
     val familyOf = IntArray(VALUES) { it % families.size }
 
-    fun site(random: Random, source: String, count: Int, width: Int, vectored: Int = TITLE_VECTORS): SiteWorks {
-        val titles =
-            HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit(random, width, counts = true)) }
+    /**
+     * A site of [count] works; of every work one of [titleKinds] titles at random, when not nought, else a title of its
+     * own.
+     */
+    fun site(
+        random: Random,
+        source: String,
+        count: Int,
+        width: Int,
+        vectored: Int = TITLE_VECTORS,
+        titleKinds: Int = 0,
+    ): SiteWorks {
+        val titles = titles(random, count, width, titleKinds)
         val titleLengths = FloatArray(count) { 2f + random.nextInt(6) }
         // The names of the authors of some, of others none
         val authorLengths = FloatArray(count) { if (random.nextInt(3) == 0) 0f else 1f + random.nextInt(4) }
@@ -80,6 +90,16 @@ internal object RandomSearches {
             },
             letterLengths,
         )
+    }
+
+    /** The titles' trigrams of [count] works: of every work one of [kinds] at random, of none a title of its own. */
+    private fun titles(random: Random, count: Int, width: Int, kinds: Int): HalfMatrix {
+        val borne = Array(kinds) { unit(random, width, counts = true) }
+        return HalfMatrix(count, width).also { m ->
+            for (i in 0 until count) {
+                m.put(i, if (kinds == 0) unit(random, width, counts = true) else borne[random.nextInt(kinds)])
+            }
+        }
     }
 
     /** The rows of [m] kept sparse. */
