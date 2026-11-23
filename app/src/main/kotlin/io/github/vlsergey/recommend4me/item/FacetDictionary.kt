@@ -2,6 +2,8 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
+import io.github.vlsergey.recommend4me.database.streamed
+import java.sql.ResultSet
 import org.jooq.DSLContext
 
 /**
@@ -86,23 +88,26 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             else -> namesInOnePass(facet, keys as? Set<String> ?: keys.toHashSet())
         }
 
-    /** The names of the facet's values [wanted], every row of the facet read in one pass. */
-    private fun namesInOnePass(facet: String, wanted: Set<String>): Map<String, String> {
+    /** The names of the facet's values [wanted] — of every value, when null —, of one pass over the table ([scan]). */
+    private fun namesInOnePass(facet: String, wanted: Set<String>?): Map<String, String> {
         val out = HashMap<String, String>()
-        db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .where(FACET_VALUE.FACET.eq(facet))
-            .fetchSize(STREAMED_ROWS)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { if (it.value1()!! in wanted) out[it.value1()!!] = it.value2()!! } }
+        scan("SELECT facet, value_key, name FROM facet_value") { r ->
+            val key = r.getString("value_key")
+            if (r.getString("facet") == facet && (wanted == null || key in wanted)) out[key] = r.getString("name")
+        }
         return out
     }
 
-    override fun facetNames(facet: String): Map<String, String> =
-        db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .where(FACET_VALUE.FACET.eq(facet))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
+    /**
+     * Every row of the table [sql] reads, handed to [row] as it is read: the table's own rows in the order they are
+     * kept, no condition and no order of a key — by JDBC, lazily ([streamed]). A table keyed by text keeps its rows by
+     * a number of its own: a reading by its key, or by a facet, takes them a row at a time by that number, a seek of
+     * the disk each (2026-11-23: the descriptions of every site's fandom by their keys, 6 s of every request of the
+     * universes alike); read whole, they come page after page.
+     */
+    private fun scan(sql: String, row: (ResultSet) -> Unit) = db.streamed(sql, emptyList(), row)
+
+    override fun facetNames(facet: String): Map<String, String> = namesInOnePass(facet, null)
 
     /** One lookup a name, by the index of the names: H2 matches a list bound to the query against every row. */
     override fun keysNamed(facet: String, names: Collection<String>): Map<String, List<String>> =
@@ -117,12 +122,13 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             }
             .filterValues { it.isNotEmpty() }
 
-    override fun allFacetNames(): Map<String, Map<String, String>> =
-        db.select(FACET_VALUE.FACET, FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! to it.value3()!! })
-            .mapValues { it.value.toMap() }
+    override fun allFacetNames(): Map<String, Map<String, String>> {
+        val out = HashMap<String, HashMap<String, String>>()
+        scan("SELECT facet, value_key, name FROM facet_value") { r ->
+            out.getOrPut(r.getString("facet")) { HashMap() }[r.getString("value_key")] = r.getString("name")
+        }
+        return out
+    }
 
     @Synchronized
     override fun describeFacetValues(facet: String, descriptions: Map<String, String>) {
@@ -142,18 +148,36 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             }
     }
 
+    /**
+     * What the site says the values [keys] of the facet mean: of a few, each by the table's key; of more, every row of
+     * the table read in one pass ([scan]) and the keys picked out of it.
+     */
     override fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> {
-        if (keys.isEmpty()) return emptyMap()
         val d = FACET_VALUE_DESCRIPTION
-        return keys
-            .distinct()
-            .chunked(ITEM_BATCH)
-            .flatMap { chunk ->
-                db.select(d.VALUE_KEY, d.DESCRIPTION).from(d).where(d.FACET.eq(facet), d.VALUE_KEY.`in`(chunk)).fetch {
-                    it.value1()!! to it.value2()!!
+        return when {
+            keys.isEmpty() -> emptyMap()
+            keys.size <= LOOKED_UP ->
+                keys
+                    .distinct()
+                    .mapNotNull { key ->
+                        db.select(d.DESCRIPTION)
+                            .from(d)
+                            .where(d.FACET.eq(facet), d.VALUE_KEY.eq(key))
+                            .fetchOne()
+                            ?.value1()
+                            ?.let { key to it }
+                    }
+                    .toMap()
+            else -> {
+                val wanted = keys as? Set<String> ?: keys.toHashSet()
+                val out = HashMap<String, String>()
+                scan("SELECT facet, value_key, description FROM facet_value_description") { r ->
+                    val key = r.getString("value_key")
+                    if (r.getString("facet") == facet && key in wanted) out[key] = r.getString("description")
                 }
+                out
             }
-            .toMap()
+        }
     }
 
     private companion object {
