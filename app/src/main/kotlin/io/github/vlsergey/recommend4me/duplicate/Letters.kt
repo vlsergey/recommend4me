@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.ByteMatrix
 import io.github.vlsergey.recommend4me.matrix.SparseRows
 import java.util.stream.IntStream
 import kotlin.math.sqrt
@@ -58,9 +58,13 @@ internal object Letters {
         return rows to lengths
     }
 
-    /** The same of long texts — a description, of hundreds of trigrams —, every row whole. */
-    fun wholeRows(texts: List<String?>): Pair<HalfMatrix, FloatArray> {
-        val rows = HalfMatrix(texts.size, WIDTH)
+    /**
+     * The same of long texts — a description, of hundreds of trigrams —, every row whole, a byte a number with a scale
+     * a row ([ByteMatrix]): kept so from here to the card's kernels (2026-11-23: of halves, 1 KB a work, read of every
+     * pair the graph compares; a byte moves the cosine of two by a few thousandths).
+     */
+    fun wholeRows(texts: List<String?>): Pair<ByteMatrix, FloatArray> {
+        val rows = ByteMatrix(texts.size, WIDTH)
         val lengths = FloatArray(texts.size)
         val buffer = ThreadLocal.withInitial { FloatArray(WIDTH) }
         IntStream.range(0, texts.size).parallel().forEach { i ->

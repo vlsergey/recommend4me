@@ -17,7 +17,8 @@
 // The rows kept small (AllOnCard, owner, 2026-11-20: every work's rows whole ran the card out of its memory): the
 // trigrams of the short texts sparse — of a work its entries tAt[u] .. tAt[u + 1] of tE, each its column in the lower
 // two bytes and its half in the higher, by their columns ascending —, the vectors a byte a number with a scale a work
-// (D and dS, V and vS), the description's trigrams whole halves (L)
+// (D and dS, V and vS) and the description's trigrams (L and lS, 2026-11-23: of its halves, a pair of the descent read
+// 1 KB of them of the other work)
 #define WORKS_PARAMS \
     int n, const int* siteOf, int sites, const unsigned char* comparedD, int width, int described, \
     const int* tAt, const unsigned int* tE, const int* aAt, const unsigned int* aE, \
@@ -26,11 +27,11 @@
     const int* valueAt, const int* values, const float* valueWeights, const int* familyOf, \
     const int* kinAt, const int* kin, const int* authorAt, const int* authors, \
     const unsigned char* comparedV, int titled, const signed char* V, const float* vS, const unsigned char* hasV, \
-    const unsigned short* L, const int* fAt, const unsigned int* fE, const int* cAt, const unsigned int* cE, \
+    const signed char* L, const float* lS, const int* fAt, const unsigned int* fE, const int* cAt, const unsigned int* cE, \
     const float* ll, int models, const float* weights, int stride
 #define WORKS_ARGS \
     n, siteOf, sites, comparedD, width, described, tAt, tE, aAt, aE, D, dS, tl, al, hasD, facets, sizes, sizeOf, \
-    valueAt, values, valueWeights, familyOf, kinAt, kin, authorAt, authors, comparedV, titled, V, vS, hasV, L, fAt, fE, \
+    valueAt, values, valueWeights, familyOf, kinAt, kin, authorAt, authors, comparedV, titled, V, vS, hasV, L, lS, fAt, fE, \
     cAt, cE, ll, models, weights, stride
 
 #define NO_SCORE (-__int_as_float(0x7f800000))
@@ -50,40 +51,6 @@ __device__ __forceinline__ float half_to_float(unsigned short h) {
 // The share of the trigrams of a string of length own the other, of length other, has, of the cosine c of the two
 __device__ __forceinline__ float share(float c, float own, float other) {
     return own <= 0.0f ? 0.0f : fminf(fmaxf(c * other / own, 0.0f), 1.0f);
-}
-
-// The product of two rows of n numbers of half precision
-__device__ __forceinline__ float dot_halves(const unsigned short* a, const unsigned short* b, int n) {
-    float s = 0.0f;
-    for (int q = 0; q < n; q++) s += half_to_float(a[q]) * half_to_float(b[q]);
-    return s;
-}
-
-// The product of the eight halves of two pieces of sixteen bytes
-__device__ __forceinline__ float dot_piece(uint4 x, uint4 y) {
-    unsigned int xs[4] = {x.x, x.y, x.z, x.w};
-    unsigned int ys[4] = {y.x, y.y, y.z, y.w};
-    float s = 0.0f;
-    for (int q = 0; q < 4; q++) {
-        s += half_to_float((unsigned short) (xs[q] & 0xffffu)) * half_to_float((unsigned short) (ys[q] & 0xffffu));
-        s += half_to_float((unsigned short) (xs[q] >> 16)) * half_to_float((unsigned short) (ys[q] >> 16));
-    }
-    return s;
-}
-
-// The product of two rows of n halves by a warp, every lane of it: read together, sixteen bytes a lane, when the rows
-// are of whole pieces (n of eights: their starts of sixteen bytes), else a half a lane
-__device__ float warp_dot(const unsigned short* a, const unsigned short* b, int n, int lane) {
-    float s = 0.0f;
-    if ((n & 7) == 0) {
-        const uint4* x = (const uint4*) a;
-        const uint4* y = (const uint4*) b;
-        for (int q = lane; q < n / 8; q += 32) s += dot_piece(x[q], y[q]);
-    } else {
-        for (int q = lane; q < n; q += 32) s += half_to_float(a[q]) * half_to_float(b[q]);
-    }
-    for (int offset = 16; offset > 0; offset >>= 1) s += __shfl_xor_sync(0xffffffff, s, offset);
-    return s;
 }
 
 // The product of the sparse rows u and j (at .. of e): of the columns both have, their halves' products
@@ -276,9 +243,9 @@ __device__ void pair_scores(int u, int j, WORKS_PARAMS, float* z, float* chance)
         ? dot_bytes(D + (size_t) u * described, D + (size_t) j * described, described) * dS[u] * dS[j] : 0.0f;
     bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
     float v = hasTitleVector ? dot_bytes(V + (size_t) u * titled, V + (size_t) j * titled, titled) * vS[u] * vS[j] : 0.0f;
-    // The description's trigrams whole, the sites' names of the fandoms and lines of the characters sparse
+    // The description's trigrams a byte a number, the sites' names of the fandoms and lines of the characters sparse
     float l[LETTERED];
-    l[0] = LETTERED_BOTH(0) ? dot_halves(L + (size_t) u * width, L + (size_t) j * width, width) : 0.0f;
+    l[0] = LETTERED_BOTH(0) ? dot_bytes(L + (size_t) u * width, L + (size_t) j * width, width) * lS[u] * lS[j] : 0.0f;
     l[1] = LETTERED_BOTH(1) ? sparse_dot(fAt, fE, u, j) : 0.0f;
     l[2] = LETTERED_BOTH(2) ? sparse_dot(cAt, cE, u, j) : 0.0f;
     float f[MAX_MODELS];
@@ -301,7 +268,9 @@ __device__ void warp_pair_scores(int u, int j, int lane, WORKS_PARAMS, float* z,
         ? warp_dot_bytes(V + (size_t) u * titled, V + (size_t) j * titled, titled, lane) * vS[u] * vS[j]
         : 0.0f;
     float l[LETTERED];
-    l[0] = LETTERED_BOTH(0) ? warp_dot(L + (size_t) u * width, L + (size_t) j * width, width, lane) : 0.0f;
+    l[0] = LETTERED_BOTH(0)
+        ? warp_dot_bytes(L + (size_t) u * width, L + (size_t) j * width, width, lane) * lS[u] * lS[j]
+        : 0.0f;
     l[1] = LETTERED_BOTH(1) ? warp_sparse_dot(fAt, fE, u, j, lane) : 0.0f;
     l[2] = LETTERED_BOTH(2) ? warp_sparse_dot(cAt, cE, u, j, lane) : 0.0f;
     float f[MAX_MODELS];

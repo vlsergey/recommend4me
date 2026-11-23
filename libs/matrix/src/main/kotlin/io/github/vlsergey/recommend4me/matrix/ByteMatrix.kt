@@ -10,8 +10,9 @@ import kotlin.math.roundToInt
 /**
  * ROWS OF A BYTE A NUMBER, each row with a scale of its own: a number is its byte (-127..127) times its row's scale,
  * the largest of the row 127 bytes (owner, 2026-11-20: the vectors of the texts the search of the duplicates holds, in
- * half the memory of half precision). A cosine of two unit rows so moves by a few thousandths. The bytes are off the
- * heap, belonging to the garbage collector (`Arena.ofAuto`); the scales on it.
+ * half the memory of half precision; 2026-11-23, the counts of the trigrams of the descriptions too). A cosine of two
+ * unit rows so moves by a few thousandths. The bytes are off the heap, belonging to the garbage collector
+ * (`Arena.ofAuto`); the scales on it.
  */
 class ByteMatrix
 private constructor(
@@ -57,6 +58,21 @@ private constructor(
         val scale = scales[first + i]
         val at = i.toLong() * cols
         for (q in 0 until cols) into[q] = seg.get(ValueLayout.JAVA_BYTE, at + q) * scale
+    }
+
+    /**
+     * The product of the row [i] and the row [j] of [other]: of two rows of bytes, their bytes' products summed as
+     * integers, times their scales — no row made single precision.
+     */
+    override fun dot(i: Int, other: Rows, j: Int): Float {
+        if (other !is ByteMatrix) return super.dot(i, other, j)
+        val p = i.toLong() * cols
+        val q = j.toLong() * other.cols
+        var sum = 0
+        for (k in 0 until cols) {
+            sum += seg.get(ValueLayout.JAVA_BYTE, p + k) * other.seg.get(ValueLayout.JAVA_BYTE, q + k)
+        }
+        return sum * scales[first + i] * other.scales[other.first + j]
     }
 
     override fun floats(fromRow: Int, count: Int, into: Floats) {

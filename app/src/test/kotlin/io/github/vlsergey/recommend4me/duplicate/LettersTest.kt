@@ -15,8 +15,8 @@ class LettersTest {
     private fun lexical(texts: List<String?>, a: Int, b: Int): Lexical {
         val (rows, lengths) = Letters.rows(texts)
         val (whole, _) = Letters.wholeRows(texts)
-        // Kept sparse or whole, the same cosine
-        assertEquals(whole.dot(a, whole, b), rows.dot(a, rows, b), 1e-6f)
+        // Kept sparse in halves or whole in bytes, the same cosine but for a byte's thousandths
+        assertEquals(whole.dot(a, whole, b), rows.dot(a, rows, b), BYTE_CLOSE)
         return Lexical.of(rows.dot(a, rows, b), lengths[a], lengths[b])
     }
 
@@ -30,5 +30,10 @@ class LettersTest {
         // A string of none: no trigram, no share
         assertEquals(0f, lexical(texts, 3, 0).within)
         assertEquals(1f, lexical(texts, 0, 0).alike, 1e-2f)
+    }
+
+    private companion object {
+        /** A cosine of two rows of a byte a number: off by a few thousandths. */
+        const val BYTE_CLOSE = 1e-2f
     }
 }

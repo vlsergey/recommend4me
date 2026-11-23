@@ -49,6 +49,14 @@ class RowsTest {
         val made = List(10) { unit(sparse = false) }
         val rows = ByteMatrix(made.size, cols).also { m -> made.forEachIndexed { i, v -> m.put(i, v) } }
         for (i in made.indices) for (j in made.indices) assertEquals(dot(made[i], made[j]), rows.dot(i, rows, j), 5e-3f)
+        // Their bytes summed as integers: the product of the rows read as single precision, but for the last digits
+        val x = FloatArray(cols)
+        val y = FloatArray(cols)
+        for (i in made.indices) for (j in made.indices) {
+            rows.take(i, x)
+            rows.take(j, y)
+            assertEquals(dot(x, y), rows.dot(i, rows, j), 1e-6f)
+        }
         val run = rows.rows(4, 3)
         assertEquals(dot(made[5], made[6]), run.dot(1, rows, 6), 5e-3f)
         assertContentEquals(rows.scales(4, 3), run.scales(0, 3))

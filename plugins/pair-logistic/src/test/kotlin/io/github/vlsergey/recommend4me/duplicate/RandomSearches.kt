@@ -65,8 +65,8 @@ internal object RandomSearches {
             LetteredText.entries.map {
                 FloatArray(count) { if (random.nextInt(3) == 0) 0f else 5f + random.nextInt(50) }
             }
-        // Kept as the application keeps them: the short texts' trigrams sparse, the vectors a byte a number, the
-        // description's trigrams whole
+        // Kept as the application keeps them: the short texts' trigrams sparse, the vectors and the description's
+        // trigrams a byte a number
         return SiteWorks(
             source,
             List(count) { "%05d".format(it) },
@@ -86,7 +86,7 @@ internal object RandomSearches {
             titled,
             letterLengths.mapIndexed { k, l ->
                 val m = rows(random, BooleanArray(count) { l[it] > 0f }, width, counts = true)
-                if (LetteredText.entries[k] == LetteredText.DESCRIPTION) m else sparse(m)
+                if (LetteredText.entries[k] == LetteredText.DESCRIPTION) bytes(m) else sparse(m)
             },
             letterLengths,
         )

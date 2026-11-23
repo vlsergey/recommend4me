@@ -3,9 +3,9 @@ package io.github.vlsergey.recommend4me.matrix
 /**
  * ROWS OF NUMBERS, A ROW A THING, as a product reads them, however they are kept: every row of its [cols] numbers whole
  * ([HalfMatrix], two bytes a number), only the numbers not nought of each ([SparseRows]: the trigrams of a short text,
- * a few of hundreds), or a byte a number and a scale a row ([ByteMatrix]: the vectors of texts, half the memory of half
- * precision). A product on the processor reads a run of rows as single precision ([floats]); the card is sent them made
- * whole halves.
+ * a few of hundreds), or a byte a number and a scale a row ([ByteMatrix]: the vectors of texts and the trigrams of long
+ * ones, half the memory of half precision). A product on the processor reads a run of rows as single precision
+ * ([floats]); the card is sent them made whole halves.
  */
 sealed interface Rows {
     val rows: Int

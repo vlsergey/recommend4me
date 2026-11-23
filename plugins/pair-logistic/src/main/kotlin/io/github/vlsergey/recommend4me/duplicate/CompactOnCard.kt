@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.matrix.ByteMatrix
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.matrix.SparseRows
+import java.util.stream.IntStream
 
 /**
  * SPARSE ROWS OF EVERY WORK OF A SEARCH ON THE CARD, as the kernels of the graph read them (`graph.cu`): of the work u
@@ -56,21 +57,31 @@ internal class BytesOnCard(val bytes: Cublas.DeviceBytes, val scales: Cublas.Dev
             all.sites.forEachIndexed { a, s ->
                 val rows = of(s)
                 if (cols == 0 || rows.cols != cols) return@forEachIndexed
-                val own = rows as? ByteMatrix ?: quantized(rows)
-                bytes.upload(own, 0, s.count, all.start[a].toLong() * width)
-                own.scales(0, s.count).copyInto(scales, all.start[a])
+                for (from in 0 until s.count step PORTION) {
+                    val count = minOf(PORTION, s.count - from)
+                    val own = (rows as? ByteMatrix)?.rows(from, count) ?: quantized(rows, from, count)
+                    bytes.upload(own, 0, count, (all.start[a] + from).toLong() * width)
+                    own.scales(0, count).copyInto(scales, all.start[a] + from)
+                }
             }
             return BytesOnCard(bytes, room.floatsOf(scales))
         }
 
-        /** The [rows] a byte a number. */
-        private fun quantized(rows: Rows): ByteMatrix =
-            ByteMatrix(rows.rows, rows.cols).also { m ->
-                val row = FloatArray(rows.cols)
-                for (i in 0 until rows.rows) {
-                    rows.take(i, row)
-                    m.put(i, row)
+        /** The [count] rows of [rows] from [from] a byte a number, side by side on every core. */
+        private fun quantized(rows: Rows, from: Int, count: Int): ByteMatrix =
+            ByteMatrix(count, rows.cols).also { m ->
+                val row = ThreadLocal.withInitial { FloatArray(rows.cols) }
+                IntStream.range(0, count).parallel().forEach { i ->
+                    val own = row.get()
+                    rows.take(from + i, own)
+                    m.put(i, own)
                 }
             }
+
+        /**
+         * The rows made bytes and sent at once: of the description's trigrams (512 numbers) 32 MB of the main memory,
+         * not every work's.
+         */
+        private const val PORTION = 65_536
     }
 }

@@ -12,12 +12,12 @@ import io.github.vlsergey.recommend4me.matrix.SparseRows
  * one; of no column, a site with no vector of a description), the same of the vectors of their titles ([titleVectors],
  * [titled]), the unit rows of the trigrams of the other texts ([letters] and [letterLengths], by [LetteredText]: nought
  * of a work of none). The rows of any kind ([Rows]): the application keeps those of the short texts sparse, the vectors
- * a byte a number (owner, 2026-11-20: the search ran out of memory). The values of the facets the sites share
- * ([values], by their places among every value of the type, ascending) with the weight of each ([weights]: its rarity
- * among every work of the type, a work's values of each facet of unit length) and the facets it has a value of
- * ([facets], a bit a facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places
- * of [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
- * author the dictionary of authors gives as one with them, fully or in part ([kin]).
+ * and the trigrams of the descriptions a byte a number (owner, 2026-11-20: the search ran out of memory). The values of
+ * the facets the sites share ([values], by their places among every value of the type, ascending) with the weight of
+ * each ([weights]: its rarity among every work of the type, a work's values of each facet of unit length) and the
+ * facets it has a value of ([facets], a bit a facet by its place among [PairSearch.families]); the numbers of its size
+ * ([sizes], by the places of [PairSearch.sizes], a row a number, nought when not known); its normalized authors
+ * ([authors]) and with them every author the dictionary of authors gives as one with them, fully or in part ([kin]).
  */
 class SiteWorks(
     val source: String,

@@ -78,7 +78,8 @@ internal class TextsCompared(
             val streamed = System.nanoTime()
             fandomsOf(s, ids, at, index, fandomKeys)?.copyInto(texts.getValue(LetteredText.FANDOMS))
             val named = System.nanoTime()
-            // The description long, every row whole; the names of the fandoms and the line of the characters short
+            // The description long, every row whole, a byte a number; the names of the fandoms and the line of the
+            // characters short
             val rows =
                 LetteredText.entries.map {
                     val own = texts.getValue(it).asList()

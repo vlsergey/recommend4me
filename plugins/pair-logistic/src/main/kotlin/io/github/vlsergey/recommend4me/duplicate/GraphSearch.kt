@@ -16,7 +16,7 @@ private val log = LoggerFactory.getLogger(GraphSearch::class.java)
  * are not of one width: their search is every pair's ([CardSearch]).
  */
 internal object GraphSearch {
-    private val NAMES = listOf("descend", "scored") + RowsOnCard.NAMES
+    private val NAMES = listOf("descend", "scored")
 
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null
@@ -27,7 +27,7 @@ internal object GraphSearch {
         if (compiledFor !== card) {
             compiledFor = card
             compiled =
-                card.kernels(RowsOnCard.source("graph.cu"), NAMES)?.also { k ->
+                card.kernels(GraphSearch::class.java.getResource("graph.cu")!!.readText(), NAMES)?.also { k ->
                     log.info("the kernels of the graph: {}", BOUNDED.joinToString { "$it ${k.fit(it)}" })
                 }
         }
@@ -51,7 +51,7 @@ internal object GraphSearch {
             val kernels = kernels(card) ?: error("the kernels of the graph were not made")
             CardRoom.of(card, AllOnCard.need(all, models.size)).use { room ->
                 val started = System.currentTimeMillis()
-                val onCard = AllOnCard(all, room, kernels)
+                val onCard = AllOnCard(all, room)
                 val titles = Titles.of(all)
                 val ofAuthors = WorksAlike.ofAuthors(all)
                 // Of every work the works of an author one with its, and those of the very same title: every one a
@@ -126,10 +126,12 @@ internal object GraphSearch {
  * (owner, 2026-11-20: every work's rows made whole halves took 13 of the card's 16 GB, Windows moved the rest to the
  * main memory and the graph ran 70 times slower): the trigrams of the titles, of the authors' names, of the sites'
  * names of the fandoms and lines of the characters sparse ([SparseOnCard]); the descriptions' and the titles' vectors a
- * byte a number with a scale a work — noughts of a work of none, or of another encoder's —; the description's trigrams
- * whole halves; the lengths, the facets, the sizes, the values, the authors and their kin, the works answered on.
+ * byte a number with a scale a work — noughts of a work of none, or of another encoder's —, the description's trigrams
+ * so (2026-11-23: of halves whole, a pair of the descent read 1 KB of them; the chances the search keeps are of its
+ * halves, of the main memory); the lengths, the facets, the sizes, the values, the authors and their kin, the works
+ * answered on.
  */
-internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: CudaKernels) {
+internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
     companion object {
         /**
          * The card's memory the graph of [all] needs at least, of [models] models: its rows, their lengths and marks,
@@ -146,8 +148,7 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
                     sparse { it.authorNames } +
                     sparse { it.letters[LetteredText.FANDOMS.ordinal] } +
                     sparse { it.letters[LetteredText.CHARACTERS.ordinal] } +
-                    n * (maxOf(1, all.described) + maxOf(1, all.titled) + 2L * Float.SIZE_BYTES) +
-                    n * all.width * HALF_BYTES
+                    n * (maxOf(1, all.described) + maxOf(1, all.titled) + all.width + 3L * Float.SIZE_BYTES)
             val lists =
                 (all.values.entries.size.toLong() * 2 +
                     all.kin.entries.size +
@@ -169,21 +170,7 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
     val characters = SparseOnCard.of(all.sites.map { it.letters[LetteredText.CHARACTERS.ordinal] }, room)
     val descriptions = BytesOnCard.of(all, { it.descriptions }, all.described, room)
     val titleVectors = BytesOnCard.of(all, { it.titleVectors }, all.titled, room)
-    val descriptionLetters = room.bytes(n * all.width * HALF_BYTES)
-
-    init {
-        // Whole halves, however the sites' works hold them ([RowsOnCard])
-        all.sites.forEachIndexed { a, s ->
-            val rows = s.letters[LetteredText.DESCRIPTION.ordinal]
-            RowsOnCard.write(
-                room.card,
-                kernels,
-                rows,
-                descriptionLetters,
-                all.start[a] * all.width * HALF_BYTES.toLong(),
-            )
-        }
-    }
+    val descriptionLetters = BytesOnCard.of(all, { it.letters[LetteredText.DESCRIPTION.ordinal] }, all.width, room)
 
     val titleLengths = room.floatsOf(all.sites.flatMap { it.titleLengths.asList() }.toFloatArray())
     val authorLengths = room.floatsOf(all.sites.flatMap { it.authorLengths.asList() }.toFloatArray())
@@ -261,7 +248,8 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
             titleVectors.bytes,
             titleVectors.scales,
             titled,
-            descriptionLetters,
+            descriptionLetters.bytes,
+            descriptionLetters.scales,
             fandoms.at,
             fandoms.entries,
             characters.at,
