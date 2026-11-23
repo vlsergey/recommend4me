@@ -33,9 +33,16 @@ internal object ListChanges {
 
     /**
      * The next portion of the [type] after the [cursors], of at most [limit] items of a source and [limit] works: of
-     * those taken in a writing begun at [started], every item of their works as the [clusters] tell them.
+     * those taken in a writing begun at [started], every item of their works as the works of them read by their keys
+     * tell ([clustersOf]).
      */
-    fun next(type: TypeStore, clusters: WorkClusters, cursors: ListCursors, limit: Int, started: Long): Portion {
+    fun next(
+        type: TypeStore,
+        clustersOf: (Collection<ItemKey>) -> WorkClusters,
+        cursors: ListCursors,
+        limit: Int,
+        started: Long,
+    ): Portion {
         val keys = HashSet<ItemKey>()
         val items = HashMap<String, ItemCursor?>()
         val written = HashMap<String, Long>()
@@ -44,7 +51,7 @@ internal object ListChanges {
         type.sources.forEach { s ->
             val from = cursors.of(s.id)
             val picked = s.changes.after(from, limit)
-            picked.forEach { keys += clusters.members(ItemKey(s.id, it.id)) }
+            picked.forEach { keys += ItemKey(s.id, it.id) }
             if (picked.isNotEmpty()) told[s.id] = picked.size
             val caught = picked.size < limit
             more = more || !caught
@@ -53,9 +60,17 @@ internal object ListChanges {
         }
         val before = cursors.works()
         val works = type.works.after(before, limit)
-        type.works.itemsOf(works.map { it.id }).values.flatten().forEach { keys += clusters.members(it) }
+        keys += type.works.itemsOf(works.map { it.id }).values.flatten()
         val worksCaught = works.size < limit
-        val named = keys.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
+        // With every item of their works: of the works of these items alone, never of every work of several
+        val clusters = clustersOf(keys)
+        val named =
+            keys
+                .flatMapTo(HashSet()) { clusters.members(it) }
+                .groupBy({ it.source }, { it.id })
+                .mapValues {
+                    it.value.toSet()
+                }
         log.info(
             "{}: changed after where its index stands: items {}, works {}; named with their works' items {}",
             type.id,

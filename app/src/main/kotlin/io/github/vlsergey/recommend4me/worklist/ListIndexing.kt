@@ -127,12 +127,14 @@ class ListIndexing(
         index.keepSources(type.sources.mapTo(HashSet()) { it.id })
         val cursors = ListCursors(index)
         val before = type.sources.associate { it.id to cursors.held(it.id) }
-        val clusters = works.of(type)
-        val portion = ListChanges.next(type, clusters, cursors, PORTION, started.toEpochMilli())
+        // The works of several items of the portion's items alone, by their keys: not every work of several of the type
+        // grouped of every binding, a second of every portion however few its items (2026-11-23)
+        val portion = ListChanges.next(type, { works.ofKeys(type, it) }, cursors, PORTION, started.toEpochMilli())
         // The documents a change of the dictionaries reaches, compared with what their drafts make now
         val dictionary = ListDictionary.next(type, index, PORTION)
         val named = HashMap<String, Set<String>>(portion.named)
         dictionary.named.forEach { (source, ids) -> named.merge(source, ids) { a, b -> a + b } }
+        val clusters = works.ofKeys(type, named.flatMap { (source, ids) -> ids.map { ItemKey(source, it) } })
         val more = portion.more || dictionary.more
         val gathered = System.currentTimeMillis()
         val changed = HashSet<WorkDatum>()
