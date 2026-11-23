@@ -74,13 +74,14 @@ fun h2Of(kind: String): String {
 }
 
 /**
- * The DuckDB files, each made by its one script (DuckDatabase): the store of the search of duplicates and the index of
- * the list, by the package of their classes. H2 reads a script for the generator alike, as DuckDB runs it in the
- * application.
+ * The DuckDB files, each made by its one script (DuckDatabase): the stores of the searches of the works' and of the
+ * authors' duplicates and the index of the list, by the package of their classes. H2 reads a script for the generator
+ * alike, as DuckDB runs it in the application.
  */
 val duckStores =
     mapOf(
         "duplicates" to layout.projectDirectory.file("src/main/resources/duplicate/store.sql"),
+        "authorduplicates" to layout.projectDirectory.file("src/main/resources/author/store.sql"),
         "worklist" to layout.projectDirectory.file("src/main/resources/worklist/store.sql"),
     )
 

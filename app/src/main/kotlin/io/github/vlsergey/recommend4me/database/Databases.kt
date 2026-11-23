@@ -21,8 +21,11 @@ import org.springframework.stereotype.Component
  */
 class SourceDatabases(val source: Database, val corrections: Database, val ratings: Database, val parts: PartStore)
 
-/** The files of a content type: what is learnt, and the store of the search of its duplicates. */
-class TypeDatabases(val model: Database, val duplicates: DuckDatabase)
+/**
+ * The files of a content type: what is learnt, and the stores of the searches of its works' duplicates and of its
+ * authors'.
+ */
+class TypeDatabases(val model: Database, val workDuplicates: DuckDatabase, val authorDuplicates: DuckDatabase)
 
 /**
  * Every database file of every source and content type, opened and migrated on start and held open until the end: an
@@ -97,12 +100,19 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
                             "model",
                             cacheMegabytes = MODEL_CACHE_MB,
                         ),
-                    duplicates =
+                    workDuplicates =
                         DuckDatabase(
-                            "${t.id}/duplicates",
-                            folder.type(t.id).resolve("duplicates.duckdb"),
+                            "${t.id}/work_duplicates",
+                            folder.type(t.id).resolve("work_duplicates.duckdb"),
                             "duplicate/store.sql",
                             DUPLICATES_MEMORY,
+                        ),
+                    authorDuplicates =
+                        DuckDatabase(
+                            "${t.id}/authors_duplicates",
+                            folder.type(t.id).resolve("authors_duplicates.duckdb"),
+                            "author/store.sql",
+                            AUTHOR_DUPLICATES_MEMORY,
                         ),
                 )
         }
@@ -133,7 +143,8 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
         }
         types.values.forEach {
             it.model.close()
-            it.duplicates.close()
+            it.workDuplicates.close()
+            it.authorDuplicates.close()
         }
         dictionaries.close()
         preferences.close()
@@ -158,5 +169,8 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
 
         /** The memory the store of the duplicates of a content type takes at most, as DuckDB names it. */
         const val DUPLICATES_MEMORY = "2GB"
+
+        /** The memory the store of the authors' duplicates of a content type takes at most, as DuckDB names it. */
+        const val AUTHOR_DUPLICATES_MEMORY = "1GB"
     }
 }

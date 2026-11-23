@@ -21,34 +21,18 @@
 | `search_query_shift` | the closeness of a line and a passage by meaning corrected by the user's judgments: q·p + (q·a)(b·p), the two vectors of weights of the dimensions of the text encoder's vectors; the line's vector moved by it before it is searched |
 | `search_weight` | the order of what a search finds learnt of the user's judgments: of every feature a work is found by — how close by meaning, how its words matched, the reranker's score — its weight on its own scale |
 | `work_size_model` | the model of how many words a site item has to a character, in one row: its weight of every feature — the site, the item's tags, languages and normalized authors as the index of the list holds them — by the feature's name, how every site counts the characters of our texts' classes, and the variances the next fitting begins at, packed (`content`), with when it was fitted; fitted again in the queue only when an item gives it something new to learn of; the other of an item's two sizes is worked out of it where it is read |
-| `author_candidate` | two normalized authors who may be one, as the last search of the authors' duplicates found them: whether they are bound to one entry of a catalogue (`one_entry`), how many pairs of their works the user said are one (`matching`), the chances of the rest summed (`expected`), the sites of their works (`sites`, ",a,b,"), and the user's word on them (`answer`: DIFFERENT, PARTIAL, none of an open pair) — what a page of the offers is chosen of in the database; a pair answered struck out at once, till the next search |
 | `author_listing` | every normalized author of works as the last search of the authors' duplicates read them: how many works they have, whether several authors of the sites are merged into them, whether they are bound to an entry, and their names on the sites and of their entries, lowercase — what the tab of all the authors chooses its page of |
-| `author_search` | when the authors' duplicates were last looked for, of how many works |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
-    author_candidate {
-        BIGINT first_author PK
-        BIGINT other_author PK
-        BOOLEAN one_entry
-        INTEGER matching
-        DOUBLE expected
-        VARCHAR sites
-        VARCHAR answer "null"
-    }
     author_listing {
         BIGINT author PK
         INTEGER works
         BOOLEAN merged
         BOOLEAN catalogued
         VARCHAR names
-    }
-    author_search {
-        INTEGER id PK
-        TIMESTAMPTZ made_at
-        INTEGER works
     }
     average_work {
         INTEGER id PK

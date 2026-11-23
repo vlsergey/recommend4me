@@ -1,9 +1,11 @@
 package io.github.vlsergey.recommend4me.author
 
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
-import io.github.vlsergey.recommend4me.database.model.tables.references.AUTHOR_CANDIDATE
-import io.github.vlsergey.recommend4me.database.model.tables.references.AUTHOR_SEARCH
+import io.github.vlsergey.recommend4me.database.DuckDatabase
+import io.github.vlsergey.recommend4me.database.authorduplicates.tables.references.AUTHOR_CANDIDATE
+import io.github.vlsergey.recommend4me.database.authorduplicates.tables.references.AUTHOR_SEARCH
 import java.time.Instant
+import org.duckdb.DuckDBConnection
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -31,36 +33,36 @@ class AuthorCandidate(
 class AuthorSearchMade(val madeAt: Instant, val works: Int)
 
 /**
- * THE PAIRS OF AUTHORS OF THE LAST SEARCH OF THEIR DUPLICATES, in the model database of the type: made anew whole by
- * every search, a page of them chosen in the database by its filter and its order (owner, 2026-11-20: "the tab of the
- * authors' duplicates reads a bounded amount of the database"), a word of the user's kept with its pair at once.
+ * THE PAIRS OF AUTHORS OF THE LAST SEARCH OF THEIR DUPLICATES, in the store of the type's authors' duplicates
+ * ([DuckDatabase], beside the works': owner, 2026-11-24): made anew whole by every search, appended in the order of
+ * their key, no index kept; a page of them chosen in the store by its filter and its order (owner, 2026-11-20: "the tab
+ * of the authors' duplicates reads a bounded amount of the database"), a word of the user's kept with its pair at once.
  */
-class AuthorCandidateRepository(private val db: DSLContext) {
+class AuthorCandidateRepository(private val store: DuckDatabase) {
+    private val db: DSLContext = store.dsl
     private val c = AUTHOR_CANDIDATE
 
-    /** The [pairs] of a search made [at] of [works] works, in place of those before. */
+    /**
+     * The [pairs] of a search made [at] of [works] works, in place of those before: in one transaction, a reading in
+     * between sees the last search whole.
+     */
     fun replace(pairs: Collection<AuthorCandidate>, at: Instant, works: Int) {
-        db.deleteFrom(AUTHOR_SEARCH).execute()
-        db.truncate(c).execute()
-        db.transaction { t ->
-            val tx = t.dsl()
-            // In the order of the table's key: every row written after the last
-            pairs.sortedWith(compareBy({ it.first }, { it.second })).chunked(BATCH).forEach { chunk ->
-                val columns =
-                    listOf(c.FIRST_AUTHOR, c.OTHER_AUTHOR, c.ONE_ENTRY, c.MATCHING, c.EXPECTED, c.SITES, c.ANSWER)
-                val batch = tx.batch(tx.insertInto(c).columns(columns).values(List(columns.size) { null }))
-                chunk.forEach {
-                    batch.bind(
-                        it.first,
-                        it.second,
-                        it.oneEntry,
-                        it.matching,
-                        it.expected,
-                        sitesOf(it.sites),
-                        answerOf(it.partly),
-                    )
+        store.transaction { connection, tx ->
+            tx.deleteFrom(AUTHOR_SEARCH).execute()
+            tx.deleteFrom(c).execute()
+            connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, c.name.lowercase()).use { a ->
+                pairs.sortedWith(compareBy({ it.first }, { it.second })).forEach {
+                    a.beginRow()
+                    a.append(it.first)
+                    a.append(it.second)
+                    a.append(it.oneEntry)
+                    a.append(it.matching)
+                    a.append(it.expected)
+                    a.append(sitesOf(it.sites))
+                    val answer = answerOf(it.partly)
+                    if (answer == null) a.appendNull() else a.append(answer)
+                    a.endRow()
                 }
-                batch.execute()
             }
             tx.insertInto(AUTHOR_SEARCH)
                 .set(AUTHOR_SEARCH.ID, 1)
@@ -142,7 +144,6 @@ class AuthorCandidateRepository(private val db: DSLContext) {
         }
 
     private companion object {
-        const val BATCH = 1000
         const val DIFFERENT = "DIFFERENT"
         const val PARTIAL = "PARTIAL"
     }

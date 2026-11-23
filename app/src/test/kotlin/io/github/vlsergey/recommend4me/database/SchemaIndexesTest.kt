@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.database
 
 import io.github.vlsergey.recommend4me.database.app.Public as AppSchema
+import io.github.vlsergey.recommend4me.database.authorduplicates.Public as AuthorDuplicatesSchema
 import io.github.vlsergey.recommend4me.database.corrections.Public as CorrectionsSchema
 import io.github.vlsergey.recommend4me.database.dictionaries.Public as DictionariesSchema
 import io.github.vlsergey.recommend4me.database.duplicates.Public as DuplicatesSchema
@@ -24,6 +25,7 @@ class SchemaIndexesTest {
     private val schemas: List<Schema> =
         listOf(
             AppSchema.PUBLIC,
+            AuthorDuplicatesSchema.PUBLIC,
             CorrectionsSchema.PUBLIC,
             DictionariesSchema.PUBLIC,
             DuplicatesSchema.PUBLIC,

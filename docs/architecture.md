@@ -132,9 +132,14 @@ sources/<source>/images/           picture files
 types/<type>/model.mv.db           the trained model, the predictions, the likeness to the marks,
                                    the directions of the set embeddings, the suggested tags — all
                                    recomputable
-types/<type>/duplicates.duckdb     the store of the search of duplicates (DuckDB): its candidates,
-                                   the models of the answers, how rare every value is — all
-                                   recomputable, made anew empty as its tables change
+types/<type>/work_duplicates.duckdb
+                                   the store of the search of the works' duplicates (DuckDB): its
+                                   candidates, the models of the answers, how rare every value is
+                                   — all recomputable, made anew empty as its tables change
+types/<type>/authors_duplicates.duckdb
+                                   the store of the search of the authors' duplicates (DuckDB):
+                                   its pairs of authors — recomputable, made anew empty as its
+                                   tables change
 types/<type>/search-index/         the search index
 types/<type>/list.duckdb           the index of the list of works (DuckDB): what the list is
                                    filtered, sorted, counted and paged by — all recomputable,

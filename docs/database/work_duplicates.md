@@ -1,6 +1,6 @@
-# The store of the search of duplicates of a content type: `duplicates`
+# The store of the search of the works' duplicates of a content type: `work_duplicates`
 
-`types/<type>/duplicates.duckdb` — a DuckDB file (owner, 2026-11-22: "let us move to DuckDB"), made by its one script
+`types/<type>/work_duplicates.duckdb` (`duplicates.duckdb` till 2026-11-24) — a DuckDB file (owner, 2026-11-22: "let us move to DuckDB"), made by its one script
 `app/src/main/resources/duplicate/store.sql` and made anew, empty, as its tables are other than the script makes
 (`DuckDatabase`): everything in it is made again by the next search, the user's words on the pairs kept elsewhere. The
 candidates and the rarities of the values are written whole by every search, the candidates appended in the order of

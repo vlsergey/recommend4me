@@ -11,5 +11,7 @@ The schema of every one, as its migrations (`app/src/main/resources/db/<kind>`) 
 | [A source's corrections](corrections.md) | `sources/<source>/corrections.mv.db` |
 | [A source's ratings](ratings.md) | `sources/<source>/ratings.mv.db` |
 | [A content type's model](model.md) | `types/<type>/model.mv.db` |
+| [The store of a content type's works' duplicates](work_duplicates.md) (DuckDB) | `types/<type>/work_duplicates.duckdb` |
+| [The store of a content type's authors' duplicates](authors_duplicates.md) (DuckDB) | `types/<type>/authors_duplicates.duckdb` |
 | [The dictionaries](dictionaries.md) | `dictionaries.mv.db` |
 | [The user's preferences](preferences.md) | `preferences.mv.db` |
