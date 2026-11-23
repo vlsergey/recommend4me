@@ -94,9 +94,14 @@ class CandidateReads internal constructor(private val db: DSLContext) {
         return Said(words, derived)
     }
 
-    /** Of the works [items], those whose key is the [source] and the [id]: of every site its works a list. */
+    /**
+     * Of the works [items], those whose key is the [source] and the [id]: the two as one key ("<source>|<id>", no
+     * source's name holds the bar) in one list, which DuckDB looks up by a hash — a list of ids of every site, the
+     * sites ORed, it compared every row with every id: 640 keys 1 s, 3000 keys 5-12 s, against 18 and 40 ms
+     * (2026-11-24, 2.6 million rows).
+     */
     private fun keyIn(source: Field<String?>, id: Field<String?>, items: Collection<ItemKey>): Condition =
-        DSL.or(items.groupBy({ it.source }, { it.id }).map { (s, ids) -> source.eq(s).and(id.`in`(ids.distinct())) })
+        DSL.concat(source, DSL.inline(BAR), id).`in`(items.mapTo(HashSet()) { "${it.source}$BAR${it.id}" })
 
     /**
      * The candidates the user's word is on as the search or the last answer left it, with the word: what the models of
@@ -187,6 +192,9 @@ class CandidateReads internal constructor(private val db: DSLContext) {
     }
 
     private companion object {
+        /** What parts the source and the id of a work in one key. */
+        const val BAR = "|"
+
         const val FETCH = 5000
     }
 }
