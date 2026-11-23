@@ -90,11 +90,12 @@ class ListIndexing(
 
     private fun work(typeId: String) = Task(WORK, type = typeId)
 
-    /** Whether the index of the content type [typeId] was never written: an empty list. */
-    private fun never(typeId: String): Boolean {
-        val cursors = ListCursors(indexes.of(typeId))
-        return stores.type(typeId)?.sources?.all { cursors.written(it.id) == 0L } ?: false
-    }
+    /**
+     * Whether the list of the content type [typeId] is empty: its index holds no row, never written or made anew. An
+     * index marked current as of nought ([ListCursors.nought]) holds its rows while it is written again from the first,
+     * the list whole meanwhile: a writing of the background.
+     */
+    private fun never(typeId: String): Boolean = !indexes.of(typeId).searching { it.fetchExists(ITEM) }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
