@@ -113,10 +113,14 @@ class FandomRepository(private val db: DSLContext) {
     }
 
     /**
-     * What was of the fandom [from] — its sites' fandoms, its entries, its parents and children, the pairs told apart —
-     * of [into], and [from] gone.
+     * What was of the fandom [from] — its sites' fandoms, its entries, its parents and children, the pairs told apart,
+     * its characters read — of [into], and [from] gone.
      */
     fun merge(from: Long, into: Long, now: Instant) {
+        // The characters of the entries read when either read them: [from] would lose them else (2026-11-23, of Harry
+        // Potter, its entry's universe merged into the one of the sites' fandoms)
+        val read = db.select(FANDOM.CHARACTERS).from(FANDOM).where(FANDOM.ID.eq(from)).fetchOne(FANDOM.CHARACTERS)
+        if (read == true) db.update(FANDOM).set(FANDOM.CHARACTERS, true).where(FANDOM.ID.eq(into)).execute()
         db.update(FANDOM_SITE)
             .set(FANDOM_SITE.FANDOM, into)
             .set(FANDOM_SITE.BOUND_AT, now)

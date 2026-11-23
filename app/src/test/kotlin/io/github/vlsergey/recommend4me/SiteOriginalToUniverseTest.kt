@@ -4,6 +4,8 @@ import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemFacet
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
+import io.github.vlsergey.recommend4me.api.model.UniverseRelation
+import io.github.vlsergey.recommend4me.api.model.UniverseRelationRequest
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import kotlin.test.assertEquals
@@ -64,6 +66,25 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         charactersToChoose(universe, "after the background")
     }
 
+    @Test
+    fun `an original given a universe its characters were merged into has them to choose`() {
+        val read = taught()
+        // A universe of a site's fandom, its characters never read, the universe whose characters are read merged into
+        // it (2026-11-23, of Harry Potter: the universe of the site's fandoms kept, the one of the entry merged)
+        capture("f1|The harbour|ships|Boats rest in the harbour|||fleet:Fleet")
+        val drafted = facetsOf("f1").single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
+        val universe = drafted.single { it.draftedFrom != null }.key
+        assertTrue(!universes.getUniverse(universe).body!!.characters, "the site's universe reads no characters")
+        universes.relateUniverses(UniverseRelationRequest(universe, read, UniverseRelation.MERGED))
+        assertTrue(universes.listUniverses().body!!.none { it.value == read }, "merged")
+        assertTrue(universes.getUniverse(universe).body!!.characters, "the characters are read after the merge")
+
+        capture("o2|The courier|letters|A courier carries letters across the desert|||originals:Originals")
+        corrections.correctFacet(site, "o2", FacetCorrection(facet = "universe", added = true, key = universe))
+        background.run()
+        charactersToChoose(universe, "after the merge", "o2")
+    }
+
     /**
      * Works of the universe [UniverseRef] U2 whose characters the user named, and works of none, the models fitted of
      * them: the universe's value.
@@ -90,9 +111,9 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
     }
 
     /** On the work's screen and on the site's page, the characters of the [universe] to choose ([when] it is so). */
-    private fun charactersToChoose(universe: String, `when`: String) {
-        val screen = items.getItem(site, "o1").body!!.allFacets
-        val page = pages.getPage("https://$site.example/work/o1").body!!.item!!.facets
+    private fun charactersToChoose(universe: String, `when`: String, id: String = "o1") {
+        val screen = items.getItem(site, id).body!!.allFacets
+        val page = pages.getPage("https://$site.example/work/$id").body!!.item!!.facets
         listOf("the screen" to screen, "the page" to page).forEach { (where, facets) ->
             val given = facets.single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
             assertTrue(
@@ -102,16 +123,16 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
             )
             assertTrue(facets.any { it.facet == UniverseFacets.CHARACTERS }, "$where, $`when`: no field of characters")
         }
-        chances(screen, `when`)
+        chances(screen, `when`, id)
         foundOnTheScreen(universe, `when`)
-        foundOnThePage(`when`)
+        foundOnThePage(`when`, id)
     }
 
     /**
      * The model's chance of every character of the universe, by the rest of the work: given on the card ([screen]) or
      * offered among the candidates the line of the characters and "…" read.
      */
-    private fun chances(screen: List<ItemFacet>, `when`: String) {
+    private fun chances(screen: List<ItemFacet>, `when`: String, id: String) {
         val given =
             screen
                 .single { it.facet == UniverseFacets.CHARACTERS }
@@ -120,7 +141,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
                 .map { it.key }
         val offered =
             suggestionsApi
-                .getCandidates(site, "o1", UniverseFacets.CHARACTERS, null, null)
+                .getCandidates(site, id, UniverseFacets.CHARACTERS, null, null)
                 .body!!
                 .filter { it.key in CHARACTERS && it.chance != null }
                 .map { it.key }
@@ -147,11 +168,11 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
      * The page's field of the characters (`addField` of the extension): the candidates of the work, every one, found by
      * any of its names.
      */
-    private fun foundOnThePage(`when`: String) {
-        val hints = suggestionsApi.getCandidates(site, "o1", UniverseFacets.CHARACTERS, null, null).body!!
+    private fun foundOnThePage(`when`: String, id: String) {
+        val hints = suggestionsApi.getCandidates(site, id, UniverseFacets.CHARACTERS, null, null).body!!
         val given =
             pages
-                .getPage("https://$site.example/work/o1")
+                .getPage("https://$site.example/work/$id")
                 .body!!
                 .item!!
                 .facets
