@@ -53,7 +53,14 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
         val (predicted, written) =
             index.written { ListPredictions.of(it, s.id, other) to ListKeptRows.of(it, s.id, other) }
         val rows =
-            ListRows.read(s, other, clusters.value, ListModelValues.of(index, s.id, other), predicted, encoder)
+            ListRows.read(
+                    s,
+                    other,
+                    clusters.value,
+                    index.written { ListModelValues.of(it, s.id, other) },
+                    predicted,
+                    encoder,
+                )
                 .mapNotNull { r -> written[r.key.id]?.takeIf { !r.datedOtherThan(it) }?.let { r.over(it) } }
         index.replace(rows)
         return rows.size

@@ -157,7 +157,7 @@ class EveryWork(
                         heads ?: of.items.keysOf(ids),
                         laps.within("$source:"),
                         read,
-                        kept = if (kept) ListModelValues.of(index, source, ids) else null,
+                        kept = if (kept) index.written { ListModelValues.of(it, source, ids) } else null,
                         given = told,
                     )
                     .also { told.forEach { (id, v) -> given[ItemKey(source, id)] = v } }

@@ -264,7 +264,12 @@ class SiteUniversesTest : SiteTestBase() {
         background.run()
         assertEquals(
             setOf("fake:C1", "fake:C2"),
-            ListModelValues.of(listIndexes.of("books"), site, listOf("p9"))["p9"]?.get("characters").orEmpty().toSet(),
+            listIndexes
+                .of("books")
+                .written { ListModelValues.of(it, site, listOf("p9")) }["p9"]
+                ?.get("characters")
+                .orEmpty()
+                .toSet(),
         )
         assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
         val pairing = facets.single { it.facet == "pairings" }.propertyValues.single { it.offered != true }

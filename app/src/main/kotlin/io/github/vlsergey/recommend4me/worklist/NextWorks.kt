@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import org.jooq.Condition
+import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /** An item a task over the works takes, and its expected grade: none of no expectation. */
@@ -27,18 +28,28 @@ object NextWorks {
         if (scope == WorkScope.MARKED) TaskPriority.MARKED_WORKS else TaskPriority.OTHER_WORKS
 
     /**
-     * The next [n] items of the [scope] the condition [stale] picks, from the [cursor] on, the highest expected first.
+     * The next [n] items of the [scope] the condition [stale] picks, from the [cursor] on, the highest expected first;
+     * of the items [among] alone when given ([ListIndex.AMONG]: what another store tells is to be done of them).
      */
-    fun next(index: ListIndex, scope: WorkScope, stale: Condition, cursor: TaskCursor, n: Int): List<TakenWork> =
-        index.written { db ->
-            val marked = ITEM.MARKED.eq(scope == WorkScope.MARKED)
-            db.select(ITEM.ITEM_KEY, ITEM.PREDICTION)
-                .from(ITEM)
-                .where(marked, stale, after(cursor))
-                .orderBy(ITEM.PREDICTION.desc().nullsLast(), ITEM.ITEM_KEY.asc())
-                .limit(n)
-                .fetch { r -> TakenWork(ItemKey.parse(r.value1()!!), r.value2() ?: Double.NEGATIVE_INFINITY) }
+    fun next(
+        index: ListIndex,
+        scope: WorkScope,
+        stale: Condition,
+        cursor: TaskCursor,
+        n: Int,
+        among: Collection<ItemKey>? = null,
+    ): List<TakenWork> =
+        index.written(among) { db ->
+            next(db, scope, if (among == null) stale else stale.and(ListIndex.AMONG), cursor, n)
         }
+
+    private fun next(db: DSLContext, scope: WorkScope, stale: Condition, cursor: TaskCursor, n: Int): List<TakenWork> =
+        db.select(ITEM.ITEM_KEY, ITEM.PREDICTION)
+            .from(ITEM)
+            .where(ITEM.MARKED.eq(scope == WorkScope.MARKED), stale, after(cursor))
+            .orderBy(ITEM.PREDICTION.desc().nullsLast(), ITEM.ITEM_KEY.asc())
+            .limit(n)
+            .fetch { r -> TakenWork(ItemKey.parse(r.value1()!!), r.value2() ?: Double.NEGATIVE_INFINITY) }
 
     /**
      * The items after the [cursor] in the order of the tasks: of a lower expectation, or of the same and a greater key
@@ -53,7 +64,4 @@ object NextWorks {
             else -> DSL.or(ITEM.PREDICTION.lt(grade), ITEM.PREDICTION.eq(grade).and(key), ITEM.PREDICTION.isNull)
         }
     }
-
-    /** The items [keys] alone: what another store tells is to be done of them. */
-    fun among(keys: Collection<ItemKey>): Condition = ITEM.ITEM_KEY.`in`(keys.map { it.toString() })
 }

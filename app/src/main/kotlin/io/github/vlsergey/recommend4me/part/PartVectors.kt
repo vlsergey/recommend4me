@@ -104,7 +104,7 @@ class PartVectors(
         // Of none waiting, a sweep of none: its mark moves up to its horizon all the same
         val items =
             if (type == null || encoder == null) emptyList()
-            else sweeps.next(STAGE, typeId, sources, scope, cursor, portion, NextWorks.among(waiting))
+            else sweeps.next(STAGE, typeId, sources, scope, cursor, portion, waiting)
         var gaveWay = false
         if (items.isNotEmpty()) {
             val works = items.groupBy({ it.key.source }, { it.key.id }).mapValues { it.value.toSet() }

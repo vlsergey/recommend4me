@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.TaskCursor
-import org.jooq.Condition
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -62,13 +61,13 @@ class StageSweeps(
         scope: WorkScope,
         cursor: TaskCursor,
         portion: Int,
-        pending: Condition? = null,
+        pending: Collection<ItemKey>? = null,
     ): List<TakenWork> {
         val index = lists.of(typeId)
         val began = StageMarks.began(index, stage, scope) ?: begin(index, stage, scope, sources)
         val due =
-            pending?.let { StageDue.pending(it, stage, began) } ?: StageDue.of(index, stage, scope, sources, began)
-        return NextWorks.next(index, scope, due, cursor, portion)
+            if (pending != null) StageDue.pending(stage, began) else StageDue.of(index, stage, scope, sources, began)
+        return NextWorks.next(index, scope, due, cursor, portion, among = pending)
     }
 
     /**

@@ -166,7 +166,7 @@ class WorkFields(
         fresh: Map<String, Map<String, List<String>>>,
         ids: List<String>,
     ): Int {
-        val kept = ListModelValues.of(index, s.id, ids)
+        val kept = index.written { ListModelValues.of(it, s.id, ids) }
         val other = ids.filter { id -> asSets(fresh[id]) != asSets(kept[id]) }
         if (other.isNotEmpty()) {
             val (predicted, written) =

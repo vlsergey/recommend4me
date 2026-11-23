@@ -190,7 +190,14 @@ class ListIndexing(
     ): Int {
         val (predicted, written) = index.written { ListPredictions.of(it, s.id, ids) to ListKeptRows.of(it, s.id, ids) }
         val rows =
-            ListRows.read(s, ids, clusters, ListModelValues.of(index, s.id, ids), predicted, plugins.textEncoder()?.id)
+            ListRows.read(
+                s,
+                ids,
+                clusters,
+                index.written { ListModelValues.of(it, s.id, ids) },
+                predicted,
+                plugins.textEncoder()?.id,
+            )
         val found = rows.mapTo(HashSet()) { it.key.id }
         val filters = ListRows.filterIds(s)
         val drafted = HashSet<String>()

@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import org.duckdb.DuckDBConnection
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
 import org.jooq.impl.DSL
@@ -65,8 +66,31 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
             }
         }
 
-    /** The [block] of a reading of the index as written so far, committed or not. */
-    fun <T> written(block: (DSLContext) -> T): T = lock.withLock { block(writing) }
+    /**
+     * The [block] of a reading of the index as written so far, committed or not; given the items [among], their keys
+     * where [AMONG] reads them — appended to a table of the writing's connection, temporary (no table of the index's
+     * script, whose change makes the index anew), and joined, not named one by one in a statement (2026-11-23: the
+     * items whose chapters waited, a million, named so in the choice of the next works took 2–3 minutes under the lock
+     * of the writing, the page of the duplicates waiting behind it), emptied as the block ends.
+     */
+    fun <T> written(among: Collection<ItemKey>? = null, block: (DSLContext) -> T): T = lock.withLock {
+        if (among == null) return@withLock block(writing)
+        writing.execute(
+            "CREATE TEMPORARY TABLE IF NOT EXISTS $TEMPORARY.$SCHEMA.$AMONG_ITEMS (item_key VARCHAR NOT NULL)"
+        )
+        try {
+            writer.createAppender(TEMPORARY, SCHEMA, AMONG_ITEMS).use { a ->
+                among.forEach { key ->
+                    a.beginRow()
+                    a.append(key.toString())
+                    a.endRow()
+                }
+            }
+            block(writing)
+        } finally {
+            writing.execute("DELETE FROM $TEMPORARY.$SCHEMA.$AMONG_ITEMS")
+        }
+    }
 
     /**
      * The rows of the [rows] written in place of those of their items — each of every table —, and those of the items
@@ -197,6 +221,20 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
     companion object {
         /** The items of one statement: the length of its list of keys, not a meaning. */
         const val BATCH = 1000
+
+        /** The catalogue of a connection's temporary tables in DuckDB, and its schema. */
+        private const val TEMPORARY = "temp"
+        private const val SCHEMA = DuckDBConnection.DEFAULT_SCHEMA
+
+        /** The temporary table of the items a reading is among ([written]). */
+        private const val AMONG_ITEMS = "among_item"
+
+        /** An item's being among those a reading of the index as written was given ([written]). */
+        val AMONG: Condition =
+            ITEM.ITEM_KEY.`in`(
+                DSL.select(DSL.field(DSL.name("item_key"), String::class.java))
+                    .from(DSL.table(DSL.name(TEMPORARY, SCHEMA, AMONG_ITEMS)))
+            )
 
         /** The tables of an item's rows beside its own, by the column of its key. */
         private val OTHERS =

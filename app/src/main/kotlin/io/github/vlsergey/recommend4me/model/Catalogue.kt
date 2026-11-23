@@ -145,7 +145,7 @@ class CatalogueReader(
                 of[s.id]
                     ?.toHashSet()
                     ?.let { ids ->
-                        val kept = ListModelValues.of(index, s.id, ids)
+                        val kept = index.written { ListModelValues.of(it, s.id, ids) }
                         readItems(s, type.sources.size > 1, series, s.items.keysOf(ids), kept = kept)
                     }
                     .orEmpty()

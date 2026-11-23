@@ -272,7 +272,7 @@ internal class ComparedFacets(private val s: SourceStore) {
      * 2026-11-18: the screens are of the databases, the search alone of the index); the authors apart.
      */
     fun shown(ids: List<String>, index: ListIndex): Map<String, List<String>> {
-        val byFacet = ListRows.facetsOf(s, ids, ListModelValues.of(index, s.id, ids))
+        val byFacet = ListRows.facetsOf(s, ids, index.searching { ListModelValues.of(it, s.id, ids) })
         return ids.associateWith { id ->
             byFacet
                 .flatMap { (facetId, byItem) ->
