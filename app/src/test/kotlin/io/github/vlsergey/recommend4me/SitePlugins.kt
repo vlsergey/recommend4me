@@ -41,10 +41,15 @@ import org.springframework.context.annotation.Bean
 class SitePlugins {
     @Bean fun siteSource(): Source = SiteSource()
 
-    /** The sites of the scenarios whose models are of their own works alone: [SiteTest], [SiteUniversesTest]. */
+    /**
+     * The sites of the scenarios whose models are of their own works alone: [SiteTest], [SiteUniversesTest],
+     * [SiteOriginalToUniverseTest].
+     */
     @Bean fun tagSite(): Source = SiteSource(SiteTest.SITE)
 
     @Bean fun universeSite(): Source = SiteSource(SiteUniversesTest.SITE)
+
+    @Bean fun originalSite(): Source = SiteSource(SiteOriginalToUniverseTest.SITE)
 
     @Bean fun wordsEncoder(): TextEncoder = WordsEncoder()
 
