@@ -11,10 +11,14 @@ import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListTexts
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import io.github.vlsergey.recommend4me.worklist.WorkStages
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.SpringApplication
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ConfigurableApplicationContext
 
 /**
  * The stages of the tasks over the works do again the works whose data they read changed, and only them: a mark of
@@ -24,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired
 class WorkStagesTest : SiteTestBase() {
     @Autowired lateinit var lists: ListIndexes
     @Autowired lateinit var plugins: Plugins
+    @Autowired lateinit var context: ConfigurableApplicationContext
 
     private fun stages(vararg ids: String): Map<String, WorkStages> =
         WorkStages.of(lists.of("books"), site, ids.toList())
@@ -94,5 +99,22 @@ class WorkStagesTest : SiteTestBase() {
             assertEquals(before[it], after[it], "$it of a work its document holds alike")
         }
         assertTrue(ListCursors(index).written(site) > 0, "the index written again")
+    }
+
+    @Test
+    fun `a stage of no mark yet does, after a start, every work it never did, however old its data`() {
+        capture("wm1|The fifth lantern|space|A lantern lit on a low reef||")
+        background.run()
+        // The stage never did the work and keeps no mark of its source — as every stage before they kept marks, and a
+        // stage or a source new
+        val index = lists.of("books")
+        index.set(WorkStage.VECTORS.column, mapOf(ItemKey(site, "wm1") to 0L))
+        index.stages.forget { it.startsWith("mark:${WorkStage.VECTORS.name}:") && it.endsWith(":$site") }
+        index.commit()
+
+        context.publishEvent(ApplicationReadyEvent(SpringApplication(), arrayOf(), context, Duration.ZERO))
+        background.run()
+        textVectors.encodeNow("books")
+        assertTrue(stages("wm1").getValue("wm1")[WorkStage.VECTORS] > 0, "the work its data older than the start done")
     }
 }

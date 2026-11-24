@@ -2,11 +2,7 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.TaskCursor
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 /**
@@ -19,35 +15,11 @@ import org.springframework.stereotype.Component
  * dated by the horizon ([made]): the stages reading it see it. The documents all done, the mark is the horizon
  * ([complete]): the stage tells the stages after it, each by an event of its own. A stage to be done of every work
  * again — its models fitted anew, an encoder of another — is marked at nought ([reset]): every document of its sources
- * is taken. No date compares a document with another: a range of dates the stage reads, and a mark.
+ * is taken; so is a stage or a source of no mark yet — none of its works done. No date compares a document with
+ * another: a range of dates the stage reads, and a mark.
  */
 @Component
-class StageSweeps(
-    private val stores: Stores,
-    private val lists: ListIndexes,
-) {
-
-    /**
-     * Of every stage, scope and source of no mark yet — the stages did their work before they kept marks — the mark as
-     * of the index's writing now, kept: what changes after it is theirs to do. Before anything writes the index.
-     */
-    @Order(START_ORDER)
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        stores.types.forEach { type ->
-            val index = lists.of(type.id)
-            val unmarked =
-                WorkStage.entries
-                    .flatMap { stage ->
-                        WorkScope.entries.flatMap { scope ->
-                            type.sources.map { it.id to StageMarks.markKey(stage, scope, it.id) }
-                        }
-                    }
-                    .filter { (_, key) -> index.stages.since(key) == null }
-            if (unmarked.isEmpty()) return@forEach
-            unmarked.forEach { (source, key) -> index.stages.changed(key, StageMarks.written(index, source)) }
-            index.commit()
-        }
+class StageSweeps(private val lists: ListIndexes) {
 
     /**
      * The next [portion] works of the [scope] of the [typeId] the [stage] is to do, of the [sources], from the [cursor]
@@ -171,9 +143,4 @@ class StageSweeps(
     private fun horizon(index: ListIndex, stage: WorkStage, scope: WorkScope, source: String): Long =
         (listOf(StageMarks.written(index, source)) + stage.after.map { StageMarks.mark(index, it, scope, source) })
             .min()
-
-    private companion object {
-        /** Among the listeners of the start: before the index of the list or any stage is planned. */
-        const val START_ORDER = -100
-    }
 }

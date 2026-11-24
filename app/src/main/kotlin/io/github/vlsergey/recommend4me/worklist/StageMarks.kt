@@ -13,8 +13,8 @@ internal object StageMarks {
     fun written(index: ListIndex, source: String): Long = ListCursors(index).held(source)
 
     /**
-     * Up to when the [stage] did every change of the [source] ([StageSweeps.start]); nought of a source come since —
-     * none of its works done yet — and of a stage to be done of every work.
+     * Up to when the [stage] did every change of the [source] ([StageSweeps]); nought of none kept — a stage or a
+     * source new, none of its works done yet — and of a stage to be done of every work.
      */
     fun mark(index: ListIndex, stage: WorkStage, scope: WorkScope, source: String): Long =
         index.stages.since(markKey(stage, scope, source)) ?: 0L
