@@ -28,6 +28,7 @@ import io.github.vlsergey.recommend4me.manner.MannerWordsRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
 import io.github.vlsergey.recommend4me.model.AverageWorkRepository
 import io.github.vlsergey.recommend4me.model.HeldOutRepository
+import io.github.vlsergey.recommend4me.model.ModelAutoChanges
 import io.github.vlsergey.recommend4me.model.ModelRepository
 import io.github.vlsergey.recommend4me.model.ScoreSweepRepository
 import io.github.vlsergey.recommend4me.part.PartRepository
@@ -348,6 +349,9 @@ class TypeStore(
 
     /** The likeness of the names of the sites' fandoms learnt of the user's word on the universes. */
     val fandomLikeness = FandomLikenessRepository(databases.model(type.id))
+
+    /** The changes of no word of the user's counted beside the models of the grades and of the fields. */
+    val autoChanges = ModelAutoChanges(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))

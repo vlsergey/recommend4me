@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
+import io.github.vlsergey.recommend4me.model.ModelAutoChanges
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -60,6 +61,16 @@ internal class FacetRefits(
         tasks.keys.want(work, listOf(store.id))
         val due = if (tasks.planned().any { it.work == work }) null else Instant.now().plusSeconds(DELAY_SECONDS)
         planRefresh(store.type, due, reason)
+    }
+
+    /**
+     * [changes] of no word of the user's of what the source's models learn from — the works the user answered on or
+     * rated —, for the [reason]: counted beside the models, fitted again once they come to a hundredth of the works the
+     * models learnt of ([ModelAutoChanges]).
+     */
+    fun counted(source: String, reason: String, changes: Int) {
+        if (changes == 0) return
+        if (stores.typeOf(source).autoChanges.count(ModelAutoChanges.fields(source), changes)) changed(source, reason)
     }
 
     /**
@@ -132,6 +143,9 @@ internal class FacetRefits(
         val stop = { tasks.stopping }
         val facets = chain.facetsOf(store)
         val started = System.currentTimeMillis()
+        // The changes of no word of the user's counted till now: those this fitting reads, let go after it
+        val changes = stores.typeOf(store.id).autoChanges
+        val counted = changes.of(ModelAutoChanges.fields(store.id))?.changes ?: 0
         // What is done, told to the queue: every facet a step (user, 2026-11-18: "a progress indicator is needed")
         val steps = facets.size.coerceAtLeast(1).toDouble()
         tasks.progress(of.toDouble() / sources, TaskStep.READ_CHARACTERS)
@@ -155,6 +169,11 @@ internal class FacetRefits(
             read - started,
             took,
         )
+        changes.learnt(
+            ModelAutoChanges.fields(store.id),
+            store.suggestions.suggesters().mapNotNull { it.fit?.items }.maxOrNull(),
+        )
+        changes.letGo(ModelAutoChanges.fields(store.id), counted)
         events.publishEvent(FieldModelFitEvent(store.id))
     }
 

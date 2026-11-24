@@ -13,6 +13,7 @@
 | `manner_words` | the words a manner of a text is measured by: the most frequent words of the works' texts, each with the mean and the spread of its share, and of how many texts |
 | `group_manner` | the manner of every normalized author and every normalized series: the mean of the manners of their works that have a text, with the hash of what it was made of — the words, the works and the texts of their items |
 | `fandom_likeness` | the likeness of the names of the sites' fandoms learnt of the user's word on the universes: a weight of every dimension of their vectors, of how many universes it was learnt, how many of the pairs of the universes held out it put in the user's order beside the encoder's own, and the changes of no word of the user's counted since (learnt again at a hundredth of the universes); kept in the model database of the first content type of universes |
+| `model_auto_changes` | the changes of no word of the user's counted beside a model since it was fitted — the models of the grades (`grades`), of the fields of a source (`fields:<source>`): a chapter of a rated work, its texts' or sets' vectors, its pictures — with of how many works it learnt; fitted again at a hundredth of them, the count let go by the fitting that read it |
 | `mark_likeness` | how every work is alike what the user marked |
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
@@ -117,6 +118,11 @@ erDiagram
         TIMESTAMPTZ trained_at
         CLOB meta
         BLOB weights
+    }
+    model_auto_changes {
+        VARCHAR model PK
+        INTEGER learnt "null"
+        INTEGER changes
     }
     score_sweep {
         INTEGER id PK

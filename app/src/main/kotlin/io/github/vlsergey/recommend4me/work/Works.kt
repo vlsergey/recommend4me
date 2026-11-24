@@ -127,7 +127,8 @@ class Works(private val stores: Stores, private val events: ApplicationEventPubl
      */
     @Order(Ordered.LOWEST_PRECEDENCE)
     @EventListener
-    fun written(event: SiteItemWriteEvent) = events.publishEvent(WorkChangeEvent(event.source, event.ids))
+    fun written(event: SiteItemWriteEvent) =
+        events.publishEvent(WorkChangeEvent(event.source, event.ids, bySite = true))
 
     /**
      * A site's item removed: its work read again — of the items left of other sites, the work changed; of none, gone —
@@ -135,9 +136,9 @@ class Works(private val stores: Stores, private val events: ApplicationEventPubl
      */
     @EventListener
     fun removed(event: SiteItemRemoveEvent) {
-        events.publishEvent(WorkChangeEvent(event.source, listOf(event.itemId)))
+        events.publishEvent(WorkChangeEvent(event.source, listOf(event.itemId), bySite = true))
         event.remaining.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            events.publishEvent(WorkChangeEvent(source, ids))
+            events.publishEvent(WorkChangeEvent(source, ids, bySite = true))
         }
     }
 

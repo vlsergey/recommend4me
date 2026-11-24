@@ -142,6 +142,8 @@ class Recommendations(
         tasks.run(trainingWork(typeId), priority = TaskPriority.ASKED.takeIf { asked }) {
             val type = stores.contentType(typeId)
             trainingNow += typeId
+            // The changes of no word of the user's counted till now: those this training reads, let go after it
+            val counted = type.autoChanges.of(ModelAutoChanges.GRADES)?.changes ?: 0
             try {
                 val started = System.currentTimeMillis()
                 // Its steps told to the queue, each begun at its share of a training as long trainings went
@@ -168,6 +170,8 @@ class Recommendations(
                     indexes.of(typeId).commit()
                 }
                 predictions.begin(type, "trained")
+                type.autoChanges.learnt(ModelAutoChanges.GRADES, model?.meta?.ratingCounts?.sum())
+                type.autoChanges.letGo(ModelAutoChanges.GRADES, counted)
             } finally {
                 trainingNow -= typeId
             }

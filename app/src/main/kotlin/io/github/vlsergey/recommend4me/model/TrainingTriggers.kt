@@ -3,12 +3,9 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
-import io.github.vlsergey.recommend4me.manner.WorkMannerChangeEvent
 import io.github.vlsergey.recommend4me.mark.SiteItemMarkChangeEvent
-import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.settings.Settings
-import io.github.vlsergey.recommend4me.setvector.SiteItemSetVectorChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.TagChangeEvent
 import io.github.vlsergey.recommend4me.worklist.RatedWorkValueFillEvent
@@ -21,8 +18,8 @@ private val log = LoggerFactory.getLogger(TrainingTriggers::class.java)
 
 /**
  * WHAT MAKES THE MODELS LEARN AGAIN: the changes the application tells of — the user's grades, marks, tags and answers,
- * the background's chances and set vectors — each a training planned ([Recommendations.scheduleRetrain]); a type with
- * grades and no model readable, on start.
+ * the background's chances — each a training planned ([Recommendations.scheduleRetrain]); a type with grades and no
+ * model readable, on start. The works' pictures, sets and manners are counted ([WorkFeatureCounts]).
  */
 @Component
 class TrainingTriggers(
@@ -78,22 +75,6 @@ class TrainingTriggers(
         heldOuts.forget(event.source, event.itemId)
         if (event.graded) recommendations.scheduleRetrain(event.type, "removal")
     }
-
-    /** The works' pictures analysed: features of the works, learnt as they come. */
-    @EventListener
-    fun picturesAnalysed(event: SiteItemPictureAnalysisEvent) =
-        recommendations.scheduleRetrain(stores.typeOf(event.source).id, "pictures", byUser = false)
-
-    @EventListener
-    fun setVectorsChanged(event: SiteItemSetVectorChangeEvent) {
-        log.info("{}: {} items have new set vectors: retraining", event.type, event.items)
-        recommendations.scheduleRetrain(event.type, "setVectors", byUser = false)
-    }
-
-    /** The manners of the works' texts were made again: inputs of the works. */
-    @EventListener
-    fun mannersChanged(event: WorkMannerChangeEvent) =
-        recommendations.scheduleRetrain(event.type, "manner", byUser = false)
 
     /** A model that could not be read, or none, is trained on start where there are grades. */
     @EventListener(ApplicationReadyEvent::class)

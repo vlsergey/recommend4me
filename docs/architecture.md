@@ -407,7 +407,13 @@ of every work after a refit. The age rating is a field of the chain as any other
 2026-11-19): learnt of the user's answers, of the whole description of the work and the fields
 before it, a work offered the steps its site lets it have alone (`AgeRatingVocabulary`).
 The models of the facets of a type's sources are fitted again in the background, in the queue of the
-computations, whenever anything they learn from changes: one work of the queue of the type, the
+computations, whenever anything they learn from changes — at once of the user's word; of no word of
+the user's (a chapter, the texts' vectors, the names of a cast of a work the user answered on or
+rated, a site's page of it written again) once such changes, counted beside the models
+(`ModelAutoChanges`, `model_auto_changes`), come to a hundredth of the works they learnt of, and so
+the models of the grades of the works' pictures, sets and manners (`WorkFeatureCounts`; owner,
+2026-11-24: a chapter of a rated work read fitted every model again, and every work's fields and
+expectation were made anew from the first): one work of the queue of the type, the
 sources changed kept waiting in it, whole, NOTHING OF IT HOLDING MORE
 THAN TEN THOUSAND WORKS (user, 2026-11-17: of ficbook's 1.39 million works a pass holding every work
 was more than the memory of 12 GB). The works of the source are read a portion at a time in the
