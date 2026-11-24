@@ -125,6 +125,12 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
 
     fun type(typeId: String): TypeDatabases = types[typeId] ?: error("No such content type: $typeId")
 
+    /** The DuckDB files of every content type: the stores of its works' duplicates and of its authors'. */
+    fun duckFiles(): List<DuckDatabase> = types.values.flatMap { listOf(it.workDuplicates, it.authorDuplicates) }
+
+    /** The ids of every content type. */
+    fun typeIds(): Set<String> = types.keys
+
     fun model(typeId: String): DSLContext = type(typeId).model.dsl
 
     /** Every database file. */

@@ -26,7 +26,8 @@ private val log = LoggerFactory.getLogger(DuckDatabase::class.java)
  * the memory, at most [memory].
  */
 class DuckDatabase(
-    private val name: String,
+    /** What the file is named by where it is listed: "<type>/list", "<type>/work_duplicates". */
+    val name: String,
     private val file: Path,
     private val script: String,
     memory: String,

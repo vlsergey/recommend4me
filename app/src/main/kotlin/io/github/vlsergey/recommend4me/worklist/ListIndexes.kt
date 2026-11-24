@@ -14,14 +14,17 @@ class ListIndexes(private val folder: DataFolder) : DisposableBean {
     private val open = ConcurrentHashMap<String, Pair<DuckDatabase, ListIndex>>()
 
     /** The index of the content type [typeId]. */
-    fun of(typeId: String): ListIndex =
-        open
-            .computeIfAbsent(typeId) {
-                // Read by the computations of the facets too, as the index of Lucene was: no database of theirs
-                val store = DuckDatabase("$it/list", folder.type(it).resolve(FILE), SCRIPT, MEMORY, refused = false)
-                store to ListIndex(store)
-            }
-            .second
+    fun of(typeId: String): ListIndex = opened(typeId).second
+
+    /** The file of the index of the content type [typeId]: what a query of the files reads. */
+    fun store(typeId: String): DuckDatabase = opened(typeId).first
+
+    private fun opened(typeId: String): Pair<DuckDatabase, ListIndex> =
+        open.computeIfAbsent(typeId) {
+            // Read by the computations of the facets too, as the index of Lucene was: no database of theirs
+            val store = DuckDatabase("$it/list", folder.type(it).resolve(FILE), SCRIPT, MEMORY, refused = false)
+            store to ListIndex(store)
+        }
 
     override fun destroy() =
         open.values.forEach { (store, index) ->

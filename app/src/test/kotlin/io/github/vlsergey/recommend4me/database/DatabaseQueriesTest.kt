@@ -54,6 +54,25 @@ class DatabaseQueriesTest : BaseTest() {
     }
 
     @Test
+    fun `the DuckDB files are queried alike, nothing written by them`() {
+        val names = queries.listDatabases().body!!
+        assertTrue(
+            listOf("books/list", "books/work_duplicates", "books/authors_duplicates").all { it in names },
+            names.toString(),
+        )
+        val counted = query("SELECT count(*) AS items FROM item", database = "books/list").body!!
+        assertNull(counted.error)
+        assertEquals(listOf("items"), counted.columns)
+        query("CREATE TABLE query_written(x INT)", database = "books/list")
+        assertNotNull(query("SELECT * FROM query_written", database = "books/list").body!!.error)
+        val authors = "books/authors_duplicates"
+        val searched = { query("SELECT count(*) FROM author_search", database = authors).body!!.rows }
+        val before = searched()
+        query("DELETE FROM author_search", database = authors)
+        assertEquals(before, searched())
+    }
+
+    @Test
     fun `a file of no such name is not found`() {
         assertEquals(HttpStatus.NOT_FOUND, query("SELECT 1", database = "nowhere").statusCode)
     }

@@ -3132,9 +3132,10 @@ paths:
       operationId: queryDatabase
       summary: A query of one database file while the application runs, written nothing
       description: |
-        For whoever looks into the data — the owner, an agent: one SELECT (or EXPLAIN, a query of H2) on
-        the file named, in a transaction rolled back after, whatever it did; a statement that is no query
-        is refused by H2 before it runs. At most `limit` rows and a minute of time.
+        For whoever looks into the data — the owner, an agent: one SELECT (or EXPLAIN) on the file named —
+        a file of H2, or of DuckDB: the index of the list, the stores of the duplicates — in a transaction
+        rolled back after, whatever it did; a statement that is no query is refused by H2 before it runs.
+        At most `limit` rows and a minute of time.
       requestBody:
         required: true
         content:
