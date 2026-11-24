@@ -94,6 +94,7 @@
   "TaskQueue.title": "Очередь вычислений",
   "TaskQueue.waiting": "запрошено {{when}}",
   "What.analyseSiteItemPictures": "Анализ скачанных картинок",
+  "What.compareFandomWays": "Сравнение способов чтения фандомов сайтов",
   "What.compareFieldMethods": "Сравнение способов поля",
   "What.compareGradeScorers": "Сравнение способов оценки",
   "What.compareInterestScorers": "Сравнение способов интереса",

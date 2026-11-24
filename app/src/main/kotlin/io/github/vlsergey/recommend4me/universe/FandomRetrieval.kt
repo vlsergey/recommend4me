@@ -12,13 +12,6 @@ import kotlin.math.sqrt
  */
 class FandomFound(val first: Double, val reciprocal: Double)
 
-/** The ways a site's fandom is read for its likeness: its name alone, its description a synonym, or added to it. */
-enum class FandomWay {
-    NAMES,
-    SYNONYMS,
-    ADDED,
-}
-
 /**
  * HOW WELL A WAY OF READING THE SITES' FANDOMS FINDS THEIR UNIVERSES, as the user made them: of every universe of two
  * sites' fandoms and more, its first fandom asked for, every other fandom of every universe put in the order of its

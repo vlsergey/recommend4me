@@ -542,7 +542,12 @@ universes said different the farthest; learnt again in the queue after every wor
 right it is on the universes held out of it beside the encoder's own. What changes it by no word of
 the user's — the names of the sites' fandoms encoded, a synonym or a parent a site tells of its
 fandom — is counted beside it (`fandom_likeness.auto_changes`), and learnt again once it comes to a
-hundredth of the universes it was learnt of. A site's description of its
+hundredth of the universes it was learnt of. The page of the models shows it as a model of the type
+that keeps the universes (`FandomLikenessStates`): learnt again when the user asks, and the ways a
+site's fandom is read compared when the user asks (`FandomWayComparisons`, `FandomRetrieval`: the
+name alone, the description a synonym, the description added to the name — how well each finds the
+universes as the user made them, a minute and more of the card), the universes alike one found by
+the way the user chooses there (`FandomWays`). A site's description of its
 fandom is a synonym of the name: one more name of the universe. The names' and the descriptions'
 vectors are read as they are kept — half precision, into one block off the heap (`FandomRows`) —,
 the pairs laid out flat by their anchor (`NamePairs`), and the learning runs on the card by kernels

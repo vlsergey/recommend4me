@@ -13,6 +13,7 @@ import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 import { TaskQueue } from "@/task/TaskQueue";
 import { FacetComparisonDialog } from "./FacetComparisonDialog";
+import { FandomLikenessCard } from "./FandomLikenessCard";
 import { GradeModelDetails } from "./GradeModel";
 import { ScorerComparisonDialog } from "./ScorerComparisonDialog";
 import { useModel } from "./useModel";
@@ -24,7 +25,8 @@ const EVERY_MS = 5000;
 
 /**
  * THE MODELS OF A CONTENT TYPE, ONE CARD EACH: the model of the grades, the model of interest, the
- * models of the pairs of duplicates, and the model of every facet the application works out of every
+ * models of the pairs of duplicates, the likeness of the fandoms' names (of the type that keeps the
+ * universes), and the model of every facet the application works out of every
  * source. Each tells how it was last
  * fitted — when, how long it took, with what quality, which settings were chosen among which tried
  * — and lets the user fit it again, or search its method and settings anew, for this model alone.
@@ -45,6 +47,8 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
   const facets = list.filter(isFacetModel);
   const sources = [...new Set(facets.map((m) => m.source))];
   const pairs = list.find((m) => m.kind === "PAIRS");
+  const fandoms = list.find((m) => m.kind === "FANDOMS");
+  const changed = useModelsChanged(type);
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
@@ -61,6 +65,7 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
       {grade && <GradeCard type={type} m={grade} />}
       {interest && <InterestCard type={type} m={interest} />}
       {pairs && <PairsCard type={type} m={pairs} />}
+      {fandoms && <FandomLikenessCard type={type} m={fandoms} card={(props) => <ModelCard m={fandoms} {...props} />} changed={changed} />}
       {sources.map((source) => (
         <section key={source} className="flex flex-col gap-2">
           <h2 className="text-base font-semibold">{t("ModelsScreen.facetsOf", { source: sourceTitle(source) })}</h2>

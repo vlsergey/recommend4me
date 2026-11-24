@@ -11,6 +11,9 @@ import org.jooq.impl.DSL
  */
 class FandomLikenessFit(val pairs: Int, val universes: Int?, val heldOut: Double?, val asEncoded: Double?)
 
+/** The likeness kept: when it was learnt, how, and the changes of no word of the user's counted since. */
+class FandomLikenessKept(val fittedAt: Instant, val fit: FandomLikenessFit, val autoChanges: Int)
+
 /**
  * The changes of no word of the user's counted since the likeness was learnt ([changes]), and of how many universes it
  * was learnt — null of a likeness learnt before they were told.
@@ -50,6 +53,25 @@ class FandomLikenessRepository(private val db: DSLContext) {
                 .execute()
         }
     }
+
+    /** How the likeness kept was learnt, and the changes counted since; null of none learnt. */
+    fun kept(): FandomLikenessKept? =
+        db.select(
+                FANDOM_LIKENESS.FITTED_AT,
+                FANDOM_LIKENESS.PAIRS,
+                FANDOM_LIKENESS.UNIVERSES,
+                FANDOM_LIKENESS.HELD_OUT,
+                FANDOM_LIKENESS.AS_ENCODED,
+                FANDOM_LIKENESS.AUTO_CHANGES,
+            )
+            .from(FANDOM_LIKENESS)
+            .fetchOne {
+                FandomLikenessKept(
+                    it.value1()!!,
+                    FandomLikenessFit(it.value2()!!, it.value3(), it.value4(), it.value5()),
+                    it.value6()!!,
+                )
+            }
 
     /** The changes of no word of the user's counted since the likeness was learnt; null of none learnt. */
     fun autoChanges(): Int? = db.select(FANDOM_LIKENESS.AUTO_CHANGES).from(FANDOM_LIKENESS).fetchOne()?.value1()

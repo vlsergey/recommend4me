@@ -73,6 +73,7 @@ flowchart LR
     e_WorkSetVectorFillEvent["WorkSetVectorFillEvent"]
     e_WorkTextVectorFillEvent["WorkTextVectorFillEvent"]
     w_analyseSiteItemPictures{{"analyseSiteItemPictures"}}
+    w_compareFandomWays{{"compareFandomWays"}}
     w_compareFieldMethods{{"compareFieldMethods"}}
     w_compareGradeScorers{{"compareGradeScorers"}}
     w_compareInterestScorers{{"compareInterestScorers"}}
@@ -308,6 +309,7 @@ flowchart LR
 | `correctFacet` | TagChangeEvent, WorkChangeEvent, WorkFieldChangeEvent | nameTags |
 | `correctField` | SiteItemTextVectorChangeEvent, WorkChangeEvent | fitGradeModels, writeWorkValues |
 | `createTagAbove` | TagChangeEvent, WorkChangeEvent | nameTags |
+| `fitFandomLikeness` | — | fitFandomLikeness |
 | `fitPairModels` | — | fitDuplicateModel |
 | `getExplanation` | — | fitHeldOutModel |
 | `getHeldOut` | — | fitHeldOutModel |
@@ -342,6 +344,7 @@ flowchart LR
 | `searchDuplicates` | — | searchDuplicates |
 | `searchFacetModel` | — | searchFieldModelAnew |
 | `startFacetComparison` | — | compareFieldMethods |
+| `startFandomWayComparison` | — | compareFandomWays |
 | `startJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `startScorerComparison` | — | compareGradeScorers, compareInterestScorers |
 | `takeOutSiteAuthor` | WorkGroupChangeEvent | — |

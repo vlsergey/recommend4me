@@ -29,6 +29,7 @@ tags:
   - name: suggestions
   - name: universes
   - name: universeEntries
+  - name: fandomLikeness
   - name: tags
   - name: tagCatalogues
   - name: tagsByText
@@ -2686,6 +2687,75 @@ paths:
         '404':
           description: No such type, source, or facet the application works out
 
+  /api/types/{type}/models/fandoms/fit:
+    post:
+      tags: [fandomLikeness]
+      operationId: fitFandomLikeness
+      summary: Learns the likeness of the fandoms' names again in the background, as the user asked
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '204':
+          description: Planned
+        '404':
+          description: No such type, or not the one that keeps the universes
+
+  /api/types/{type}/models/fandoms/comparison:
+    get:
+      tags: [fandomLikeness]
+      operationId: getFandomWayComparison
+      summary: The comparison of the ways a site's fandom is read under way or last made
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The comparison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FandomWayComparison'
+        '404':
+          description: No such type, not the one that keeps the universes, or no comparison made since the application started
+    post:
+      tags: [fandomLikeness]
+      operationId: startFandomWayComparison
+      summary: >
+        Starts comparing the ways a site's fandom is read in the background, as the user asked; a comparison under way
+        is answered as it stands, not started again. Nothing is kept: the universes alike one are found by the way
+        chosen till another is
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The comparison as it stands
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FandomWayComparison'
+        '404':
+          description: No such type, or not the one that keeps the universes
+
+  /api/types/{type}/models/fandoms/way:
+    put:
+      tags: [fandomLikeness]
+      operationId: chooseFandomWay
+      summary: Makes a way of reading a site's fandom the one the universes alike one are found by
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MethodChoice'
+      responses:
+        '204':
+          description: Chosen
+        '400':
+          description: No such way
+        '404':
+          description: No such type, or not the one that keeps the universes
+
   /api/types/{type}/models/facets/{source}/{facet}/comparison:
     get:
       tags: [models]
@@ -4811,6 +4881,48 @@ components:
         scorer:
           type: string
 
+    FandomWayComparison:
+      type: object
+      description: >
+        How well every way of reading a site's fandom finds its universe as the user made them: of every universe of
+        two sites' fandoms and more its first fandom asked for, and where the first other fandom of its own universe
+        stands among every fandom by the encoder's likeness
+      required: [startedAt, ways]
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        millis:
+          type: integer
+          format: int64
+        error:
+          type: string
+        ways:
+          type: array
+          description: Every way, once measured; none while it is measured
+          items:
+            $ref: '#/components/schemas/FandomWayFound'
+
+    FandomWayFound:
+      type: object
+      required: [way]
+      properties:
+        way:
+          type: string
+          enum: [NAMES, SYNONYMS, ADDED]
+          description: The name alone; the description a synonym of the name; the description added to the name
+        first:
+          type: number
+          format: double
+          description: The share of the fandoms asked whose universe's own fandom came first; none of none asked
+        reciprocal:
+          type: number
+          format: double
+          description: The mean of 1 / the place of the universe's own fandom
+
     MethodChoice:
       type: object
       required: [method]
@@ -4949,6 +5061,7 @@ components:
         words checked as the interface is built
       enum:
           - analyseSiteItemPictures
+          - compareFandomWays
           - compareFieldMethods
           - compareGradeScorers
           - compareInterestScorers
@@ -5100,8 +5213,12 @@ components:
           description: '"grade", "interest", "facet:<source>:<facet>", or "pairs"'
         kind:
           type: string
-          enum: [GRADE, INTEREST, FACET, PAIRS]
-          description: The model of the grades, of interest, of a facet of a source, or the models of the pairs of duplicates - of one work and of one series, by one plugin that also looks for the pairs
+          enum: [GRADE, INTEREST, FACET, PAIRS, FANDOMS]
+          description: >
+            The model of the grades, of interest, of a facet of a source, the models of the pairs of duplicates - of
+            one work and of one series, by one plugin that also looks for the pairs -, or the likeness of the names of
+            the sites' fandoms learnt of the user's word on the universes (of the type that keeps the universes; its
+            method the way a site's fandom is read for the universes alike one: names, synonyms, added)
         source:
           type: string
           description: Of a facet's model, the source
@@ -5169,6 +5286,15 @@ components:
         stale:
           type: boolean
           description: Learnt before the latest of what it learns from changed
+        baseline:
+          $ref: '#/components/schemas/ModelQuality'
+          description: Of the likeness of the fandoms' names, the quality of the encoder's own likeness on the same held out
+        autoChanges:
+          type: integer
+          description: Of the likeness of the fandoms' names, the changes of no word of the user's counted since it was learnt
+        autoChangesDue:
+          type: integer
+          description: Of the likeness of the fandoms' names, how many such changes learn it again by themselves
 
     ModelQuality:
       type: object

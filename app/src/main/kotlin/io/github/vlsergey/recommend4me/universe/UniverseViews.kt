@@ -24,6 +24,7 @@ class UniverseViews(
     private val stores: Stores,
     private val phrases: PhraseVectors,
     private val fandomVectors: SiteFandomVectors,
+    private val ways: FandomWays,
 ) {
 
     /** What one asking reads: the dictionary, and of every source with fandoms its fandoms' names and works. */
@@ -166,11 +167,12 @@ class UniverseViews(
 
     /**
      * The universes alike [value], the likest first, at most [limit]: of the meaning of the names of their sites'
-     * fandoms and of what their sites say they are of, a synonym of the name ([SiteFandomVectors]), a universe alike by
-     * the best cosine of a name or a description of each, the cosine as the user's word on the universes taught it
-     * ([FandomLikeness]) — alike the text [query] instead when one is given; a universe bound to an entry this one is
-     * bound to, alike wholly. Only those the [filter] lets, by what the user said each is to this one; each with that
-     * word, and what its sites say its fandoms are of. Null of no such universe.
+     * fandoms and of what their sites say they are of, read the way chosen ([FandomWays]) — a synonym of the name of
+     * none chosen ([SiteFandomVectors]) —, a universe alike by the best cosine of a vector of each, the cosine as the
+     * user's word on the universes taught it ([FandomLikeness]) — alike the text [query] instead when one is given; a
+     * universe bound to an entry this one is bound to, alike wholly. Only those the [filter] lets, by what the user
+     * said each is to this one; each with that word, and what its sites say its fandoms are of. Null of no such
+     * universe.
      */
     fun similar(value: String, query: String?, filter: SimilarFilter, limit: Int): List<SimilarUniverse>? {
         val r = Reading()
@@ -178,9 +180,11 @@ class UniverseViews(
         // The likeness of the names as the user's word on the universes taught it, the encoder's own of no word
         val learnt = stores.withUniverses().first().fandomLikeness.find()
         val ready = { v: FloatArray -> learnt?.of(v) ?: v }
+        // Every site's fandom read the way the user chose on the page of the models
+        val way = ways.chosen()
         val vectors =
             fandomVectors.of(r.sites.map { Triple(it.store, it.facet, it.names) }).mapValues { (_, v) ->
-                v.all.map(ready)
+                way.of(v).map(ready)
             }
         val asked = query?.trim()?.takeIf { it.isNotEmpty() }
         val target =

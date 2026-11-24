@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -35,7 +36,7 @@ class FandomLikenessLearning(
     @Volatile private var compiled: FandomLikeness.OnCard? = null
 
     /** The card with the kernels of the likeness; none without a card, or of kernels that would not compile. */
-    private fun card(): FandomLikeness.OnCard? {
+    internal fun card(): FandomLikeness.OnCard? {
         val cublas = cards.getIfAvailable()?.cublas() ?: return null
         return compiled?.takeIf { it.cublas === cublas }
             ?: FandomLikenessOnCard.kernels(cublas)?.let { FandomLikeness.OnCard(cublas, it) }?.also { compiled = it }
@@ -150,8 +151,17 @@ class FandomLikenessLearning(
     private fun counted(changes: Int, reason: String) {
         val type = stores.withUniverses().firstOrNull() ?: return
         val count = type.fandomLikeness.count(changes)
-        if (count == null || count.changes >= ceil((count.universes ?: 0) * AUTO_SHARE)) schedule(QUIET_SECONDS, reason)
+        if (count == null || count.changes >= due(count.universes)) schedule(QUIET_SECONDS, reason)
     }
+
+    /** Learnt again at once, of the highest priority: the user asked on the page of the models. */
+    fun asked() {
+        if (stores.withUniverses().isEmpty()) return
+        tasks.plan(Task(LEARNING), null, "asked", priority = TaskPriority.ASKED) { learn() }
+    }
+
+    /** Whether it is being learnt now. */
+    fun learning(): Boolean = tasks.running()?.work == Task(LEARNING)
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return
@@ -160,6 +170,12 @@ class FandomLikenessLearning(
 
     companion object {
         val LEARNING = TaskKind.FIT_FANDOM_LIKENESS
+
+        /**
+         * How many changes of no word of the user's learn it again by themselves, of a likeness learnt of [universes]
+         * universes: [AUTO_SHARE] of them; nought of one learnt before the universes were told.
+         */
+        fun due(universes: Int?): Int = ceil((universes ?: 0) * AUTO_SHARE).toInt()
 
         private const val START_DELAY_SECONDS = 90L
 

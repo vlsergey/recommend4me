@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.suggestion.FacetComparison
 import io.github.vlsergey.recommend4me.suggestion.FacetComparisons
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggesterStatus
+import io.github.vlsergey.recommend4me.universe.FandomLikenessStates
 import java.time.Instant
 import java.time.ZoneOffset
 import org.springframework.http.ResponseEntity
@@ -24,8 +25,9 @@ import org.springframework.web.bind.annotation.RestController
 
 /**
  * THE MODELS OF A CONTENT TYPE, for the page of the models: the model of the grades, the model of interest, the model
- * of every facet the application works out of every source, and the models of the pairs of duplicates — each with how
- * it was last fitted, read from what is kept of it.
+ * of every facet the application works out of every source, the models of the pairs of duplicates, and of the type that
+ * keeps the universes the likeness of the fandoms' names — each with how it was last fitted, read from what is kept of
+ * it.
  */
 @RestController
 class ModelsController(
@@ -36,6 +38,7 @@ class ModelsController(
     private val stores: Stores,
     private val pairs: PairModelStates,
     private val castReading: CastReading,
+    private val fandoms: FandomLikenessStates,
 ) : ModelsApi {
 
     override fun listModels(type: String): ResponseEntity<List<ModelState>> {
@@ -45,7 +48,7 @@ class ModelsController(
         return ResponseEntity.ok(
             listOf(gradeModel(summary, scorers), interestModel(type, summary, scorers)) +
                 facetModels(typeStore) +
-                listOfNotNull(pairs.of(typeStore))
+                listOfNotNull(pairs.of(typeStore), fandoms.of(typeStore))
         )
     }
 
