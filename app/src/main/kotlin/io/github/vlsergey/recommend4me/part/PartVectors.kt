@@ -2,8 +2,10 @@ package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
@@ -107,14 +109,8 @@ class PartVectors(
             else sweeps.next(STAGE, typeId, sources, scope, cursor, portion, waiting)
         var gaveWay = false
         if (items.isNotEmpty()) {
-            val works = items.groupBy({ it.key.source }, { it.key.id }).mapValues { it.value.toSet() }
             val encoded = HashSet<ItemKey>()
-            try {
-                val reached = Reached()
-                while (!tasks.stopping && !gaveWay && encodeSome(reached, works, encoded) > 0) gaveWay = tasks.outranked
-            } finally {
-                busy = false
-            }
+            gaveWay = encodeAll(items.groupBy({ it.key.source }, { it.key.id }), encoder!!, encoded)
             // The works whose windows were encoded dated so: what the sets and the search read of them changed
             if (!gaveWay) sweeps.done(STAGE, typeId, scope, items.map { it.key })
             sweeps.made(STAGE, typeId, scope, encoded)
@@ -127,28 +123,52 @@ class PartVectors(
     }
 
     /**
-     * Of one run, the last part of every source given to encode, of its windows and of its paragraphs: the next batch
-     * looked for past it. A part left unencoded is met again on the next run.
+     * Every part of the [works] waiting encoded, a batch after another, the works of windows kept in [encoded]; whether
+     * it gave way to a work the user asked for ([Tasks.outranked]) before the end — stopped between its batches as the
+     * application stops too.
      */
-    private class Reached {
-        val windows = HashMap<String, Pair<String, String>>()
-        val paragraphs = HashMap<String, Pair<String, String>>()
+    private fun encodeAll(
+        works: Map<String, List<String>>,
+        encoder: TextEncoder,
+        encoded: MutableSet<ItemKey>,
+    ): Boolean {
+        var gaveWay = false
+        try {
+            val batches = batchesOf(works, encoder).iterator()
+            while (!tasks.stopping && !gaveWay && batches.hasNext()) {
+                encode(batches.next(), encoder, encoded)
+                gaveWay = tasks.outranked
+            }
+        } finally {
+            busy = false
+        }
+        return gaveWay
     }
 
+    /** A batch of parts of one source to encode: their windows, or their paragraphs. */
+    private class Batch(val source: SourceStore, val parts: List<PartWaiting>, val windows: Boolean)
+
     /**
-     * Encodes a batch of parts of every source's works of the [portion], their windows and then their paragraphs, from
-     * past those [reached], the works whose windows were encoded kept in [encoded]; returns how many.
+     * The batches of the parts of the [works] of every source waiting to be encoded, [BATCH] parts each: their windows,
+     * then their paragraphs — the parts of the portion read once, by their works.
      */
-    private fun encodeSome(reached: Reached, portion: Map<String, Set<String>>, encoded: MutableSet<ItemKey>): Int {
-        val encoder = plugins.textEncoder() ?: return 0
-        var done = 0
-        stores.sources.forEach { s ->
-            val works = portion[s.id].orEmpty()
-            if (works.isEmpty()) return@forEach
-            val todo = s.parts.windows.toEncode(encoder.windowsId, BATCH, reached.windows[s.id], works)
-            if (todo.isEmpty()) return@forEach
-            reached.windows[s.id] = todo.last().place
-            busy = true
+    private fun batchesOf(works: Map<String, List<String>>, encoder: TextEncoder): List<Batch> =
+        works.flatMap { (source, ids) ->
+            val s = stores.source(source) ?: return@flatMap emptyList()
+            val waiting = s.parts.windows.waitingOf(ids, encoder.windowsId, Paragraphs.keyOf(encoder.id))
+            waiting.filter { it.windows }.chunked(BATCH).map { Batch(s, it, windows = true) } +
+                waiting.filter { it.paragraphs }.chunked(BATCH).map { Batch(s, it, windows = false) }
+        }
+
+    /**
+     * The parts of the [batch] encoded — their windows, or their paragraphs —, the works of windows kept in [encoded].
+     */
+    private fun encode(batch: Batch, encoder: TextEncoder, encoded: MutableSet<ItemKey>) {
+        val s = batch.source
+        val todo = s.parts.windows.texts(batch.parts)
+        if (todo.isEmpty()) return
+        busy = true
+        if (batch.windows) {
             val windows = encoder.encodeWindows(todo.map { it.content })
             todo.forEachIndexed { i, part ->
                 s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
@@ -156,41 +176,25 @@ class PartVectors(
             // What the models learnt of these works read: told, the models fitted of them fitted again
             events.publishEvent(SiteItemChapterVectorChangeEvent(s.id, todo.map { it.itemId }.distinct()))
             todo.forEach { encoded += ItemKey(s.id, it.itemId) }
-            done += todo.size
+            return
         }
-        stores.sources.forEach { s ->
-            val works = portion[s.id].orEmpty()
-            if (works.isEmpty()) return@forEach
-            val todo =
-                s.parts.paragraphs.paragraphsToEncode(
-                    Paragraphs.keyOf(encoder.id),
-                    BATCH,
-                    reached.paragraphs[s.id],
-                    works,
-                )
-            if (todo.isEmpty()) return@forEach
-            reached.paragraphs[s.id] = todo.last().place
-            busy = true
-            // The paragraphs of every part of the batch encoded together, then given back to their parts: a chapter's
-            // few dozen alone ran the graph's batches half empty
-            val texts = todo.map { Paragraphs.of(it.content) }
-            val vectors = texts.flatten().chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-            var from = 0
-            todo.forEachIndexed { i, part ->
-                val own = texts[i]
-                s.parts.paragraphs.saveParagraphVectors(
-                    part.itemId,
-                    part.partId,
-                    Paragraphs.keyOf(encoder.id),
-                    part.hash,
-                    vectors.subList(from, from + own.size),
-                    own.map(Vectors::hash),
-                )
-                from += own.size
-            }
-            done += todo.size
+        // The paragraphs of every part of the batch encoded together, then given back to their parts: a chapter's few
+        // dozen alone ran the graph's batches half empty
+        val texts = todo.map { Paragraphs.of(it.content) }
+        val vectors = texts.flatten().chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
+        var from = 0
+        todo.forEachIndexed { i, part ->
+            val own = texts[i]
+            s.parts.paragraphs.saveParagraphVectors(
+                part.itemId,
+                part.partId,
+                Paragraphs.keyOf(encoder.id),
+                part.hash,
+                vectors.subList(from, from + own.size),
+                own.map(Vectors::hash),
+            )
+            from += own.size
         }
-        return done
     }
 
     companion object {

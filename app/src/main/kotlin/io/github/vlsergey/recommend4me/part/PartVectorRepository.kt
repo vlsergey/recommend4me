@@ -1,39 +1,20 @@
 package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
-import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /** A part whose text is to be encoded: its text and the hash it will be kept with. */
-class PartToEncode(val itemId: String, val partId: String, val content: String, val hash: String) {
-    /** Where the part stands in the order of the table's key: (item, part). */
-    val place: Pair<String, String>
-        get() = itemId to partId
-}
+class PartToEncode(val itemId: String, val partId: String, val content: String, val hash: String)
 
-/** The parts past [after] (item, part) in the order of the table's key; every part when null. */
-internal fun pastPart(after: Pair<String, String>?): Condition =
-    after?.let { (item, part) -> DSL.row(PART.ITEM_ID, PART.PART_ID).gt(item, part) } ?: DSL.noCondition()
-
-/** The parts of the [items] — a portion's few works; every part when null. */
-internal fun ofItems(items: Collection<String>?): Condition = items?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition()
-
-/**
- * The parts on the site with a text the [condition] chooses, at most [limit], in the order of the table's key, their
- * texts read of the [store]; a part whose text the store lost left out.
- */
-internal fun partsToEncode(db: DSLContext, store: PartStore, condition: Condition, limit: Int): List<PartToEncode> =
-    db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT_HASH)
-        .from(PART)
-        .where(PART.CONTENT_HASH.isNotNull, onSite)
-        .and(condition)
-        .orderBy(PART.ITEM_ID, PART.PART_ID)
-        .limit(limit)
-        .fetch()
-        .mapNotNull { r ->
-            store.text(r.value1()!!, r.value2()!!)?.let { PartToEncode(r.value1()!!, r.value2()!!, it, r.value3()!!) }
-        }
+/** A part of a work whose text waits to be encoded: its [windows], its [paragraphs], or both. */
+class PartWaiting(
+    val itemId: String,
+    val partId: String,
+    val hash: String,
+    val windows: Boolean,
+    val paragraphs: Boolean,
+)
 
 /** The rows streamed from the database at a time: memory, not meaning. */
 private const val STREAMED = 5000
@@ -46,22 +27,31 @@ private const val STREAMED = 5000
 class PartVectorRepository(private val db: DSLContext, private val store: PartStore) {
 
     /**
-     * The parts whose text has no vectors by [encoder] yet, at most [limit], in the order of the table's key from past
-     * [after] (item, part; from the first when null): a pass goes on from the last it was given, not from the start of
-     * the table again a batch.
+     * The parts of the works [items] whose text waits to be encoded — its windows by [windows], its paragraphs by
+     * [paragraphs] — in the order of the table's key: read work by work, by the key. A list of keys bound as parameters
+     * is no index to H2, nor a bound of (item, part) past the last part given: it walked the parts of 1.4 million works
+     * to the end of the table for every batch of eight (owner, 2026-11-24: a turn of 50 works took 47 s).
      */
-    fun toEncode(
-        encoder: String,
-        limit: Int,
-        after: Pair<String, String>? = null,
-        items: Collection<String>? = null,
-    ): List<PartToEncode> =
-        partsToEncode(
-            db,
-            store,
-            PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)).and(pastPart(after)).and(ofItems(items)),
-            limit,
-        )
+    fun waitingOf(items: Collection<String>, windows: String, paragraphs: String): List<PartWaiting> =
+        items.distinct().sorted().flatMap { item ->
+            db.select(PART.PART_ID, PART.CONTENT_HASH, PART.ENCODER, PART.PARAGRAPHS_ENCODER)
+                .from(PART)
+                .where(PART.ITEM_ID.eq(item), PART.CONTENT_HASH.isNotNull, onSite)
+                .orderBy(PART.PART_ID)
+                .fetch()
+                .mapNotNull { r ->
+                    val ofWindows = r.value3() != windows
+                    val ofParagraphs = r.value4() != paragraphs
+                    if (ofWindows || ofParagraphs)
+                        PartWaiting(item, r.value1()!!, r.value2()!!, ofWindows, ofParagraphs)
+                    else null
+                }
+        }
+
+    /** The texts of the [parts], of the store; a part whose text the store lost left out. */
+    fun texts(parts: List<PartWaiting>): List<PartToEncode> = parts.mapNotNull { p ->
+        store.text(p.itemId, p.partId)?.let { PartToEncode(p.itemId, p.partId, it, p.hash) }
+    }
 
     /**
      * The items with a part whose text has no vectors by [windows] of its windows or by [paragraphs] of its paragraphs

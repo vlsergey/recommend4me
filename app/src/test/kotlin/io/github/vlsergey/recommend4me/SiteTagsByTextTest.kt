@@ -59,7 +59,8 @@ class SiteTagsByTextTest : SiteTestBase() {
     /** The paragraphs of the work's parts encoded, as the background encodes them. */
     private fun encodeParagraphs(store: SourceStore) {
         val encoder = SitePlugins.WordsEncoder()
-        store.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+        val waiting = store.parts.windows.waitingOf(listOf("tt3"), encoder.windowsId, Paragraphs.keyOf(encoder.id))
+        store.parts.windows.texts(waiting.filter { it.paragraphs }).forEach { part ->
             val texts = Paragraphs.of(part.content)
             store.parts.paragraphs.saveParagraphVectors(
                 part.itemId,

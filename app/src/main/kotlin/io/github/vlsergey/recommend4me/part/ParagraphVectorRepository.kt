@@ -13,26 +13,6 @@ class Paragraph(val partId: String, val number: Int, val vector: FloatArray, val
 class ParagraphVectorRepository(private val db: DSLContext, private val store: PartStore) {
 
     /**
-     * The parts whose paragraphs have no vectors by [encoder] yet, at most [limit], from past [after] in the order of
-     * the table's key ([PartVectorRepository.toEncode]).
-     */
-    fun paragraphsToEncode(
-        encoder: String,
-        limit: Int,
-        after: Pair<String, String>? = null,
-        items: Collection<String>? = null,
-    ): List<PartToEncode> =
-        partsToEncode(
-            db,
-            store,
-            PART.PARAGRAPHS_ENCODER.isNull
-                .or(PART.PARAGRAPHS_ENCODER.ne(encoder))
-                .and(pastPart(after))
-                .and(ofItems(items)),
-            limit,
-        )
-
-    /**
      * Replaces the vectors of the paragraphs of a part ([Paragraphs]), made by [encoder] of the text of [hash], each
      * with the hash of its own text ([hashes]): kept, then told.
      */
