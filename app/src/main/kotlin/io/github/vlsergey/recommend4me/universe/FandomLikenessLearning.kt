@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
+import kotlin.math.ceil
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.event.EventListener
@@ -16,9 +17,12 @@ private val log = LoggerFactory.getLogger(FandomLikenessLearning::class.java)
 
 /**
  * THE LIKENESS OF THE FANDOMS' NAMES LEARNT OF THE USER'S WORD ON THE UNIVERSES ([FandomLikeness]), in the queue of the
- * computations after the word goes quiet, and on start; kept in the model database of the first content type of
- * universes, whose dictionary is every one's. How right it is told of the universes held out of it: of [FOLDS] parts of
- * them, each learnt without and its pairs put in order — beside the order of the encoder's own likeness.
+ * computations after the word goes quiet; kept in the model database of the first content type of universes, whose
+ * dictionary is every one's. What changes it by no word of the user's — the names of the sites' fandoms encoded, a
+ * synonym or a parent a site tells of its fandom — is counted beside it, and learnt again once it comes to [AUTO_SHARE]
+ * of the universes it was learnt of (owner, 2026-11-24: a change of a hundredth learns nothing new). How right it is
+ * told of the universes held out of it: of [FOLDS] parts of them, each learnt without and its pairs put in order —
+ * beside the order of the encoder's own likeness.
  */
 @Service
 class FandomLikenessLearning(
@@ -37,9 +41,18 @@ class FandomLikenessLearning(
             ?: FandomLikenessOnCard.kernels(cublas)?.let { FandomLikeness.OnCard(cublas, it) }?.also { compiled = it }
     }
 
-    /** The likeness learnt again of the dictionary as it is, and kept; nothing of no universe with two names. */
+    /**
+     * The likeness learnt again of the dictionary as it is, and kept; nothing of no universe with two names. The
+     * changes of no word of the user's counted before it let go.
+     */
     fun learn() {
         val type = stores.withUniverses().firstOrNull() ?: return
+        val counted = type.fandomLikeness.autoChanges() ?: 0
+        learn(type)
+        type.fandomLikeness.letGo(counted)
+    }
+
+    private fun learn(type: TypeStore) {
         val started = System.currentTimeMillis()
         val dictionary = type.universes.dictionary()
         // The names' and the descriptions' vectors read as they are kept, into one block off the heap
@@ -67,34 +80,25 @@ class FandomLikenessLearning(
         val right = share { pairs, learnt -> FandomLikeness.ordered(pairs, rows, learnt, card) }
         val asEncoded = share { pairs, _ -> FandomLikeness.ordered(pairs, rows, null, card) }
         val measured = System.currentTimeMillis()
-        val fit = FandomLikenessFit(all.size, right, asEncoded)
+        val fit = FandomLikenessFit(all.size, byUniverse.size, right, asEncoded)
         type.fandomLikeness.keep(likeness, fit, Instant.now())
-        val found = FandomRetrieval.of(dictionary.fandoms.keys.associateWith { dictionary.sitesOf(it) }, read, card)
         log.info(
             "The likeness of the fandoms' names learnt {} of {} pairs of {} universes with names, {} said " +
                 "different: held out, {} of the pairs in the user's order, of the encoder's own likeness {}. " +
-                "The universes found of their sites' fandoms by the encoder's likeness, {} of {} fandoms described: " +
-                "{}. In {} ms: the names read {}, the pairs {}, learnt of all {}, of the parts held out {}, " +
-                "the order of the held out {}, the ways compared {}",
+                "In {} ms: the names read {}, the pairs {}, learnt of all {}, of the parts held out {}, " +
+                "the order of the held out {}",
             if (card != null) "on the card" else "on the processor",
             all.size,
             byUniverse.size,
             word.different.size,
             "%.3f".format(fit.heldOut),
             "%.3f".format(fit.asEncoded),
-            read.ofFandom.values.count { it.description != FandomRowsOf.NONE },
-            read.ofFandom.size,
-            found.entries.joinToString("; ") { (way, f) ->
-                "${way.name.lowercase()} " +
-                    (f?.let { "first %.3f, 1/rank %.3f".format(it.first, it.reciprocal) } ?: "none asked")
-            },
-            System.currentTimeMillis() - started,
+            measured - started,
             loaded - started,
             paired - loaded,
             fitted - paired,
             learntHeldOut - fitted,
             measured - learntHeldOut,
-            System.currentTimeMillis() - measured,
         )
     }
 
@@ -130,12 +134,24 @@ class FandomLikenessLearning(
         tasks.resumption.resumes(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
+    /** The user's word on the universes learnt after it goes quiet; what a site told of its fandoms counted. */
     @EventListener
-    fun related(@Suppress("UNUSED_PARAMETER") event: FandomRelationChangeEvent) = schedule(QUIET_SECONDS, "universes")
+    fun related(event: FandomRelationChangeEvent) =
+        if (event.bySite) counted(1, "universes") else schedule(QUIET_SECONDS, "universes")
 
-    /** New names or descriptions of the sites' fandoms encoded: more to learn of. */
-    @EventListener
-    fun encoded(@Suppress("UNUSED_PARAMETER") event: FandomVectorChangeEvent) = schedule(QUIET_SECONDS, "fandomVectors")
+    /** New names or descriptions of the sites' fandoms encoded: counted. */
+    @EventListener fun encoded(event: FandomVectorChangeEvent) = counted(event.names, "fandomVectors")
+
+    /**
+     * [changes] of no word of the user's counted beside the likeness, and learnt again for the [reason] once they come
+     * to [AUTO_SHARE] of the universes it was learnt of — at once of none learnt yet, or of one learnt before the
+     * universes were told.
+     */
+    private fun counted(changes: Int, reason: String) {
+        val type = stores.withUniverses().firstOrNull() ?: return
+        val count = type.fandomLikeness.count(changes)
+        if (count == null || count.changes >= ceil((count.universes ?: 0) * AUTO_SHARE)) schedule(QUIET_SECONDS, reason)
+    }
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return
@@ -149,6 +165,9 @@ class FandomLikenessLearning(
 
         /** The quiet after the user's last word on the universes before the likeness is learnt again. */
         private const val QUIET_SECONDS = 30L
+
+        /** The share of the universes learnt of the changes of no word of the user's come to: learnt again then. */
+        private const val AUTO_SHARE = 0.01
 
         /** The parts of the universes held out in turn, to tell how right the likeness learnt is. */
         private const val FOLDS = 3

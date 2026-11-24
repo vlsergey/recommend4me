@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 /**
- * Names or descriptions of the sites' fandoms were encoded ([FandomVectors]): what is learnt of their vectors
- * ([FandomLikeness]) is to be learnt again.
+ * [names] names or descriptions of the sites' fandoms were encoded ([FandomVectors]): changes of no word of the user's,
+ * counted beside the likeness learnt of their vectors ([FandomLikenessLearning]).
  */
-object FandomVectorChangeEvent
+data class FandomVectorChangeEvent(val names: Int)

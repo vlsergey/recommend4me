@@ -46,7 +46,7 @@ class FandomVectors(
             VECTORS,
             Instant.now().plusSeconds(delaySeconds),
             reason,
-            after = { made: Int -> if (made > 0) events.publishEvent(FandomVectorChangeEvent) },
+            after = { made: Int -> if (made > 0) events.publishEvent(FandomVectorChangeEvent(made)) },
         ) {
             fill()
         }

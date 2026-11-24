@@ -35,9 +35,9 @@ class FandomEditing(
      * nothing — in place of what was said of the two before. Merged, [other] is no more: its sites' fandoms, entries
      * and links are [universe]'s, the user's answers on it answers on [universe] — the newest stands of a work answered
      * on both. A universe is never put above or under one of its own descendants or ancestors. False of no such
-     * universe.
+     * universe. Told [bySite] — of what a site says of its fandoms ([SiteFandomWords]) —, not the user's word.
      */
-    fun relate(universe: Long, other: Long, relation: UniverseRelation): Boolean {
+    fun relate(universe: Long, other: Long, relation: UniverseRelation, bySite: Boolean = false): Boolean {
         refuseUnsaid(universe, other, relation)
         val fandoms = dictionary().fandoms
         if (!fandoms.exists(universe) || !fandoms.exists(other)) return false
@@ -62,7 +62,7 @@ class FandomEditing(
         }
         if (relation == UniverseRelation.MERGED) merged(other, universe)
         log.info("Universe {} is {} to {}", other, relation, universe)
-        changed(listOf(universe))
+        changed(listOf(universe), bySite)
         return true
     }
 
@@ -114,9 +114,10 @@ class FandomEditing(
      * The site's fandom [site] bound to the universe [universe] — to a new one of its own when null: taken out of the
      * universe it was, and put under it when [under] (a part of a franchise: its works of the franchise too). The
      * user's answers stay with the universes they were given on. The universe it is bound to now; null of a site's
-     * fandom not bound, or of no such universe.
+     * fandom not bound, or of no such universe. Told [bySite] — of what a site says of its fandoms ([SiteFandomWords])
+     * —, not the user's word.
      */
-    fun bind(site: SiteFandomRef, universe: Long?, under: Boolean = false): Long? {
+    fun bind(site: SiteFandomRef, universe: Long?, under: Boolean = false, bySite: Boolean = false): Long? {
         val fandoms = dictionary().fandoms
         val was = fandoms.sites.fandomOf(site)
         if (was == null || (universe != null && !fandoms.exists(universe))) return null
@@ -131,7 +132,7 @@ class FandomEditing(
             }
         }
         log.info("{} of {} bound to universe {}, was {}", site.key, site.source, to, was)
-        changed(listOf(was, to))
+        changed(listOf(was, to), bySite)
         return to
     }
 
@@ -140,18 +141,19 @@ class FandomEditing(
         val fandoms = dictionary().fandoms
         if (!fandoms.exists(universe)) return false
         fandoms.name(universe, name?.trim()?.takeIf { it.isNotEmpty() })
-        changed(emptyList())
+        changed(emptyList(), bySite = false)
         return true
     }
 
     /**
      * The universes [renamed] named anew of their sites' fandoms, in the queue — the request does not wait for their
      * works counted — and the dictionary's change told ([UniverseChangeEvent]): the works are drafted again, those
-     * whose drafts changed read again.
+     * whose drafts changed read again; and what they are to each other ([FandomRelationChangeEvent]), told [bySite] or
+     * by the user.
      */
-    private fun changed(renamed: List<Long>) {
+    private fun changed(renamed: List<Long>, bySite: Boolean) {
         if (renamed.isNotEmpty()) normalization.renameLater(renamed)
         events.publishEvent(UniverseChangeEvent)
-        events.publishEvent(FandomRelationChangeEvent)
+        events.publishEvent(FandomRelationChangeEvent(bySite))
     }
 }

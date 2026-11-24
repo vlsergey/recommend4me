@@ -32,8 +32,9 @@ class SiteFandomWords(private val stores: Stores, private val editing: FandomEdi
             val universe = fandoms.sites.fandomOf(SiteFandomRef(event.source, key)) ?: return@forEach
             val was = fandoms.sites.fandomOf(site) ?: return@forEach
             if (was == universe) return@forEach
-            if (fandoms.sites.sitesOf(was) == listOf(site)) editing.relate(universe, was, UniverseRelation.MERGED)
-            else editing.bind(site, universe)
+            if (fandoms.sites.sitesOf(was) == listOf(site))
+                editing.relate(universe, was, UniverseRelation.MERGED, bySite = true)
+            else editing.bind(site, universe, bySite = true)
             log.info("{} of {}, a synonym of {}, of universe {} now, was {}", synonym, event.source, key, universe, was)
         }
     }
@@ -67,7 +68,7 @@ class SiteFandomWords(private val stores: Stores, private val editing: FandomEdi
             if (child == above || fandoms.relations.apart(child, above)) return@forEach
             val dictionary = FandomDictionary.load(fandoms)
             if (above in dictionary.ancestors(child) || child in dictionary.ancestors(above)) return@forEach
-            editing.relate(above, child, UniverseRelation.CHILD)
+            editing.relate(above, child, UniverseRelation.CHILD, bySite = true)
             log.info("{} of {} under {}: universe {} under {}", key, source, parent, child, above)
         }
     }

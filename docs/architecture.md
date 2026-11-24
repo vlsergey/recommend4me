@@ -539,7 +539,10 @@ word on the universes (`FandomLikeness`, `fandom_likeness`): a weight of every d
 names' vectors, so that two names of one universe — the sites' fandoms the user bound together —
 and of a universe and one under or above it are nearer than a name of another, the names of two
 universes said different the farthest; learnt again in the queue after every word, and told how
-right it is on the universes held out of it beside the encoder's own. A site's description of its
+right it is on the universes held out of it beside the encoder's own. What changes it by no word of
+the user's — the names of the sites' fandoms encoded, a synonym or a parent a site tells of its
+fandom — is counted beside it (`fandom_likeness.auto_changes`), and learnt again once it comes to a
+hundredth of the universes it was learnt of. A site's description of its
 fandom is a synonym of the name: one more name of the universe. The names' and the descriptions'
 vectors are read as they are kept — half precision, into one block off the heap (`FandomRows`) —,
 the pairs laid out flat by their anchor (`NamePairs`), and the learning runs on the card by kernels
