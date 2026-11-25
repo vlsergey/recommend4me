@@ -33,8 +33,11 @@ centre they were made by kept with the part (`part.full_text`) and with the text
 - **The centre and the rotation** (`FullTextCentres`, the model database `full_text_centre`): the mean of the windows
   the encoder makes of 300 chapters and 2 000 texts searched by meaning of every source drawn at random, and a random
   orthogonal matrix (Gram-Schmidt of numbers of a normal law) — learnt once of an encoder of
-  windows, at a start or as the texts of a type are written (`fitFullTextCentre`); learnt anew, every window's full-text
-  vector is made anew.
+  windows, at a start or as the texts of a type are written (`fitFullTextCentre`) — and learnt anew as a search reads
+  twice the windows the type had as it was learnt (`FullTextCentres.read`): a type begun of a few works, or a site of
+  another language added, has its windows told apart by a centre of its own. Learnt anew, every window's full-text
+  vector is made anew, of the windows' vectors kept, no model run. (The clusters to come — SPANN — are to replace the
+  one centre: a window coded by its cluster's, a cluster grown split and coded anew alone.)
 - **Why these vectors, and why out of Lucene** (owner, 2026-11-25): the windows' vectors in Lucene's graph (HNSW) were float
   vectors of 4 KB, read at random on the disk of the data a step of the graph — minutes a search, and the whole of
   ficbook's 85 million windows 350 GB in the index beside the store's own copy. The full-text vectors are read whole, one file after

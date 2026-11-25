@@ -19,6 +19,8 @@ class FullTextCentre(
     val rotation: Array<FloatArray>,
     val fittedAt: Instant,
     val windows: Int,
+    /** How many windows the type had as it was learnt: learnt anew of twice as many ([FullTextCentres.read]). */
+    val corpus: Long,
 ) {
     /** The vector [v] less the centre, turned by the rotation. */
     fun turned(v: FloatArray): FloatArray {
@@ -70,6 +72,7 @@ class FullTextCentreRepository(private val db: DSLContext) {
                     },
                     r.fittedAt!!,
                     r.windows!!,
+                    r.corpus ?: r.windows!!.toLong(),
                 )
             }
 
@@ -85,6 +88,7 @@ class FullTextCentreRepository(private val db: DSLContext) {
                 .set(FULL_TEXT_CENTRE.CENTRE, bytes(listOf(centre.centre)))
                 .set(FULL_TEXT_CENTRE.ROTATION, bytes(centre.rotation.toList()))
                 .set(FULL_TEXT_CENTRE.WINDOWS, centre.windows)
+                .set(FULL_TEXT_CENTRE.CORPUS, centre.corpus)
                 .execute()
         }
     }

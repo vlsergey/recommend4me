@@ -70,6 +70,16 @@ class FullTextCentres(
             if (type.fullTextCentres.of(windows) == null) plan(type.id, "parts")
     }
 
+    /**
+     * A search read [windows] windows of the [type]: of [GROWTH] times those its centre was learnt with, one learnt
+     * anew of what the type has now — a type begun of a few works, or a site added of another language, is to have its
+     * windows told apart by a centre of its own.
+     */
+    fun read(type: TypeStore, windows: Long) {
+        val centre = of(type) ?: return
+        if (windows >= GROWTH * centre.corpus) plan(type.id, "parts")
+    }
+
     private fun plan(typeId: String, reason: String) =
         tasks.plan(Task(KIND, type = typeId), null, reason) { fit(typeId) }
 
@@ -91,6 +101,12 @@ class FullTextCentres(
         }
         val sum = DoubleArray(vectors.first().size)
         vectors.forEach { v -> for (i in sum.indices) sum[i] += v[i].toDouble() }
+        // What the type has now: its windows kept — of a type whose windows are not made yet, those learnt of
+        val kept =
+            type.sources.sumOf { s ->
+                s.parts.windows.windowCounts(encoder.windowsId).values.sumOf { it.toLong() } +
+                    s.schema.texts.filter { it.searchByMeaning }.sumOf { s.textVectors.itemsWith(it.key).size.toLong() }
+            }
         val now = Instant.now()
         val centre =
             FullTextCentre(
@@ -99,9 +115,15 @@ class FullTextCentres(
                 FullTextCentre.rotation(sum.size, Random(now.toEpochMilli())),
                 now,
                 vectors.size,
+                maxOf(kept, vectors.size.toLong()),
             )
         type.fullTextCentres.keep(encoder.windowsId, centre)
-        log.info("{}: the centre of the windows learnt of {} vectors", typeId, vectors.size)
+        log.info(
+            "{}: the centre of the windows learnt of {} vectors, of {} windows",
+            typeId,
+            vectors.size,
+            centre.corpus,
+        )
         events.publishEvent(FullTextCentreFitEvent(typeId))
     }
 
@@ -117,5 +139,8 @@ class FullTextCentres(
 
         /** The least vectors a centre is learnt of. */
         private const val LEAST = 50
+
+        /** How many times the windows a centre was learnt with a type is to have for one learnt anew. */
+        private const val GROWTH = 2
     }
 }

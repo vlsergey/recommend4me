@@ -31,6 +31,7 @@ class FullTextVectorsTest {
                 FullTextCentre.rotation(dim, draw),
                 Instant.now(),
                 0,
+                0,
             )
         val line = unit(gaussian(dim))
         // The line's own vector, one near it, one farther, one apart

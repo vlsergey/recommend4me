@@ -282,6 +282,7 @@ flowchart LR
     w_fitFullTextCentre --> e_FullTextCentreFitEvent
     w_fitGradeModels --> w_predictWorks
     w_fitPieceProjection --> e_PieceProjectionFitEvent
+    w_fitSearchWeights --> w_fitFullTextCentre
     w_keepOutWorks --> e_SiteItemRemoveEvent
     w_makeSiteItemSetVectors --> e_SiteItemSetVectorChangeEvent
     w_makeSiteItemSetVectors --> e_WorkSetVectorFillEvent
@@ -329,12 +330,14 @@ flowchart LR
 | `getItem` | SiteItemTextVectorChangeEvent | writeWorkValues |
 | `getPage` | SiteItemTextVectorChangeEvent | writeWorkValues |
 | `getPicture` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `getSearchQuality` | — | fitFullTextCentre |
 | `giveMatchFeedback` | SiteItemMarkChangeEvent | — |
 | `ignoreTag` | TagChangeEvent | — |
 | `judgeSearch` | SearchJudgmentEvent | — |
 | `keepOutTag` | — | keepOutWorks |
 | `linkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkInterestChangeEvent | fitGradeModels, writeWorkValues |
 | `listHierarchyOffers` | — | nameTags |
+| `listItems` | — | fitFullTextCentre |
 | `listJobs` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `markInterest` | WorkInterestChangeEvent | — |
 | `markPicture` | SiteItemMarkChangeEvent | — |

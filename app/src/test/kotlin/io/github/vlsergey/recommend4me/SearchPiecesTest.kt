@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me
 
+import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentres
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.part.Paragraphs
 import io.github.vlsergey.recommend4me.piece.PieceProjections
@@ -7,6 +9,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.search.Search
 import io.github.vlsergey.recommend4me.search.SearchPieces
 import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.inBackground
 import java.util.Random
 import kotlin.test.assertEquals
@@ -34,6 +37,8 @@ class SearchPiecesTest : SiteTestBase() {
     @Autowired lateinit var projections: PieceProjections
 
     @Autowired lateinit var search: Search
+
+    @Autowired lateinit var centres: FullTextCentres
 
     @Autowired lateinit var plugins: Plugins
 
@@ -104,5 +109,17 @@ class SearchPiecesTest : SiteTestBase() {
         val place = assertNotNull(found.places[together])
         assertEquals("part:c3", place.field)
         assertEquals(listOf(100, 101, 102), place.marked)
+
+        // A search reading twice the windows the centre was learnt with: one learnt anew of what the type has now
+        val type = stores.type(TYPE)!!
+        val centre = centres.of(type)!!
+        fun planned() = tasks.planned().any { it.work == Task(TaskKind.FIT_FULL_TEXT_CENTRE, type = TYPE) }
+        background.run()
+        centres.read(type, 2 * centre.corpus - 1)
+        assertTrue(!planned(), "not before")
+        centres.read(type, 2 * centre.corpus)
+        assertTrue(planned(), "learnt anew")
+        background.run()
+        assertTrue(centres.of(type)!!.key != centre.key, "a centre of its own")
     }
 }

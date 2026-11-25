@@ -41,6 +41,8 @@ class FullTextNearest(private val centres: FullTextCentres) {
                 }
             }
         }
+        // Of a type grown to twice what its centre was learnt with, one learnt anew
+        centres.read(type, windows)
         val out = LinkedHashMap<ItemKey, SearchNearest>()
         best
             .sortedByDescending { it.score }

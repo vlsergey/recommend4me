@@ -58,6 +58,9 @@ class TwoSitesTest : TwoSitesTestBase() {
 
         /** A page of the pairs, as the screen of the duplicates reads them. */
         const val PAGE = 100
+
+        /** The largest page of the pairs the server gives. */
+        const val OPEN_PAGE = 200
     }
 
     @Test
@@ -299,11 +302,14 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertTrue(type.duplicates.search()?.madeAt.let { it != null && it != before }, "searched")
         val river = "tags:${tagOf("alpha", "river")}"
         assertTrue(type.duplicates.rarity.of(listOf(river)).isNotEmpty(), "$river of the index's ${listed()}")
-        // Of a pair the search kept — of the works of the other classes too, in the one application of the tests
+        // Of the pair of this scenario's own works the search kept: a pair of another class's, or of another scenario
+        // of
+        // this one, may be answered or one work already, and is no open pair (in some orders of the classes)
+        val own = setOf(ItemKey("alpha", "m1"), ItemKey("beta", "m2"))
         val kept = buildList {
             type.duplicates.reads.forEach { add(it) }
         }
-            .first { it.first.source == "alpha" && it.second.source == "beta" }
+            .first { setOf(it.first, it.second) == own }
         val worked =
             LoosePairs.candidate(
                 type,
@@ -339,8 +345,28 @@ class TwoSitesTest : TwoSitesTestBase() {
                     false,
                 )
                 .body!!
-        fun has(page: io.github.vlsergey.recommend4me.api.model.DuplicatePage) =
-            page.pairs.any {
+        // Of every page: the other classes' pairs are many, in the one application of the tests, and of a page of
+        // the 200 likeliest the pair of [a] and [b] fell out in some orders of the classes
+        fun every(first: io.github.vlsergey.recommend4me.api.model.DuplicatePage, open: Boolean) =
+            first.pairs +
+                (first.pairs.size until first.total step OPEN_PAGE).flatMap { offset ->
+                    duplicates
+                        .getDuplicates(
+                            "books",
+                            open,
+                            offset,
+                            OPEN_PAGE,
+                            DuplicateSort.CHANCE,
+                            if (open) null
+                            else listOf(io.github.vlsergey.recommend4me.api.model.DuplicateVerdict.DIFFERENT),
+                            false,
+                            false,
+                        )
+                        .body!!
+                        .pairs
+                }
+        fun has(page: io.github.vlsergey.recommend4me.api.model.DuplicatePage, open: Boolean = true) =
+            every(page, open).any {
                 setOf(it.first.source to it.first.item, it.second.source to it.second.item) == keysOf(a, b)
             }
         val before = open()
@@ -358,7 +384,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         )
         assertTrue(!has(open()), "struck out of the open pairs")
         assertEquals(before.total - 1, open().total)
-        assertTrue(has(different()), "among those said different")
+        assertTrue(has(different(), open = false), "among those said different")
         duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
         assertTrue(has(open()), "back among the open pairs")
         // Made one work by another way than its own answer — a work's screen —: struck out as the page is chosen
