@@ -66,15 +66,8 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
             }
         }
 
-    /**
-     * The [block] of a reading of the index as written so far, committed or not; given the items [among], their keys
-     * where [AMONG] reads them ([ListAmong]: not named one by one in a statement — 2026-11-23: the items whose chapters
-     * waited, a million, named so in the choice of the next works took 2–3 minutes under the lock of the writing, the
-     * page of the duplicates waiting behind it).
-     */
-    fun <T> written(among: Collection<ItemKey>? = null, block: (DSLContext) -> T): T = lock.withLock {
-        if (among == null) block(writing) else ListAmong.of(writing, among.map { it.toString() }) { block(writing) }
-    }
+    /** The [block] of a reading of the index as written so far, committed or not. */
+    fun <T> written(block: (DSLContext) -> T): T = lock.withLock { block(writing) }
 
     /**
      * The rows of the [rows] written in place of those of their items — each of every table —, and those of the items

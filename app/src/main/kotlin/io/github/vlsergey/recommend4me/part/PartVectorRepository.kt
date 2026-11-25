@@ -16,9 +16,6 @@ class PartWaiting(
     val paragraphs: Boolean,
 )
 
-/** The rows streamed from the database at a time: memory, not meaning. */
-private const val STREAMED = 5000
-
 /**
  * The vector of every window of every part of one source's works, by an encoder: a long text is a set of vectors rather
  * than their average. The vectors are kept in the [store], outside the database; the database says by what encoder, of
@@ -52,23 +49,6 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
     fun texts(parts: List<PartWaiting>): List<PartToEncode> = parts.mapNotNull { p ->
         store.text(p.itemId, p.partId)?.let { PartToEncode(p.itemId, p.partId, it, p.hash) }
     }
-
-    /**
-     * The items with a part whose text has no vectors by [windows] of its windows or by [paragraphs] of its paragraphs
-     * yet: what a portion of the encoding chooses from ([PartVectors]).
-     */
-    fun itemsToEncode(windows: String, paragraphs: String): Set<String> =
-        db.selectDistinct(PART.ITEM_ID)
-            .from(PART)
-            .where(PART.CONTENT_HASH.isNotNull, onSite)
-            .and(
-                PART.ENCODER.isNull
-                    .or(PART.ENCODER.ne(windows))
-                    .or(PART.PARAGRAPHS_ENCODER.isNull)
-                    .or(PART.PARAGRAPHS_ENCODER.ne(paragraphs))
-            )
-            .fetchSize(STREAMED)
-            .fetchSet { it.value1()!! }
 
     /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]: kept, then told. */
     fun saveVectors(itemId: String, partId: String, encoder: String, hash: String, windows: List<FloatArray>) {

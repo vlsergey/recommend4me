@@ -9,8 +9,8 @@ import kotlin.test.assertEquals
 import org.jooq.impl.DSL
 
 /**
- * THE WORKS A TASK TAKES NEXT among those another store tells wait ([NextWorks.next] among them, [ListIndex.AMONG]): of
- * those alone, the highest expected first, from the cursor on — every choice of its own keys, none of the one before.
+ * THE WORKS A TASK TAKES NEXT ([NextWorks.next]): the highest expected first, those of no expectation last, from the
+ * cursor on, a portion at a time.
  */
 class NextWorksTest {
     private fun row(id: String, prediction: Double?) =
@@ -27,23 +27,18 @@ class NextWorksTest {
             title = id,
         )
 
-    private fun ListIndex.next(among: List<String>, cursor: TaskCursor = TaskCursor.FIRST, n: Int = 10) =
-        NextWorks.next(this, WorkScope.OTHER, DSL.trueCondition(), cursor, n, among.map { ItemKey("site", it) }).map {
-            it.key.id
-        }
+    private fun ListIndex.next(cursor: TaskCursor = TaskCursor.FIRST, n: Int = 10) =
+        NextWorks.next(this, WorkScope.OTHER, DSL.trueCondition(), cursor, n).map { it.key.id }
 
     @Test
-    fun `the works taken among those waiting are of them alone, the highest expected first`() {
+    fun `the works taken the highest expected first, from the cursor on`() {
         temporaryIndex { index ->
             index.replace(listOf(row("a", 4.0), row("b", 9.0), row("c", 6.0), row("d", null), row("e", 7.0)))
             index.commit()
-            assertEquals(listOf("b", "c", "a", "d"), index.next(listOf("a", "b", "c", "d", "unknown")))
-            // A choice of other keys: none of the one before
-            assertEquals(listOf("e"), index.next(listOf("e")))
-            assertEquals(emptyList(), index.next(emptyList()))
+            assertEquals(listOf("b", "e", "c", "a", "d"), index.next())
             // From the cursor on, a portion at a time
-            assertEquals(listOf("b", "c"), index.next(listOf("a", "b", "c", "d"), n = 2))
-            assertEquals(listOf("a", "d"), index.next(listOf("a", "b", "c", "d"), TaskCursor(6.0, "site:c"), n = 2))
+            assertEquals(listOf("b", "e"), index.next(n = 2))
+            assertEquals(listOf("a", "d"), index.next(TaskCursor(6.0, "site:c"), n = 2))
         }
     }
 }

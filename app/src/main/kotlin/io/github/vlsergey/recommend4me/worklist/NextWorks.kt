@@ -28,19 +28,11 @@ object NextWorks {
         if (scope == WorkScope.MARKED) TaskPriority.MARKED_WORKS else TaskPriority.OTHER_WORKS
 
     /**
-     * The next [n] items of the [scope] the condition [stale] picks, from the [cursor] on, the highest expected first;
-     * of the items [among] alone when given ([ListIndex.AMONG]: what another store tells is to be done of them).
+     * The next [n] items of the [scope] the condition [stale] picks, from the [cursor] on, the highest expected first.
      */
-    fun next(
-        index: ListIndex,
-        scope: WorkScope,
-        stale: Condition,
-        cursor: TaskCursor,
-        n: Int,
-        among: Collection<ItemKey>? = null,
-    ): List<TakenWork> =
-        index.written(among) { db ->
-            next(db, scope, if (among == null) stale else stale.and(ListIndex.AMONG), cursor, n)
+    fun next(index: ListIndex, scope: WorkScope, stale: Condition, cursor: TaskCursor, n: Int): List<TakenWork> =
+        index.written { db ->
+            next(db, scope, stale, cursor, n)
         }
 
     private fun next(db: DSLContext, scope: WorkScope, stale: Condition, cursor: TaskCursor, n: Int): List<TakenWork> =

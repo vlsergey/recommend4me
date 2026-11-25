@@ -155,6 +155,7 @@ flowchart LR
     o_start --> e_WorkGroupChangeEvent
     o_start --> w_analyseSiteItemPictures
     o_start --> w_countFandomWorks
+    o_start --> w_encodeSiteItemChapters
     o_start --> w_encodeSiteItemTexts
     o_start --> w_fitGradeModels
     o_start --> w_fitTagTextModel

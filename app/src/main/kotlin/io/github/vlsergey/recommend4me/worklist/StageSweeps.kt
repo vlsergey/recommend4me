@@ -23,8 +23,7 @@ class StageSweeps(private val lists: ListIndexes) {
 
     /**
      * The next [portion] works of the [scope] of the [typeId] the [stage] is to do, of the [sources], from the [cursor]
-     * on, the highest expected first: of the sweep under way, or of one begun now. [pending]: of a stage whose own
-     * store tells exactly what waits for it (the parts not encoded), those works, not the dates of what it reads.
+     * on, the highest expected first: of the sweep under way, or of one begun now.
      */
     fun next(
         stage: WorkStage,
@@ -33,13 +32,10 @@ class StageSweeps(private val lists: ListIndexes) {
         scope: WorkScope,
         cursor: TaskCursor,
         portion: Int,
-        pending: Collection<ItemKey>? = null,
     ): List<TakenWork> {
         val index = lists.of(typeId)
         val began = StageMarks.began(index, stage, scope) ?: begin(index, stage, scope, sources)
-        val due =
-            if (pending != null) StageDue.pending(stage, began) else StageDue.of(index, stage, scope, sources, began)
-        return NextWorks.next(index, scope, due, cursor, portion, among = pending)
+        return NextWorks.next(index, scope, StageDue.of(index, stage, scope, sources, began), cursor, portion)
     }
 
     /**

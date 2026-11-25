@@ -24,12 +24,6 @@ internal object StageDue {
     }
 
     /**
-     * Of a stage whose own store tells what waits for it, the items not done by its sweep begun [began]: those waiting
-     * picked apart ([NextWorks.next] among them).
-     */
-    fun pending(stage: WorkStage, began: Long): Condition = notDone(stage, began)
-
-    /**
      * The items with a date of what the [stage] reads past [from] and up to [to]: every one of a mark at nought; none
      * of a source whose mark is at its horizon.
      */

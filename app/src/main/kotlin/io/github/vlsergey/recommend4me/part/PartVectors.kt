@@ -7,15 +7,18 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
 import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
+import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -34,9 +37,11 @@ data class WorkChapterWindowFillEvent(val type: String, val scope: WorkScope)
  * rated and the rest? let us split"): the text of every part of every work read, encoded window by window: a vector for
  * every few hundred words, so a chapter is a set of vectors and one scene unlike the rest is not averaged away. And
  * paragraph by paragraph ([Paragraphs]): what the tags are held against to be offered by the work's own text, a
- * paragraph quoted beside its tag. A part read again with another text is encoded again. What is to be encoded the
- * store of the parts tells; a task of the marked and rated works of a type, and one of the others after every other
- * task, a [PORTION_WORKS] of them a turn ([turn]) — the highest expected first, from where the last turn left.
+ * paragraph quoted beside its tag. A part read again with another text is encoded again. The works are taken as every
+ * stage takes them, by the dates of their chapters past its mark ([WorkStage.WINDOWS]), every work of an encoder not
+ * told before; their parts read by their keys; a task of the marked and rated works of a type, and one of the others
+ * after every other task, a [PORTION_WORKS] of them a turn ([turn]) — the highest expected first, from where the last
+ * turn left.
  */
 @Service
 class PartVectors(
@@ -71,6 +76,32 @@ class PartVectors(
         }
     }
 
+    /**
+     * Of every type whose chapters were encoded by another encoder than the one of now — or never told by which —,
+     * every work's chapters encoded again: what the data say, nothing for the start itself.
+     */
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() {
+        val encoder = plugins.textEncoder() ?: return
+        stores.types
+            .filter { !madeBy(lists.of(it.id), encoder) }
+            .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
+    }
+
+    /**
+     * The chapters of the [type] by the [encoder]: of an encoder other than the one they were made by last — never
+     * told, or told before another —, told so, and the stage to be done of every work again: the chapters of every work
+     * are read by its key as its turn comes, those encoded already passed over.
+     */
+    private fun madeBy(type: TypeStore, encoder: TextEncoder) {
+        val index = lists.of(type.id)
+        if (madeBy(index, encoder)) return
+        val now = System.currentTimeMillis()
+        index.stages.changed(WINDOWS_SINCE, now)
+        index.stages.changed(windowsBy(encoder), now)
+        sweeps.reset(STAGE, type.id, type.sources.map { it.id })
+    }
+
     /** The chapters of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
         tasks.plan(
@@ -94,23 +125,16 @@ class PartVectors(
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION_WORKS): TaskCursor? {
         val type = stores.type(typeId)
         val encoder = plugins.textEncoder()
-        val waiting =
-            if (type == null || encoder == null) emptyList()
-            else
-                type.sources.flatMap { s ->
-                    s.parts.windows.itemsToEncode(encoder.windowsId, Paragraphs.keyOf(encoder.id)).map {
-                        ItemKey(s.id, it)
-                    }
-                }
-        val sources = type?.sources.orEmpty().map { it.id }
-        // Of none waiting, a sweep of none: its mark moves up to its horizon all the same
-        val items =
-            if (type == null || encoder == null) emptyList()
-            else sweeps.next(STAGE, typeId, sources, scope, cursor, portion, waiting)
+        if (type == null || encoder == null) return null
+        madeBy(type, encoder)
+        // The works of the chapters changed past the stage's mark, the parts of each read by its key: no work's parts
+        // are
+        // read to find what waits (owner, 2026-11-25: every turn of 50 works read the 4.6 million parts of ficbook)
+        val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
         var gaveWay = false
         if (items.isNotEmpty()) {
             val encoded = HashSet<ItemKey>()
-            gaveWay = encodeAll(items.groupBy({ it.key.source }, { it.key.id }), encoder!!, encoded)
+            gaveWay = encodeAll(items.groupBy({ it.key.source }, { it.key.id }), encoder, encoded)
             // The works whose windows were encoded dated so: what the sets and the search read of them changed
             if (!gaveWay) sweeps.done(STAGE, typeId, scope, items.map { it.key })
             sweeps.made(STAGE, typeId, scope, encoded)
@@ -214,3 +238,13 @@ class PartVectors(
         private val STAGE = WorkStage.WINDOWS
     }
 }
+
+/** Whether the chapters of the [index] are encoded by the [encoder] of now since it was last told to make them. */
+private fun madeBy(index: ListIndex, encoder: TextEncoder): Boolean =
+    index.stages.since(windowsBy(encoder)).let { it != null && it == index.stages.since(WINDOWS_SINCE) }
+
+/** What the index of the list tells of since when the chapters are to be encoded by the encoder of now. */
+private const val WINDOWS_SINCE = "windows"
+
+/** What the index of the list tells of since when the chapters were encoded by the [encoder], when last told. */
+private fun windowsBy(encoder: TextEncoder) = "windowsBy:${encoder.windowsId}|${Paragraphs.keyOf(encoder.id)}"
