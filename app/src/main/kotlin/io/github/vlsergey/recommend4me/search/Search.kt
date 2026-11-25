@@ -38,9 +38,14 @@ class Search(
     /**
      * What the plugin is given to search the [type] with: the items nearest by meaning to the line's vector moved by
      * the correction [shift] learnt, if any, by the full-text vectors of the windows ([FullTextNearest]); the windows
-     * it found kept for the reranker of this search ([windows]).
+     * it found kept for the reranker of this search ([windows]). The documents as the index has them — the site's and
+     * the user's values, none of the models' ([SearchDocuments.documents]) —, those [read] already given as read.
      */
-    private inner class Context(private val type: TypeStore, private val shift: QueryShift? = null) : SearchContext {
+    private inner class Context(
+        private val type: TypeStore,
+        private val shift: QueryShift? = null,
+        private val read: Map<ItemKey, SearchDocument> = emptyMap(),
+    ) : SearchContext {
         /** The windows nearest to the line the plugin asked for, the nearest first. */
         var windows: List<NearWindow> = emptyList()
             private set
@@ -54,12 +59,17 @@ class Search(
                 .orEmpty()
 
         override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
-            keys
-                .groupBy { it.source }
-                .flatMap { (source, list) ->
-                    stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
-                }
-                .associate { it.key to it.value }
+            read.filterKeys { it in keys } +
+                keys
+                    .filter { it !in read }
+                    .groupBy { it.source }
+                    .flatMap { (source, list) ->
+                        stores
+                            .source(source)
+                            ?.let { documents.documents(it, list.map { k -> k.id }, models = false).entries }
+                            .orEmpty()
+                    }
+                    .associate { it.key to it.value }
     }
 
     /**
@@ -105,22 +115,22 @@ class Search(
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return emptyMap()
-        val context = Context(type)
-        val found = provider.matches(typeId, result, keys, context)
+        // The documents of the works read once, for the plugin and for the places of the pieces alike
+        val docs = Context(type).documents(keys)
+        val found = provider.matches(typeId, result, keys, Context(type, read = docs))
         // Of a work whose words stand together, they are shown; else its place by the pieces, when it has one
         val placed = keys.filter { it in result.places && found[it]?.byMeaning != false }
-        return found + placesShown(result, placed, context)
+        return found + placesShown(result, placed, docs)
     }
 
     /** What is shown of the works [placed] of the places of the line their pieces found in their texts. */
     private fun placesShown(
         result: SearchResult,
         placed: List<ItemKey>,
-        context: SearchContext,
+        docs: Map<ItemKey, SearchDocument>,
     ): Map<ItemKey, SearchMatch> {
         val encoder = projections.encoder()
         if (placed.isEmpty() || encoder == null) return emptyMap()
-        val docs = context.documents(placed)
         return placed
             .mapNotNull { key ->
                 val place = result.places.getValue(key)

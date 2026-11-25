@@ -73,13 +73,15 @@ class SearchPiecesTest : SiteTestBase() {
                 (1..12).map { n ->
                     val words =
                         when {
-                            // The line's words together, twice: a chapter near the line beyond what a toy encoder's
-                            // full-text vectors blur
+                            // The line's words together, four times: a chapter near the line beyond what a toy
+                            // encoder's full-text vectors blur, whatever rotation the centre is drawn with
                             id == "spc1" && n == 3 ->
-                                listOf("маяки", "рифов", "бухта", "маяки", "рифов", "бухта").withIndex().associate {
-                                    (k, w) ->
-                                    100 + k to w
-                                }
+                                List(4) { listOf("маяки", "рифов", "бухта") }
+                                    .flatten()
+                                    .withIndex()
+                                    .associate { (k, w) ->
+                                        100 + k to w
+                                    }
                             id == "spc2" && n == 3 -> mapOf(20 to "маяки", 120 to "рифов", 200 to "бухта")
                             else -> emptyMap()
                         }
