@@ -83,25 +83,30 @@ class OnnxGraph(private val name: String) {
                     .apply {
                         inputs.forEach { string(NodeField.INPUT, it) }
                         outputs.forEach { string(NodeField.OUTPUT, it) }
-                        string(NodeField.NAME, "${op}_${nodes.size}")
+                        string(NodeField.NAME, "${name}_${op}_${nodes.size}")
                         string(NodeField.OP_TYPE, op)
                         attributes.forEach { (n, v) -> message(NodeField.ATTRIBUTE, attribute(n, v)) }
                     }
                     .bytes()
         }
 
+    /**
+     * The fields of the GraphProto of its nodes, constants, inputs and outputs, of no name: what is added to another
+     * graph read ([OnnxSplice]) — fields appended to a message are merged into it.
+     */
+    fun fields(): ByteArray =
+        Proto()
+            .apply {
+                nodes.forEach { message(GraphField.NODE, it) }
+                constants.forEach { message(GraphField.INITIALIZER, it) }
+                inputs.forEach { message(GraphField.INPUT, it) }
+                outputs.forEach { message(GraphField.OUTPUT, it) }
+            }
+            .bytes()
+
     /** The ModelProto of the graph, of the operators of the standard set at [opset]. */
     fun bytes(opset: Int): ByteArray {
-        val graph =
-            Proto()
-                .apply {
-                    nodes.forEach { message(GraphField.NODE, it) }
-                    string(GraphField.NAME, name)
-                    constants.forEach { message(GraphField.INITIALIZER, it) }
-                    inputs.forEach { message(GraphField.INPUT, it) }
-                    outputs.forEach { message(GraphField.OUTPUT, it) }
-                }
-                .bytes()
+        val graph = fields() + Proto().apply { string(GraphField.NAME, name) }.bytes()
         return Proto()
             .apply {
                 varint(ModelField.IR_VERSION, IR_VERSION)
@@ -142,16 +147,6 @@ class OnnxGraph(private val name: String) {
             }
             .bytes()
     }
-
-    private fun tensor(name: String, type: Int, dims: LongArray, raw: ByteArray): ByteArray =
-        Proto()
-            .apply {
-                dims.forEach { varint(TensorField.DIMS, it) }
-                varint(TensorField.DATA_TYPE, type.toLong())
-                string(TensorField.NAME, name)
-                bytes(TensorField.RAW_DATA, raw)
-            }
-            .bytes()
 
     private fun attribute(name: String, value: Any): ByteArray =
         Proto()
@@ -286,6 +281,7 @@ class OnnxGraph(private val name: String) {
         /** TensorProto.DataType */
         const val FLOAT = 1
         const val INT64 = 7
+        const val FLOAT16 = 10
         const val DOUBLE = 11
 
         /** The version of the format written: the one of the operator sets ONNX Runtime 1.20 reads. */
@@ -318,6 +314,17 @@ class OnnxGraph(private val name: String) {
         private const val TYPE_TENSOR_TYPE = 1
         private const val VALUE_INFO_NAME = 1
         private const val VALUE_INFO_TYPE = 2
+
+        /** A TensorProto of the [raw] data of the [type], of the dimensions [dims]. */
+        private fun tensor(name: String, type: Int, dims: LongArray, raw: ByteArray): ByteArray =
+            Proto()
+                .apply {
+                    dims.forEach { varint(TensorField.DIMS, it) }
+                    varint(TensorField.DATA_TYPE, type.toLong())
+                    string(TensorField.NAME, name)
+                    bytes(TensorField.RAW_DATA, raw)
+                }
+                .bytes()
 
         /** A StringStringEntryProto: a [key] and its [value]. */
         private fun entry(key: String, value: String): ByteArray =

@@ -7,8 +7,11 @@ import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.providers.OrtCUDAProviderOptions
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import kotlin.io.path.extension
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
@@ -36,12 +39,23 @@ class Onnx(
 
     val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val sessions = HashMap<String, OrtSession>()
+    private val made = HashMap<String, Pair<String, (ByteBuffer) -> ByteBuffer>>()
     private val onGpu = HashSet<String>()
     private val libraries = CudaLibraries(cuda)
 
     fun path(name: String): Path = dir.resolve(name)
 
-    fun has(name: String): Boolean = Files.isRegularFile(path(name))
+    fun has(name: String): Boolean = Files.isRegularFile(path(synchronized(this) { made[name]?.first } ?: name))
+
+    /**
+     * The graph [name] made of the model file [of] by [make] ([OnnxSplice]): the file mapped and given to it as its
+     * session is opened — a model of a gigabyte read out of the heap, and what it makes too —, and the session of what
+     * it makes kept as any other.
+     */
+    @Synchronized
+    fun madeOf(name: String, of: String, make: (ByteBuffer) -> ByteBuffer) {
+        made[name] = of to make
+    }
 
     /** Whether the graph runs on the card. Opens its session. */
     @Synchronized
@@ -59,10 +73,17 @@ class Onnx(
         sessions[name]?.let {
             return it
         }
-        val p = path(name)
+        val p = path(made[name]?.first ?: name)
         check(Files.isRegularFile(p)) { "No such model file: ${p.toAbsolutePath()}" }
+        val graph =
+            made[name]?.let { (_, make) ->
+                FileChannel.open(p, StandardOpenOption.READ).use {
+                    make(it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()))
+                }
+            }
         val session =
-            (if (gpu && libraries.ready()) openOnGpu(name, p) else null)
+            (if (gpu && libraries.ready()) openOnGpu(name, p, graph) else null)
+                ?: graph?.let { env.createSession(it, sessionOptions(threads, cuda = false)) }
                 ?: env.createSession(p.toString(), sessionOptions(threads, cuda = false))
         sessions[name] = session
         log.info(
@@ -96,10 +117,16 @@ class Onnx(
         }
     }
 
-    /** The session of the graph [name] of the file [p] on the card; null, and CUDA not tried again, when it fails. */
-    private fun openOnGpu(name: String, p: Path): OrtSession? =
+    /**
+     * The session of the graph [name] on the card — of the file [p], or of the bytes [graph] made of it; null, and CUDA
+     * not tried again, when it fails.
+     */
+    private fun openOnGpu(name: String, p: Path, graph: ByteBuffer?): OrtSession? =
         try {
-            env.createSession(p.toString(), sessionOptions(0, cuda = true)).also { onGpu += name }
+            val options = sessionOptions(0, cuda = true)
+            (graph?.let { env.createSession(it, options) } ?: env.createSession(p.toString(), options)).also {
+                onGpu += name
+            }
         } catch (e: OrtException) {
             log.warn("{} cannot run on CUDA, it runs on the CPU: {}", name, e.message)
             libraries.failed()

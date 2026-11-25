@@ -1,7 +1,11 @@
 package io.github.vlsergey.recommend4me.encoder
 
+import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
+import ai.onnxruntime.OnnxTensor
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
+import java.nio.LongBuffer
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -13,7 +17,8 @@ import org.junit.jupiter.api.Tag
 @Tag("ci")
 class BgeM3EncoderTest {
 
-    private val encoder = BgeM3Encoder(Onnx(defaultModelsDir()))
+    private val onnx = Onnx(defaultModelsDir())
+    private val encoder = BgeM3Encoder(onnx)
 
     private fun cos(a: FloatArray, b: FloatArray) = a.indices.sumOf { (a[it] * b[it]).toDouble() }
 
@@ -70,5 +75,31 @@ class BgeM3EncoderTest {
             assertTrue(b.first > a.first && b.first < a.last, "$a $b")
         }
         assertNull(encoder.encode(listOf("   ")).single())
+    }
+
+    @Test
+    fun `the graph run gives the first piece's hidden state of the model's, within half precision`() {
+        assumeTrue(encoder.ready(), "bge-m3 files are not in the models folder")
+        val texts = listOf("Шерлок Холмс расследует загадочное убийство в Лондоне.", "A dragon sleeps under the hill.")
+        val tokenizer =
+            HuggingFaceTokenizer.newInstance(
+                onnx.path(BgeM3Encoder.TOKENIZER),
+                mapOf("addSpecialTokens" to "true", "truncation" to "false", "padding" to "false"),
+            )
+        val windows = encoder.encodeWindows(texts).map { it.single() }
+        texts.forEachIndexed { t, text ->
+            val ids = tokenizer.encode(text, true, false).ids
+            val shape = longArrayOf(1, ids.size.toLong())
+            val inputs =
+                mapOf(
+                    "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
+                    "attention_mask" to
+                        OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size) { 1 }), shape),
+                )
+            val first = onnx.runSequence(BgeM3Encoder.MODEL, inputs)[0][0]
+            val norm = sqrt(first.sumOf { (it * it).toDouble() }).toFloat()
+            val whole = FloatArray(first.size) { first[it] / norm }
+            assertTrue(cos(whole, windows[t]) > 0.9999, "${cos(whole, windows[t])}")
+        }
     }
 }

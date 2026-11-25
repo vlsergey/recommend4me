@@ -3,6 +3,8 @@ package io.github.vlsergey.recommend4me.encoder
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
 import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.OnnxSplice
+import io.github.vlsergey.recommend4me.onnx.rows
 import java.nio.LongBuffer
 import java.nio.file.Files
 import kotlin.math.sqrt
@@ -22,6 +24,12 @@ import kotlin.math.sqrt
  */
 class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
 
+    // The graph run: the model's, its output the first piece's hidden state alone, in the half precision it is computed
+    // in — not every piece's, cast to floats, brought back of the card for the first one's sake
+    init {
+        onnx.madeOf(FIRST_PIECE, MODEL) { OnnxSplice.firstPiece(it, HIDDEN_STATE, FIRST_PIECE_OUTPUT) }
+    }
+
     private val tokenizer: HuggingFaceTokenizer by lazy {
         val p = onnx.path(TOKENIZER)
         check(Files.isRegularFile(p)) { "The bge-m3 tokenizer is missing: ${p.toAbsolutePath()}" }
@@ -40,8 +48,9 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
 
     override fun ready(): Boolean = onnx.has(MODEL) && onnx.has(TOKENIZER)
 
-    /** Token ids of the whole text, without special tokens. */
-    fun pieces(text: String): LongArray = tokenizer.encode(text, false, false).ids
+    /** Token ids of every text of [texts], without special tokens: the texts handed to the tokenizer together. */
+    private fun piecesOf(texts: List<String>): List<LongArray> =
+        if (texts.isEmpty()) emptyList() else tokenizer.batchEncode(texts, false, false).map { it.ids }
 
     /** Vectors of texts of any length, unit length; an empty text gets null. A query and a passage are read alike. */
     override fun encode(texts: List<String>, kind: TextKind): List<FloatArray?> {
@@ -68,9 +77,9 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     override fun encodeWindows(texts: List<String>): List<List<FloatArray>> {
         val windows = ArrayList<LongArray>()
         val owner = ArrayList<Int>()
-        texts.forEachIndexed { t, text ->
-            if (text.isBlank()) return@forEachIndexed
-            val ids = pieces(text)
+        val written = texts.indices.filter { texts[it].isNotBlank() }
+        piecesOf(written.map { texts[it] }).forEachIndexed { k, ids ->
+            val t = written[k]
             scenesOf(ids.size).forEach { chunk ->
                 windows += longArrayOf(bos) + LongArray(chunk.count()) { ids[chunk.first + it] } + longArrayOf(eos)
                 owner += t
@@ -115,9 +124,10 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     private fun windowsOf(texts: List<String>, limit: Int): Pair<List<LongArray>, List<Int>> {
         val windows = ArrayList<LongArray>()
         val owner = ArrayList<Int>()
-        texts.forEachIndexed { t, text ->
-            if (text.isBlank()) return@forEachIndexed
-            pieces(text).asList().chunked(ROOM).take(limit).forEach { chunk ->
+        val written = texts.indices.filter { texts[it].isNotBlank() }
+        piecesOf(written.map { texts[it] }).forEachIndexed { k, ids ->
+            val t = written[k]
+            ids.asList().chunked(ROOM).take(limit).forEach { chunk ->
                 windows += longArrayOf(bos) + chunk.toLongArray() + longArrayOf(eos)
                 owner += t
             }
@@ -132,7 +142,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     private fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        for (batch in order.chunked(if (onnx.onGpu(MODEL)) GPU_BATCH else BATCH)) {
+        for (batch in order.chunked(if (onnx.onGpu(FIRST_PIECE)) GPU_BATCH else BATCH)) {
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { PAD }
             val mask = LongArray(batch.size * len)
@@ -148,9 +158,9 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
                     "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
                     "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
                 )
-            val hidden = onnx.runSequence(MODEL, inputs)
             // The dense vector of bge-m3: the first piece's hidden state, as it is trained
-            batch.forEachIndexed { r, w -> out[w] = unit(hidden[r][0].copyOf()) }
+            val first = onnx.rows(FIRST_PIECE, inputs)
+            batch.forEachIndexed { r, w -> out[w] = unit(first[r]) }
         }
         return out.map { it!! }
     }
@@ -170,6 +180,13 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         const val ENCODER = "bge-m3"
         const val MODEL = "bge-m3-fp16.onnx"
         const val TOKENIZER = "bge-m3-tokenizer.json"
+
+        /**
+         * The graph run, made of the [MODEL]: its output [HIDDEN_STATE] cut to the first piece's, [FIRST_PIECE_OUTPUT].
+         */
+        private const val FIRST_PIECE = "bge-m3-first-piece"
+        private const val HIDDEN_STATE = "last_hidden_state"
+        private const val FIRST_PIECE_OUTPUT = "first_piece"
         const val DIM = 1024
         private const val PAD = 1L
 
