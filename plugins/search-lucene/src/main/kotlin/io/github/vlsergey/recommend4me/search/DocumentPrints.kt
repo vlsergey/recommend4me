@@ -14,7 +14,7 @@ internal object DocumentPrints {
 
     /**
      * What a document is made of, as a number: its language, every field — its key, its name, its weight, how it is
-     * read, its values — and every passage with its vector.
+     * read, its values.
      */
     fun whole(doc: SearchDocument): Long {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -30,17 +30,6 @@ internal object DocumentPrints {
             put(f.weight.toString())
             put("" + f.list + f.naming + f.counted)
             f.values.forEach(::put)
-        }
-        doc.passages.forEach { p ->
-            put(p.field)
-            put(p.from.toString())
-            put(p.to.toString())
-            p.vector?.let { v ->
-                ByteBuffer.allocate(v.size * Float.SIZE_BYTES)
-                    .also { it.asFloatBuffer().put(v) }
-                    .array()
-                    .let(digest::update)
-            }
         }
         return ByteBuffer.wrap(digest.digest(), 0, Long.SIZE_BYTES).long
     }

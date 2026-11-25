@@ -41,6 +41,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
 
     /** The codes of the pieces of the chapters and of the text fields. */
     val pieces = PieceRepository(db, store)
+    val fullText = FullTextVectorRepository(db, store)
 
     /** What every part is made of, its text not read. */
     val marks = PartMarks(db)
@@ -96,6 +97,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                         .setNull(PART.PARAGRAPHS_ENCODER)
                         .setNull(PART.PARAGRAPHS_HASH)
                         .setNull(PART.PIECES)
+                        .setNull(PART.FULL_TEXT)
                         .set(PART.CHARS, content?.length)
                         .set(PART.WORDS, words)
             }

@@ -16,7 +16,6 @@ class LuceneSearchTest {
                 SearchField("author", "Автор", 1.0f, listOf(author), list = true, naming = true),
                 SearchField("annotation", "Аннотация", 0.6f, listOf(text)),
             ),
-            emptyList(),
             language,
         )
 
@@ -29,7 +28,7 @@ class LuceneSearchTest {
 
     private val context =
         object : SearchContext {
-            override fun queryVector(line: String): FloatArray? = null
+            override fun nearest(line: String): Map<ItemKey, SearchNearest> = emptyMap()
 
             override fun documents(keys: Collection<ItemKey>) =
                 documents.filter { it.key in keys }.associateBy { it.key }
@@ -55,10 +54,9 @@ class LuceneSearchTest {
     }
 
     @Test
-    fun `found by the meaning of a passage of a chapter, which goes with its item`() {
+    fun `found by the meaning of a passage of a chapter, the passage shown whole`() {
         val chapter = "Дождь шёл всю ночь. Наутро они встретились у маяка. И долго молчали, глядя на море."
         val scene = chapter.indexOf("Наутро")
-        val lighthouse = floatArrayOf(1f, 0f, 0f)
         val withChapter =
             SearchDocument(
                 ItemKey("test", "4"),
@@ -67,23 +65,19 @@ class LuceneSearchTest {
                     SearchField("annotation", "Аннотация", 0.6f, listOf("История о двух людях у моря.")),
                     SearchField("part:1", "Глава 1", 0.5f, listOf(chapter)),
                 ),
-                listOf(
-                    SearchPassage("annotation", 0, 28, floatArrayOf(0f, 1f, 0f)),
-                    SearchPassage("part:1", 0, scene, floatArrayOf(0f, 0f, 1f)),
-                    SearchPassage("part:1", scene, chapter.length, lighthouse),
-                ),
                 "ru",
             )
         val other =
             SearchDocument(
                 ItemKey("test", "5"),
                 listOf(SearchField("title", "Название", 1.0f, listOf("Другое"), naming = true)),
-                listOf(SearchPassage("title", 0, 6, floatArrayOf(0f, 1f, 0f))),
                 "ru",
             )
         val byMeaning =
             object : SearchContext by context {
-                override fun queryVector(line: String) = lighthouse
+                // The application's: the scene of the chapter nearest
+                override fun nearest(line: String) =
+                    mapOf(ItemKey("test", "4") to SearchNearest(0.9, SearchPassage("part:1", scene, chapter.length)))
 
                 override fun documents(keys: Collection<ItemKey>) =
                     listOf(withChapter, other).filter { it.key in keys }.associateBy { it.key }
@@ -101,9 +95,6 @@ class LuceneSearchTest {
             // The passage whole, every sentence of it: its vector found the work, not one sentence's
             assertTrue(shown.byMeaning, shown.text)
             assertEquals(chapter.substring(scene).trim(), shown.text)
-            // Removed, the item's passages go with it
-            search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", "4")))
-            assertTrue(ItemKey("test", "4") !in search.search("books", "свидание у маяка утром", "ru", byMeaning).keys)
         }
     }
 
@@ -117,12 +108,12 @@ class LuceneSearchTest {
                     SearchField("title", "Название", 1.0f, listOf("Обнажённая"), naming = true),
                     SearchField("tags", "Теги", 0.9f, listOf(tags)),
                 ),
-                listOf(SearchPassage("tags", 0, tags.length, floatArrayOf(1f, 0f, 0f))),
                 "ru",
             )
         val byMeaning =
             object : SearchContext by context {
-                override fun queryVector(line: String) = floatArrayOf(1f, 0f, 0f)
+                override fun nearest(line: String) =
+                    mapOf(ItemKey("test", "8") to SearchNearest(0.9, SearchPassage("tags", 0, tags.length)))
 
                 override fun documents(keys: Collection<ItemKey>) =
                     listOf(doc).filter { it.key in keys }.associateBy { it.key }
@@ -152,7 +143,6 @@ class LuceneSearchTest {
             SearchDocument(
                 ItemKey("test", "7"),
                 listOf(SearchField("title", "Название", 1.0f, listOf("Долгая сага"), naming = true)) + chapters,
-                emptyList(),
                 "ru",
             )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->

@@ -40,10 +40,7 @@ class SearchReranking(
                 .filter { it !in kept }
                 .groupBy { it.source }
                 .flatMap { (source, list) ->
-                    stores
-                        .source(source)
-                        ?.let { documents.documents(it, list.map { k -> k.id }, passages = false).entries }
-                        .orEmpty()
+                    stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
                 }
                 .associate { it.key to it.value }
         val todo = found.keys.filter { it in read }

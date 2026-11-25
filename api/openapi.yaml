@@ -5079,6 +5079,7 @@ components:
           - fitFieldModels
           - fitGradeModels
           - fitPieceProjection
+          - fitFullTextCentre
           - fitHeldOutModel
           - fitSearchWeights
           - fitSetDirections

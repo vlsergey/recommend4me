@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.InterestRequest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.textvector.encodeNow
 import io.github.vlsergey.recommend4me.worklist.HeldTexts
 import io.github.vlsergey.recommend4me.worklist.ListCursors
 import io.github.vlsergey.recommend4me.worklist.ListIndexes

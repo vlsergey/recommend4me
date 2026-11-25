@@ -24,7 +24,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/scorer-fm` | Pairwise factorization machine: the line and every two features meeting through vectors of rank 8; C chosen by cross-validation. |
 | `plugins/scorer-kernel` | Pairwise kernel ranking with the arc-cosine kernel (no width to choose); C chosen by cross-validation. |
 | `plugins/scorer-boosting` | Gradient boosted trees on the pairwise logistic loss, Newton leaves; the number of trees chosen by cross-validation. |
-| `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type; the texts of the works found read again by the pieces of their texts (`SearchPieces`), how a search goes in docs/search.md. |
+| `plugins/search-lucene` | Search by words over one Lucene index per content type; by meaning the application's, the full-text vectors of every window read whole (`FullTextNearest`), and the texts of the works found read again by their pieces (`SearchPieces`): how a search goes in docs/search.md. |
 | `plugins/catalogue-wikidata` | The universes of fan fiction and their characters, from Wikidata. |
 | `plugins/pair-logistic` | The works of different sites that may be one work, or one series of works: a logistic model of how alike their layers are, one a kind, fitted on the user's answers on pairs; and the search of the pairs by both at once, on the card when there is one. |
 | `plugins/cast-reading` | The ways the sites' lines of characters and pairings — split by each site's habit into names and pairings, a half structure with no guarantee — are given to the models of the characters and the pairings: the line whole as one vector (as from the first), every name a vector and the mean of them, every name and pairing a feature, the names found in the dictionary of the universes as the site's word on its characters, or all at once; one chosen for each such facet on the page of the models. |
@@ -120,8 +120,9 @@ sources/<source>/source.mv.db      what the site says: works, facets, numbers, t
                                    reviews, text parts, captured pages — and their vectors, a
                                    compressed form of the same scrape
 sources/<source>/parts/            the texts of the parts, the vectors of their windows and
-                                   paragraphs, the codes of the pieces of their texts and of the
-                                   items' text fields (docs/search.md), outside the database
+                                   paragraphs, the codes of the pieces and the full-text
+                                   vectors of the windows of their texts and of the items' texts searched by
+                                   meaning (docs/search.md), outside the database
                                    (RocksDB, the texts compressed
                                    by zstd with a dictionary of their own, the vectors in blob
                                    files shared by thousands of parts, apart from their keys):
@@ -143,7 +144,7 @@ types/<type>/authors_duplicates.duckdb
                                    the store of the search of the authors' duplicates (DuckDB):
                                    its pairs of authors — recomputable, made anew empty as its
                                    tables change
-types/<type>/search-index/         the search index
+types/<type>/search-index/         the index of the search by words
 types/<type>/list.duckdb           the index of the list of works (DuckDB): what the list is
                                    filtered, sorted, counted and paged by — all recomputable,
                                    made anew empty as its tables change

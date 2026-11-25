@@ -9,8 +9,11 @@ import kotlin.concurrent.withLock
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
-/** A text's vector kept: the hash of its text, null of a vector by another encoder; whether its pieces are made. */
-class KeptText(val hash: String?, val pieces: Boolean)
+/**
+ * A text's vector kept: the hash of its text, null of a vector by another encoder; whether its pieces and the full-text
+ * vectors of its windows are made.
+ */
+class KeptText(val hash: String?, val pieces: Boolean, val fullText: Boolean)
 
 /**
  * The vectors of the texts of one source's items, kept with the hash of the text and the encoder that made them: a text
@@ -53,6 +56,7 @@ class TextVectorRepository(private val db: DSLContext) {
         encoder: String,
         ids: Collection<String>? = null,
         pieces: String? = null,
+        fullText: String? = null,
     ): Map<Pair<String, String>, KeptText> {
         val out = HashMap<Pair<String, String>, KeptText>()
         fun read(only: Collection<String>?) =
@@ -62,6 +66,7 @@ class TextVectorRepository(private val db: DSLContext) {
                     TEXT_VECTOR.ENCODER,
                     TEXT_VECTOR.TEXT_HASH,
                     TEXT_VECTOR.PIECES,
+                    TEXT_VECTOR.FULL_TEXT,
                 )
                 .from(TEXT_VECTOR)
                 .where(only?.let { TEXT_VECTOR.ITEM_ID.`in`(it) } ?: DSL.noCondition())
@@ -70,34 +75,8 @@ class TextVectorRepository(private val db: DSLContext) {
                         KeptText(
                             it.value4().takeIf { _ -> it.value3() == encoder },
                             pieces == null || it.value5() == pieces,
+                            fullText == null || it.value6() == fullText,
                         )
-                }
-        if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
-        return out
-    }
-
-    /**
-     * Of the texts [keys] of the items [ids] (every item when null) with a vector by [encoder], what their passages are
-     * made of, no vector read: item to text key to "hash/windows/by" — the hash of the text, how many windows it has
-     * (none till counted) and what they were made by ([TEXT_VECTOR.WINDOWS_BY]).
-     */
-    fun marksOf(ids: Collection<String>?, encoder: String, keys: Collection<String>): Map<String, Map<String, String>> {
-        val out = HashMap<String, MutableMap<String, String>>()
-        if (keys.isEmpty()) return out
-        fun read(only: Collection<String>?) =
-            db.select(
-                    TEXT_VECTOR.ITEM_ID,
-                    TEXT_VECTOR.TEXT_KEY,
-                    TEXT_VECTOR.TEXT_HASH,
-                    TEXT_VECTOR.WINDOWS,
-                    TEXT_VECTOR.WINDOWS_BY,
-                )
-                .from(TEXT_VECTOR)
-                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.TEXT_KEY.`in`(keys))
-                .and(only?.let { TEXT_VECTOR.ITEM_ID.`in`(it) } ?: DSL.noCondition())
-                .fetch {
-                    out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] =
-                        "${it.value3()}/${it.value4()}/${it.value5()}"
                 }
         if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
         return out
@@ -135,6 +114,7 @@ class TextVectorRepository(private val db: DSLContext) {
                     .setNull(TEXT_VECTOR.WINDOWS)
                     .setNull(TEXT_VECTOR.WINDOWS_BY)
                     .setNull(TEXT_VECTOR.PIECES)
+                    .setNull(TEXT_VECTOR.FULL_TEXT)
                     .execute()
                 tx.deleteFrom(TEXT_WINDOW)
                     .where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey))

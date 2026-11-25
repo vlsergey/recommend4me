@@ -1,32 +1,55 @@
 # The search
 
-How a line typed in the search finds works, and where in a work's text the place it means is. The index and the
-search by words and by meaning are the plugin `plugins/search-lucene` (`SearchProvider`); the order of what is found
-and the place shown are the application's (`app/.../search`).
+How a line typed in the search finds works, and where in a work's text the place it means is. The index of the words
+and the search by them are the plugin `plugins/search-lucene` (`SearchProvider`); the search by meaning, the order of
+what is found and the place shown are the application's (`app/.../meaning`, `app/.../search`).
 
-## The index
+## The index of the words
 
-One Lucene index of a content type (`types/<type>/search-index/`, `LuceneIndex`):
-
-- **a document of every item**: a field of every text and value of the item (`SearchDocuments`, `WorkTexts`), its weight
-  in the field's name (`<marks>.<weight in hundredths>.<key>`). Every text is stemmed once, in its own language
-  (`TextLanguages`, `Stemmers`), every word at its place — no stop word dropped, a function word may be of a name;
-- **a document of every passage of the item's texts** searched by meaning: a window of a text the encoder cut it into
-  (`TextEncoder.encodeWindows`, `windowSpans`) — of a long text field, and of every chapter — its vector in the one
-  field `VECTOR` (HNSW). A short text is one passage, its vector the text's.
+One Lucene index of a content type (`types/<type>/search-index/`, `LuceneIndex`): a document of every item, a field of
+every text and value of the item (`SearchDocuments`, `WorkTexts`), its weight in the field's name
+(`<marks>.<weight in hundredths>.<key>`). Every text is stemmed once, in its own language (`TextLanguages`,
+`Stemmers`), every word at its place — no stop word dropped, a function word may be of a name.
 
 The index keeps the fingerprint of what every item's document was made of and is written again only of the items whose
 fingerprint changed (`DocumentPrints`, `IndexKept`, `SourceCatchUp`); the documents are brought in by the stage of the
-search of the tasks over the works (`WorkStage.TEXTS`, `indexWorkTexts`). It knows nothing of the models.
+search of the tasks over the works (`WorkStage.TEXTS`, `indexWorkTexts`). It knows nothing of the models, nor of the
+vectors: no passage and no vector is in it (its format 4).
+
+## The full-text vectors of the windows
+
+What a work is found by by meaning (`FullTextVectors`): of every window of every chapter and of every text searched by
+meaning (`TextDef.searchByMeaning`) — a window the encoder cut the text into (`TextEncoder.encodeWindows`,
+`windowSpans`), a short text one window, its vector the text's — its vector less the type's centre, made of the sign of
+every number: a bit a number, 128 bytes a window of bge-m3. Kept in the store of the parts of the source
+(`PartStore.fullText`, the column family `fullText`, RocksDB's own files of tens of megabytes, not apart from the keys),
+of every text one value: its windows' characters and full-text vectors (`FullTextVectorRepository`); the key of the
+centre they were made by kept with the part (`part.full_text`) and with the text's vector (`text_vector.full_text`).
+
+- **Made by the stages that make the windows**, of the windows of the run: the chapters' by the stage of the chapters
+  (`PartVectors`, `ChapterEncoding`), the texts' by the stage of the texts (`TextVectors`, `TextWindows`); of a text
+  whose windows are made and whose full-text vectors are not, of the vectors kept, no model run.
+- **The centre** (`FullTextCentres`, the model database `full_text_centre`): the mean of the windows the encoder makes
+  of 300 chapters and 2 000 texts searched by meaning of every source drawn at random — learnt once of an encoder of
+  windows, at a start or as the texts of a type are written (`fitFullTextCentre`); learnt anew, every window's full-text
+  vector is made anew.
+- **Why these vectors, and why out of Lucene** (owner, 2026-11-25): the windows' vectors in Lucene's graph (HNSW) were float
+  vectors of 4 KB, read at random on the disk of the data a step of the graph — minutes a search, and the whole of
+  ficbook's 85 million windows 350 GB in the index beside the store's own copy. The full-text vectors are read whole, one file after
+  another, what the disk reads well — 11 GB of the whole of ficbook, seconds when the system holds them. Measured on 85
+  retellings among 129 250 windows: the window of the answer among the first 1 000 79 times, as by the vectors
+  themselves; its chapter among the first 300 78 times against 79. Of the signs of numbers not less the centre 71
+  times; of the signs of the 256 leading directions (32 bytes) 68; of a product quantization of 64 bytes 67.
 
 ## A search
 
 1. **The line** is read in the interface's language unless written in letters of another (`LineLanguages`); its words,
    stemmed so, without the function words (`Stemmers.stopWords`).
-2. **By meaning** (`MeaningSearch`): the line's vector (`TextVectors.query`, one short line on the thread of the request),
-   moved by the correction the user's judgments of snippets taught (`QueryShift`: q·p + (q·a)(b·p)), against every
-   passage's vector — the 8 000 nearest passages, an item counting with its nearest; its closeness
-   (`MeaningSearch.closeness`) the cosine on the scale of the line's own nearest.
+2. **By meaning** (`FullTextNearest`, given the plugin by `SearchContext.nearest`): the line's vector (`TextVectors.query`,
+   one short line on the thread of the request), moved by the correction the user's judgments of snippets taught
+   (`QueryShift`: q·p + (q·a)(b·p)), less the centre, against the full-text vector of every window of the type, read
+   whole — every number of the line with the sign of the window's —: the 8 000 windows of the best scores, an item counting with its
+   best; its closeness (`MeaningSearch.closeness`, the plugin's) the score on the scale of the line's own nearest.
 3. **By words** (`WordSearch`): the words in any of their forms or as beginnings of words, in every field, weighed by the
    field; the whole line in a naming field (title, author) a bonus.
 4. **The pieces** (below, `SearchPieces`): of the items found by meaning, the first `SearchPieces.READ` (300) by the
@@ -53,14 +76,14 @@ the windows' nearest 300 passages read again by their pieces; among the first te
 - **Kept as codes** (`PieceCodebook`): of every number of the 128 its bucket of four, 2 bits — 32 bytes a piece — by
   cuts learnt with the projection, the bucket's mean read back; nothing of a centroid, so nothing kept changes when the
   index of the pieces does. In the store of the parts of the source (`PartStore.pieces`, the column family `pieces`,
-  blob files): of every chapter by its part's id, of every text field of an item and its title by `text:<key>`, its
-  pieces' codes in order (`PieceRepository`); the key of the projection they were made by kept with the part
+  blob files): of every chapter by its part's id, of every text searched by meaning by `text:<key>`, its pieces' codes
+  in order (`PieceRepository`); the key of the projection they were made by kept with the part
   (`part.pieces`) and with the text's vector (`text_vector.pieces`). Where every piece lies in the text is not kept:
   the text is read with them and cut into pieces again (the tokenizer, milliseconds).
 - **Made by the stages that make the windows**: the chapters' by the stage of the chapters (`PartVectors`,
-  `encodeSiteItemChapters`), the text fields' by the stage of the texts (`TextVectors`, `TextWindows`,
-  `encodeSiteItemTexts`) — a text whose vector is made and whose pieces are not has its pieces made alone, nothing the
-  models or the index read told of as changed.
+  `ChapterEncoding`, `encodeSiteItemChapters`), the texts' searched by meaning by the stage of the texts (`TextVectors`,
+  `TextWindows`, `encodeSiteItemTexts`) — a text whose vector is made and whose pieces are not has its pieces made
+  alone, nothing the models or the index read told of as changed.
 - **The projection and the cuts** (`PieceProjection`, the model database `piece_projection`) are learnt once of a sample
   of the type's chapters — the leading 128 directions of the head's vectors of 100 000 pieces, then the quartiles of
   every number — when the encoder has none (`fitPieceProjection`): learnt of other works they lose 0.015 of the MRR
@@ -75,11 +98,12 @@ the windows' nearest 300 passages read again by their pieces; among the first te
   the text's. The work's feature `pieces` is that span's score; the span is what is shown, the line's pieces' best
   matches marked.
 
-What is not done by the pieces: finding the candidates. The nearest windows' vectors do it (above); the centroids of the
+What is not done by the pieces: finding the candidates. The full-text vectors of the windows do it (above); the centroids of the
 pieces alone were measured to lose half the answers (owner, 2026-11-25: not to be tested further).
 
 ## What the space costs
 
-Of the ficbook dump (4.7 million chapters, 38 billion characters, about 11 billion pieces): the pieces 32 bytes a piece,
-about 350 GB; the windows' vectors 2 KB a window of 127 new pieces, about 177 GB; the paragraphs' vectors of the tags
-by text (`Paragraphs`) as before.
+Of the ficbook dump (4.7 million chapters, 38 billion characters, about 11 billion pieces, about 85 million windows):
+the pieces 32 bytes a piece, about 350 GB; the windows' vectors 2 KB a window of 127 new pieces, about 177 GB; the
+windows' full-text vectors 136 bytes a window with its characters, about 11 GB — what every search reads; the paragraphs' vectors of
+the tags by text (`Paragraphs`) as before. The index of the words: what the texts' words are, no vector.

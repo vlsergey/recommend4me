@@ -1,65 +1,22 @@
 package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import org.apache.lucene.search.IndexSearcher
-import org.apache.lucene.search.KnnFloatVectorQuery
-import org.slf4j.LoggerFactory
-
-private val log = LoggerFactory.getLogger(MeaningSearch::class.java)
-
-/** The passage of an item nearest to the query by meaning, and its cosine. */
-internal class Nearest(val cosine: Double, val passage: SearchPassage)
 
 /**
- * THE SEARCH BY MEANING: the line a vector of the text encoder — in any language, a Russian line finds English
- * overviews — compared with the vector of every passage of every item; an item counts with its closest passage.
- * "corruption of a nun" finds a game whose overview never says "corruption".
+ * THE SEARCH BY MEANING, of what the application found nearest to the line ([SearchContext.nearest]): how close every
+ * item is on the line's own scale, and what is shown of an item found by it. "corruption of a nun" finds a game whose
+ * overview never says "corruption".
  */
 internal object MeaningSearch {
 
     /**
-     * The items nearest to the query's vector [q] by meaning: the [PASSAGES] passages nearest — of descriptions, of
-     * notes, of chapters — an item by its nearest passage.
-     */
-    fun nearest(searcher: IndexSearcher, q: FloatArray): Map<ItemKey, Nearest> {
-        val out = HashMap<ItemKey, Nearest>()
-        val stored = searcher.storedFields()
-        val hits =
-            try {
-                searcher
-                    .search(KnnFloatVectorQuery(LuceneIndex.VECTOR, LuceneIndex.unit(q), PASSAGES), PASSAGES)
-                    .scoreDocs
-            } catch (e: IllegalArgumentException) {
-                // Vectors of another dimension: an encoder changed and the index is not made again yet
-                log.debug("passages are not searched: {}", e.message)
-                return out
-            }
-        hits.forEach { hit ->
-            // The score of a dot product is (1 + cos) / 2
-            val cosine = 2.0 * hit.score - 1.0
-            val doc = stored.document(hit.doc)
-            val key = ItemKey.parse(doc.get(LuceneIndex.ID))
-            if ((out[key]?.cosine ?: Double.NEGATIVE_INFINITY) < cosine) {
-                val passage =
-                    SearchPassage(
-                        doc.get(LuceneIndex.PASSAGE_FIELD),
-                        doc.getField(LuceneIndex.PASSAGE_FROM).numericValue().toInt(),
-                        doc.getField(LuceneIndex.PASSAGE_TO).numericValue().toInt(),
-                    )
-                out[key] = Nearest(cosine, passage)
-            }
-        }
-        return out
-    }
-
-    /**
      * How close the items nearest to the query by meaning are, ON THE QUERY'S OWN SCALE: 0 at the [NEAREST]th nearest
      * item — or at the median one of a smaller catalogue — 1 at the top percent of the catalogue of [size] items; the
-     * items farther than that are not matches by meaning. Raw cosines are no scale at all — e5 puts nearly every pair
-     * of texts between 0.7 and 0.9 — and a fixed threshold either lets everything through or nothing.
+     * items farther than that are not matches by meaning. Raw scores are no scale at all — e5 puts nearly every pair of
+     * texts between 0.7 and 0.9 — and a fixed threshold either lets everything through or nothing.
      */
-    fun closeness(found: Map<ItemKey, Nearest>, size: Int): Map<ItemKey, Double> {
-        val nearest = found.mapValues { it.value.cosine }
+    fun closeness(found: Map<ItemKey, SearchNearest>, size: Int): Map<ItemKey, Double> {
+        val nearest = found.mapValues { it.value.score }
         if (nearest.size < 2) return nearest
         val sorted = nearest.values.sortedDescending()
         val floor = sorted[minOf(NEAREST, size / 2, sorted.size).coerceAtLeast(1) - 1]
@@ -79,14 +36,8 @@ internal object MeaningSearch {
         else SearchMatch(passage.field, true, text, emptyList())
     }
 
-    /** The items nearest by meaning that are asked for; the farther ones are no matches by meaning. */
+    /** The item the closeness is nought at: the farther ones are no matches by meaning. */
     private const val NEAREST = 2000
-
-    /**
-     * The passages asked for, of the [NEAREST] items: a passage of a scene, half as long as a page and overlapping the
-     * next by half, four of them stand where one page did — and the nearest are often of one chapter.
-     */
-    private const val PASSAGES = 4 * NEAREST
 
     /** The few items above the top percent are not told apart further than this. */
     const val MAX_CLOSENESS = 1.5

@@ -5,32 +5,40 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 
 /**
- * A text to encode: its item, its key, the text as the user corrected it and the hash it will be kept with;
- * [piecesOnly] of a text whose vector is made and whose pieces are not.
+ * A text to encode: its item, its key, the text as the user corrected it and the hash it will be kept with; of a text
+ * searched by meaning ([meaningful]) its pieces and the full-text vectors of its windows too. [vector] of a text whose
+ * vector is to be made, else of one whose vector is made and whose [pieces] or [fullText] are not.
  */
 class TextToEncode(
     val itemId: String,
     val key: String,
     val text: String,
     val hash: String,
-    val piecesOnly: Boolean = false,
+    val meaningful: Boolean,
+    val vector: Boolean = true,
+    val pieces: Boolean = meaningful,
+    val fullText: Boolean = meaningful,
 )
 
 /**
- * THE TEXTS OF A SOURCE'S ITEMS AS THEY ARE NOW, held against the vectors kept by [encoder] and the pieces kept by the
- * projection [pieces] (none of none): of every item, or of [only] those — every text the models read or the search
- * reads by meaning, and the title, as the user corrected them. A text new or changed is to be encoded ([todo]); a text
- * kept that is no more is gone ([gone]). Of one pass, kept nowhere.
+ * THE TEXTS OF A SOURCE'S ITEMS AS THEY ARE NOW, held against the vectors kept by [encoder], and of the texts searched
+ * by meaning the pieces kept by the projection [pieces] and the full-text vectors by the centre [fullText] (none of
+ * none): of every item, or of [only] those — every text the models read or the search reads by meaning, and the title,
+ * as the user corrected them. A text new or changed is to be encoded ([todo]); a text kept that is no more is gone
+ * ([gone]). Of one pass, kept nowhere.
  */
 class TextScan(
     private val store: SourceStore,
     private val only: Collection<String>?,
     encoder: String,
     pieces: String?,
+    fullText: String?,
 ) {
     private val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
+    private val meaningful = store.schema.texts.filter { it.searchByMeaning }.map { it.key }.toSet()
+
     /** Every text kept of the items, of any encoder, to the hash of its vector by the encoder: one read. */
-    private val stored = store.textVectors.kept(encoder, only, pieces)
+    private val stored = store.textVectors.kept(encoder, only, pieces, fullText)
     private val fields = if (only == null) store.corrections.allFields() else store.corrections.fieldsOf(only)
 
     /** The title of every item, as the user corrected it: a text the models read like any other. */
@@ -67,8 +75,10 @@ class TextScan(
             present += itemId to key
             val hash = Vectors.hash(text)
             val kept = stored[itemId to key]
-            if (kept?.hash != hash) todo += TextToEncode(itemId, key, text, hash)
-            else if (!kept.pieces) todo += TextToEncode(itemId, key, text, hash, piecesOnly = true)
+            val searched = key in meaningful
+            if (kept?.hash != hash) todo += TextToEncode(itemId, key, text, hash, searched)
+            else if (searched && !(kept.pieces && kept.fullText))
+                todo += TextToEncode(itemId, key, text, hash, true, vector = false, !kept.pieces, !kept.fullText)
         }
     }
 

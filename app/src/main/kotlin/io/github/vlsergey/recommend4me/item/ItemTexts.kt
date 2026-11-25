@@ -17,11 +17,22 @@ interface ItemTexts {
 
     /** Every text of the [keys] of every item, streamed item by item. */
     fun forEachTexts(keys: Collection<String>, action: (itemId: String, texts: Map<String, String>) -> Unit)
+
+    /** [n] texts of the [keys] of items drawn at random. */
+    fun sampleTexts(n: Int, keys: Collection<String>): List<String>
 }
 
 /** The [ItemTexts] of the source database [db]: [changed] told of every item whose texts were written. */
 internal class ItemTextRepository(private val db: DSLContext, private val changed: (Collection<String>) -> Unit) :
     ItemTexts {
+
+    override fun sampleTexts(n: Int, keys: Collection<String>): List<String> =
+        db.select(ITEM_TEXT.CONTENT)
+            .from(ITEM_TEXT)
+            .where(ITEM_TEXT.TEXT_KEY.`in`(keys))
+            .orderBy(DSL.rand())
+            .limit(n)
+            .fetch { it.value1()!! }
 
     override fun setTexts(itemId: String, texts: Map<String, String?>) {
         if (texts.isEmpty()) return

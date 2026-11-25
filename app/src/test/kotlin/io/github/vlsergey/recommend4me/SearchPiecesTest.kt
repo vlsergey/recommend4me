@@ -16,11 +16,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 
 /**
- * The pieces of the texts, end to end (docs/search.md, "The pieces"): the projection learnt of the type's chapters, the
- * chapters' pieces made by the stage of the chapters as it is set at nought by it, and a search reading them — the work
- * whose chapter says the line's words together above the one that says them apart, the place of them found. Of a
- * content type and a site of its own ([TYPE], [SITE]): the projection learnt sets every stage of every work of its type
- * at nought, which no other class's works may see.
+ * The search by meaning and the pieces of the texts, end to end (docs/search.md): the centre of the windows and the
+ * projection of the pieces learnt of the type's chapters, the chapters' full-text vectors and pieces made by the stage
+ * of the chapters as it is set at nought by them, and a search finding the works by the full-text vectors and reading
+ * their pieces — the work whose chapter says the line's words together above the one that says them apart, the place of
+ * them found. Of a content type and a site of its own ([TYPE], [SITE]): the projection learnt sets every stage of every
+ * work of its type at nought, which no other class's works may see.
  */
 class SearchPiecesTest : SiteTestBase() {
     companion object {
@@ -88,6 +89,9 @@ class SearchPiecesTest : SiteTestBase() {
         val found = search.search(TYPE, "маяки рифов бухта", "ru", rerank = false, learnt = false)!!
         val together = ItemKey(site, "spc1")
         val apart = ItemKey(site, "spc2")
+        // Found by meaning by the full-text vectors of the windows: of the work saying the words together, its chapter
+        // of them
+        assertEquals("part:c3", found.nearest[together]?.field)
         fun piecesOf(key: ItemKey) = found.features[key]?.get(SearchPieces.PIECES) ?: 0.0
         assertTrue(piecesOf(together) > piecesOf(apart), "${piecesOf(together)} against ${piecesOf(apart)}")
         val place = assertNotNull(found.places[together])

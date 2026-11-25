@@ -3,9 +3,10 @@ package io.github.vlsergey.recommend4me.textvector
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentreFitEvent
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentres
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.piece.FittedPieces
 import io.github.vlsergey.recommend4me.piece.PieceProjectionFitEvent
 import io.github.vlsergey.recommend4me.piece.PieceProjections
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -66,6 +67,7 @@ class TextVectors(
     private val sweeps: StageSweeps,
     private val documents: ListVectors,
     private val projections: PieceProjections,
+    private val centres: FullTextCentres,
 ) {
     /** Whether texts are being encoded now. */
     val running: Boolean
@@ -90,9 +92,17 @@ class TextVectors(
     fun start() {
         val encoder = plugins.textEncoder() ?: return
         stores.types
-            .filter { !madeBy(lists.of(it.id), keyOf(encoder, projections.of(it))) }
+            .filter { !madeBy(lists.of(it.id), Encoding(encoder, TextEncoding.of(it, projections, centres)).key) }
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
     }
+
+    /**
+     * The centre of the windows of a type learnt anew: every text of it searched by meaning read again for its
+     * full-text vectors.
+     */
+    @EventListener
+    fun centreFitted(event: FullTextCentreFitEvent) =
+        WorkScope.entries.forEach { plan(event.type, it, "encoder", TaskCursor.FIRST) }
 
     /** The projection of the pieces of a type learnt anew: every text of it to be encoded again for its pieces. */
     @EventListener
@@ -122,13 +132,6 @@ class TextVectors(
             }
         }
 
-    /** Every text of the [typeId] to be encoded encoded now, on the caller's thread, turn after turn: for the tests. */
-    fun encodeNow(typeId: String) =
-        WorkScope.entries.forEach { scope ->
-            var cursor: TaskCursor? = TaskCursor.FIRST
-            while (cursor != null) cursor = turn(typeId, scope, cursor)
-        }
-
     /**
      * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose texts are to be encoded, from the
      * [cursor] on, encoded; where the next turn goes on from — none when none is left. Of no encoder, none: the next
@@ -139,19 +142,19 @@ class TextVectors(
         val type = stores.type(typeId)
         val encoder = plugins.textEncoder()
         if (type == null || encoder == null) return null
-        val fitted = projections.of(type)
-        madeBy(type, keyOf(encoder, fitted))
+        val with = Encoding(encoder, TextEncoding.of(type, projections, centres))
+        madeBy(type, with.key)
         val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
-        val gaveWay = items.isNotEmpty() && !done(type, scope, Encoding(encoder, fitted), items.map { it.key })
+        val gaveWay = items.isNotEmpty() && !done(type, scope, with, items.map { it.key })
         if (!gaveWay && items.size < portion && sweeps.complete(STAGE, typeId, scope))
             events.publishEvent(WorkTextVectorFillEvent(typeId, scope))
         return if (gaveWay) cursor else items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
     /**
-     * The vectors of the [type] by the encoder and the projection of the pieces of [key] ([keyOf]): of one other than
-     * the one they were made by last — never seen, or seen before another —, told so, and the stage to be done of every
-     * work again.
+     * The vectors of the [type] by the encoder, the projection of the pieces and the centre of the full-text vectors of
+     * [key] ([Encoding.key]): of one other than the one they were made by last — never seen, or seen before another —,
+     * told so, and the stage to be done of every work again.
      */
     private fun madeBy(type: TypeStore, key: String) {
         val index = lists.of(type.id)
@@ -210,30 +213,31 @@ class TextVectors(
         giveWay: () -> Boolean = { false },
     ): List<ItemKey> {
         val encoder = with.encoder
-        val scan = TextScan(store, ids, encoder.id, with.pieces?.projection?.key)
+        val scan = TextScan(store, ids, encoder.id, with.texts.pieces?.projection?.key, with.texts.centre?.key)
         val gone = scan.gone()
-        gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
+        gone.forEach { (id, key) ->
+            store.textVectors.delete(id, key)
+            store.parts.fullText.forgetText(id, key)
+        }
         if (gone.isNotEmpty())
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, gone.map { it.first }.distinct()))
-        val (piecesOnly, changed) = scan.todo.partition { it.piecesOnly }
+        val (changed, made) = scan.todo.partition { it.vector }
         for (batch in changed.chunked(BATCH)) {
             if (giveWay()) break
             val vectors = encoder.encode(batch.map { it.text })
             batch.forEachIndexed { i, t ->
                 vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
             }
-            windows.keepWindows(
-                store,
-                batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
-                with.pieces,
-            )
+            val encoded = batch.indices.filter { vectors[it] != null }
+            windows.keepWindows(store, encoded.map { batch[it] }, encoded.map { vectors[it]!! }, with.texts)
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, batch.map { it.itemId }.distinct()))
         }
-        // The texts whose vectors are made and whose pieces are not, of a projection learnt anew: their pieces made,
-        // their windows of the same run; nothing the models or the index read changed
-        for (batch in piecesOnly.chunked(BATCH)) {
+        // The texts whose vectors are made and whose pieces or full-text vectors are not, of a projection or a centre
+        // learnt anew:
+        // nothing the models or the index read changed
+        for (batch in made.chunked(BATCH)) {
             if (giveWay()) break
-            windows.keepWindows(store, batch.map { Triple(it.itemId, it.key, it.text) }, with.pieces)
+            windows.keepMade(store, batch, with.texts)
         }
         return (changed.map { it.itemId } + gone.map { it.first }).distinct().map { ItemKey(store.id, it) }
     }
@@ -250,7 +254,15 @@ class TextVectors(
         val encoder = plugins.textEncoder() ?: return
         items.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
             stores.source(source)?.let { s ->
-                encoded(s, Encoding(encoder, stores.type(s.type)?.let(projections::of)), ids)
+                encoded(
+                    s,
+                    Encoding(
+                        encoder,
+                        stores.type(s.type)?.let { TextEncoding.of(it, projections, centres) }
+                            ?: TextEncoding(null, null),
+                    ),
+                    ids,
+                )
             }
         }
     }
@@ -298,12 +310,15 @@ class TextVectors(
     }
 }
 
-/** The encoder of the texts, and what the pieces of the type are made with — none of no projection of them. */
-private class Encoding(val encoder: TextEncoder, val pieces: FittedPieces?)
-
-/** What the vectors are made by: the encoder [encoder], and the projection of the pieces [fitted] when there is one. */
-private fun keyOf(encoder: TextEncoder, fitted: FittedPieces?) =
-    encoder.id + (fitted?.let { "|pieces:${it.projection.key}" } ?: "")
+/** The encoder of the texts, and what the texts searched by meaning are made of beside their vectors. */
+private class Encoding(val encoder: TextEncoder, val texts: TextEncoding) {
+    /** What the vectors are made by: a change of any of it makes every text again. */
+    val key: String
+        get() =
+            encoder.id +
+                (texts.pieces?.let { "|pieces:${it.projection.key}" } ?: "") +
+                (texts.centre?.let { "|fullText:${it.key}" } ?: "")
+}
 
 /**
  * Whether the vectors of the [index] are made by the encoder and the projection of [key] since they were last told to
@@ -315,5 +330,5 @@ private fun madeBy(index: ListIndex, key: String): Boolean =
 /** What the index of the list tells of since when the vectors are to be made by the encoder of now. */
 private const val VECTORS_SINCE = "vectors"
 
-/** What the index of the list tells of since when the vectors were made by [key] ([keyOf]), when it was last told. */
+/** What the index of the list tells of since when the vectors were made by [key] ([Encoding.key]), when last told. */
 private fun vectorsBy(key: String) = "vectorsBy:$key"

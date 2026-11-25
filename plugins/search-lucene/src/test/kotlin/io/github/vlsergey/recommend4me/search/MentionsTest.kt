@@ -36,7 +36,6 @@ class MentionsTest {
                         .takeIf { it.isNotEmpty() }
                         ?.let { SearchField("facet.tag", "tag", 0.9f, it, list = true, group = "facet.tag+given") },
                 ),
-            emptyList(),
             language,
         )
 

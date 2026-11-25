@@ -15,7 +15,12 @@ class PartWaiting(
     val windows: Boolean,
     val paragraphs: Boolean,
     val pieces: Boolean = false,
-)
+    val fullText: Boolean = false,
+) {
+    /** Whether anything of the part waits. */
+    val waits: Boolean
+        get() = windows || paragraphs || pieces || fullText
+}
 
 /**
  * The vector of every window of every part of one source's works, by an encoder: a long text is a set of vectors rather
@@ -26,32 +31,51 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
 
     /**
      * The parts of the works [items] whose text waits to be encoded — its windows by [windows], its paragraphs by
-     * [paragraphs], its pieces by the projection [pieces] when there is one — in the order of the table's key: read
-     * work by work, by the key. A list of keys bound as parameters is no index to H2, nor a bound of (item, part) past
-     * the last part given: it walked the parts of 1.4 million works to the end of the table for every batch of eight
-     * (owner, 2026-11-24: a turn of 50 works took 47 s).
+     * [paragraphs], its pieces by the projection [pieces] and its full-text vectors by the centre [fullText] when there
+     * are any — in the order of the table's key: read work by work, by the key. A list of keys bound as parameters is
+     * no index to H2, nor a bound of (item, part) past the last part given: it walked the parts of 1.4 million works to
+     * the end of the table for every batch of eight (owner, 2026-11-24: a turn of 50 works took 47 s).
      */
     fun waitingOf(
         items: Collection<String>,
         windows: String,
         paragraphs: String,
         pieces: String? = null,
+        fullText: String? = null,
     ): List<PartWaiting> =
         items.distinct().sorted().flatMap { item ->
-            db.select(PART.PART_ID, PART.CONTENT_HASH, PART.ENCODER, PART.PARAGRAPHS_ENCODER, PART.PIECES)
+            db.select(
+                    PART.PART_ID,
+                    PART.CONTENT_HASH,
+                    PART.ENCODER,
+                    PART.PARAGRAPHS_ENCODER,
+                    PART.PIECES,
+                    PART.FULL_TEXT,
+                )
                 .from(PART)
                 .where(PART.ITEM_ID.eq(item), PART.CONTENT_HASH.isNotNull, onSite)
                 .orderBy(PART.PART_ID)
                 .fetch()
                 .mapNotNull { r ->
-                    val ofWindows = r.value3() != windows
-                    val ofParagraphs = r.value4() != paragraphs
-                    val ofPieces = pieces != null && r.value5() != pieces
-                    if (ofWindows || ofParagraphs || ofPieces)
-                        PartWaiting(item, r.value1()!!, r.value2()!!, ofWindows, ofParagraphs, ofPieces)
-                    else null
+                    PartWaiting(
+                            item,
+                            r.value1()!!,
+                            r.value2()!!,
+                            windows = r.value3() != windows,
+                            paragraphs = r.value4() != paragraphs,
+                            pieces = pieces != null && r.value5() != pieces,
+                            fullText = fullText != null && r.value6() != fullText,
+                        )
+                        .takeIf { it.waits }
                 }
         }
+
+    /** The vectors of the windows kept of the [parts] — item and part —, by part; a part of none left out. */
+    fun windowsOfParts(parts: List<Pair<String, String>>): Map<Pair<String, String>, List<FloatArray>> =
+        parts
+            .groupBy({ it.first }, { it.second })
+            .flatMap { (item, own) -> store.windows(item, own).map { (part, w) -> (item to part) to w } }
+            .toMap()
 
     /** The texts of the [parts], of the store; a part whose text the store lost left out. */
     fun texts(parts: List<PartWaiting>): List<PartToEncode> = parts.mapNotNull { p ->
@@ -92,17 +116,13 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
     }
 
     /** Every window vector by [encoder] of the items. */
-    fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> =
-        windowsByParts(itemIds, encoder).mapValues { (_, parts) -> parts.values.flatten() }
-
-    /** The window vectors by [encoder] of the parts of the items [ids]: item to part to its windows in order. */
-    fun windowsByParts(ids: Collection<String>, encoder: String): Map<String, Map<String, List<FloatArray>>> {
-        val out = HashMap<String, Map<String, List<FloatArray>>>()
-        encodedParts(ids, encoder).forEach { (item, parts) ->
+    fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> {
+        val out = HashMap<String, List<FloatArray>>()
+        encodedParts(itemIds, encoder).forEach { (item, parts) ->
             val windows = store.windows(item, parts)
-            out[item] = parts.mapNotNull { p -> windows[p]?.takeIf { it.isNotEmpty() }?.let { p to it } }.toMap()
+            parts.flatMap { windows[it].orEmpty() }.takeIf { it.isNotEmpty() }?.let { out[item] = it }
         }
-        return out.filterValues { it.isNotEmpty() }
+        return out
     }
 
     /** The window vectors by [encoder] of the item's parts: part to its windows in order. */

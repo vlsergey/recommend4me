@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import io.github.vlsergey.recommend4me.fulltext.FullTextNearest
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.piece.PieceProjections
@@ -30,21 +31,23 @@ class Search(
     private val reranking: SearchReranking,
     private val pieces: SearchPieces,
     private val projections: PieceProjections,
+    private val meaning: FullTextNearest,
 ) {
 
-    /** What the plugin is given to search with: the line's vector moved by the correction [shift] learnt, if any. */
-    private fun context(shift: QueryShift? = null) =
+    /**
+     * What the plugin is given to search the [type] with: the items nearest by meaning to the line's vector moved by
+     * the correction [shift] learnt, if any, by the full-text vectors of the windows ([FullTextNearest]).
+     */
+    private fun context(type: TypeStore, shift: QueryShift? = null) =
         object : SearchContext {
-            override fun queryVector(line: String): FloatArray? = textVectors.query(line)?.let { shift?.of(it) ?: it }
+            override fun nearest(line: String): Map<ItemKey, SearchNearest> =
+                textVectors.query(line)?.let { meaning.nearest(type, shift?.of(it) ?: it) }.orEmpty()
 
             override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
                 keys
                     .groupBy { it.source }
                     .flatMap { (source, list) ->
-                        stores
-                            .source(source)
-                            ?.let { documents.documents(it, list.map { k -> k.id }, passages = false).entries }
-                            .orEmpty()
+                        stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
                     }
                     .associate { it.key to it.value }
         }
@@ -70,7 +73,7 @@ class Search(
         if (provider == null || type == null) return null
         val own = if (learnt) with ?: kept(type) else null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
-        val found = pieces.read(type, provider.search(typeId, line, language, context(own?.shift)))
+        val found = pieces.read(type, provider.search(typeId, line, language, context(type, own?.shift)))
         val read = if (rerank) reranking.reranked(type, found) else found
         return own?.weights?.ordered(read) ?: read
     }
@@ -91,7 +94,7 @@ class Search(
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return emptyMap()
-        val context = context()
+        val context = context(type)
         val found = provider.matches(typeId, result, keys, context)
         // Of a work whose words stand together, they are shown; else its place by the pieces, when it has one
         val placed = keys.filter { it in result.places && found[it]?.byMeaning != false }
@@ -200,7 +203,7 @@ class Search(
         places: (SearchProvider, SearchDocument) -> List<NamePlace>,
     ): List<Quote> {
         val provider = plugins.search
-        val doc = provider?.let { documents.documents(s, listOf(itemId), passages = false)[ItemKey(s.id, itemId)] }
+        val doc = provider?.let { documents.documents(s, listOf(itemId))[ItemKey(s.id, itemId)] }
         if (provider == null || doc == null) return emptyList()
         val found = places(provider, doc)
         val chapters =

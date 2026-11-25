@@ -10,7 +10,6 @@ import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.document.Document
 import org.apache.lucene.document.Field
-import org.apache.lucene.document.KnnFloatVectorField
 import org.apache.lucene.document.StoredField
 import org.apache.lucene.document.StringField
 import org.apache.lucene.document.TextField
@@ -19,7 +18,6 @@ import org.apache.lucene.index.FieldInfos
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.index.Term
-import org.apache.lucene.index.VectorSimilarityFunction
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
@@ -28,13 +26,13 @@ import org.apache.lucene.store.FSDirectory
 
 /**
  * The index of one content type on disk: of every item a document of its fields — a field per [SearchField], searched
- * by words — and a document of every passage of its texts ([SearchPassage]), its vector searched by meaning; all of
- * them under the item's [ID], replaced and removed together.
+ * by words — under the item's [ID]. What is searched by meaning is not here: the application's, its windows' full-text
+ * vectors read whole ([SearchContext.nearest]); the vectors of millions of windows in a graph of the index were minutes
+ * of random reads a search on the disk of the data (2026-11-25).
  *
  * THE WEIGHT OF A FIELD IS IN ITS NAME — `<marks>.<weight in hundredths>.<key>`, the marks `n` of a field that names
  * the item, `c` of the work's own words ([SearchField.counted]), `t` of neither — so a search reads which fields there
- * are and what each weighs from the index itself, whatever source wrote them. Every passage's vector is in the one
- * field [VECTOR].
+ * are and what each weighs from the index itself, whatever source wrote them.
  *
  * EVERY TEXT STEMMED BEFORE IT IS PUT IN, ONCE, as written in its language ([TextLanguages], [Stemmers]) — one field of
  * it, no copy by another language (user, 2026-10-16): every word as its stem at its place, marked when written with a
@@ -161,19 +159,18 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         }
     }
 
-    /** The text fields of the index with their weights, and whether it has passages' vectors. */
+    /** The text fields of the index with their weights. */
     fun fields(searcher: IndexSearcher): Fields {
         val names = FieldInfos.getMergedFieldInfos(searcher.indexReader).map { it.name }
-        val text = names.mapNotNull(::textField).sortedByDescending { it.weight }
-        return Fields(text, VECTOR in names)
+        return Fields(names.mapNotNull(::textField).sortedByDescending { it.weight })
     }
 
-    class Fields(val text: List<IndexedField>, val vectors: Boolean) {
+    class Fields(val text: List<IndexedField>) {
         /** Of the fields searched alone: not those of weight 0, the work's own words kept for the counting of names. */
-        fun searched() = Fields(text.filter { it.weight > 0f }, vectors)
+        fun searched() = Fields(text.filter { it.weight > 0f })
     }
 
-    /** How many items the index has: their documents of fields, not their passages. */
+    /** How many items the index has. */
     fun items(searcher: IndexSearcher): Int = searcher.count(TermQuery(Term(KIND, ITEM)))
 
     /**
@@ -196,13 +193,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     companion object {
         const val ID = "id"
 
-        /** What a document is: an item's fields ([ITEM]) or a passage of it ([PASSAGE]). */
+        /** What a document is: an item's fields ([ITEM]), the one kind there is. */
         private const val KIND = "kind"
         private const val ITEM = "item"
-        private const val PASSAGE = "passage"
-
-        /** The vector of a passage. */
-        const val VECTOR = "v"
 
         /** The languages an item's texts were stemmed as, by a comma. */
         const val LANGUAGES = "languages"
@@ -215,9 +208,10 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         /**
          * The version of how the documents are made — the fields, the stemming, the marks — kept with every commit: an
          * index of another is made anew. 2: every text stemmed as its language, the paragraphs of the work's own words
-         * marked, the fingerprints kept; 3: the fingerprints the application's, of what a document is made of.
+         * marked, the fingerprints kept; 3: the fingerprints the application's, of what a document is made of; 4: no
+         * passage and no vector, the search by meaning the application's.
          */
-        const val FORMAT = 3
+        const val FORMAT = 4
         private const val FORMAT_KEY = "format"
 
         private const val WHOLE_KEY = "whole"
@@ -233,9 +227,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             w.commit()
         }
 
-        /**
-         * What an item's document is: the term of the documents of items alone, not of their passages, and their query.
-         */
+        /** What an item's document is: the term of the documents of items, and their query. */
         val ITEM_TERM = Term(KIND, ITEM)
         val ITEMS = TermQuery(ITEM_TERM)
 
@@ -245,11 +237,6 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
                 .flatMap { f -> f.values.filter { it.isNotBlank() }.map { TextLanguages.of(it, doc.language) } }
                 .distinct()
                 .sorted()
-
-        /** Where a passage is: its field's key, its characters from and until in the field's text. */
-        const val PASSAGE_FIELD = "p.field"
-        const val PASSAGE_FROM = "p.from"
-        const val PASSAGE_TO = "p.to"
 
         /**
          * The writer's: the texts come stemmed already, each as its language ([documents]); what it tells is the gap
@@ -311,10 +298,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             )
         }
 
-        /**
-         * The documents of an item: of its fields, and of every passage of it with a vector; [print] — the item's
-         * fingerprint ([DocumentPrints]), made once by the caller.
-         */
+        /** The documents of an item: of its fields; [print] — the item's fingerprint ([DocumentPrints]), made once. */
         private fun documents(doc: SearchDocument, print: Long): List<Document> {
             val id = doc.key.toString()
             // Every value stemmed as its language: a stream of its own each, of an analyzer that reuses none
@@ -343,37 +327,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
                     add(StoredField(LANGUAGES, used.joinToString(",")))
                     add(StoredField(FINGERPRINT, print))
                 }
-            // Every field's text made once, not a field looked for and its text joined again a passage
-            val texts = HashMap<String, String>()
-            doc.fields.forEach { texts.putIfAbsent(it.key, it.text) }
-            val passages =
-                doc.passages.mapNotNull { p ->
-                    val vector = p.vector ?: return@mapNotNull null
-                    // A piece of no phrase — "-", a changelog of dates — says nothing, and its vector lies
-                    // near every query: the same few items were found by meaning whatever was looked for
-                    val text = p.within(texts[p.field]) ?: return@mapNotNull null
-                    if (Phrases.split(text).isEmpty()) return@mapNotNull null
-                    Document().apply {
-                        add(StringField(ID, id, Field.Store.YES))
-                        add(StringField(KIND, PASSAGE, Field.Store.NO))
-                        add(StoredField(PASSAGE_FIELD, p.field))
-                        add(StoredField(PASSAGE_FROM, p.from))
-                        add(StoredField(PASSAGE_TO, p.to))
-                        add(KnnFloatVectorField(VECTOR, unit(vector), VectorSimilarityFunction.DOT_PRODUCT))
-                    }
-                }
-            return listOf(fields) + passages
+            return listOf(fields)
         }
-
-        /** A dot product needs unit vectors; the stored ones are, up to the rounding of a float. */
-        fun unit(v: FloatArray): FloatArray {
-            var n = 0.0
-            for (x in v) n += x.toDouble() * x
-            n = kotlin.math.sqrt(n)
-            return if (n > LEAST_NORM) FloatArray(v.size) { (v[it] / n).toFloat() } else v
-        }
-
-        /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
-        private const val LEAST_NORM = 1e-9
     }
 }

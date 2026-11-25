@@ -38,6 +38,7 @@ flowchart LR
     e_FandomRelationChangeEvent["FandomRelationChangeEvent"]
     e_FandomVectorChangeEvent["FandomVectorChangeEvent"]
     e_FieldModelFitEvent["FieldModelFitEvent"]
+    e_FullTextCentreFitEvent["FullTextCentreFitEvent"]
     e_PieceProjectionFitEvent["PieceProjectionFitEvent"]
     e_RatedWorkValueFillEvent["RatedWorkValueFillEvent"]
     e_SearchJudgmentEvent["SearchJudgmentEvent"]
@@ -90,6 +91,7 @@ flowchart LR
     w_fitDuplicateModel{{"fitDuplicateModel"}}
     w_fitFandomLikeness{{"fitFandomLikeness"}}
     w_fitFieldModels{{"fitFieldModels"}}
+    w_fitFullTextCentre{{"fitFullTextCentre"}}
     w_fitGradeModels{{"fitGradeModels"}}
     w_fitHeldOutModel{{"fitHeldOutModel"}}
     w_fitPieceProjection{{"fitPieceProjection"}}
@@ -159,6 +161,7 @@ flowchart LR
     o_start --> w_countFandomWorks
     o_start --> w_encodeSiteItemChapters
     o_start --> w_encodeSiteItemTexts
+    o_start --> w_fitFullTextCentre
     o_start --> w_fitGradeModels
     o_start --> w_fitPieceProjection
     o_start --> w_fitTagTextModel
@@ -171,6 +174,8 @@ flowchart LR
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
     e_FieldModelFitEvent --> w_fillWorkFields
+    e_FullTextCentreFitEvent --> w_encodeSiteItemChapters
+    e_FullTextCentreFitEvent --> w_encodeSiteItemTexts
     e_PieceProjectionFitEvent --> w_encodeSiteItemChapters
     e_PieceProjectionFitEvent --> w_encodeSiteItemTexts
     e_RatedWorkValueFillEvent --> w_fitGradeModels
@@ -233,12 +238,12 @@ flowchart LR
     e_WorkChangeEvent --> w_nameFandoms
     e_WorkChangeEvent --> w_nameTags
     e_WorkChangeEvent --> w_writeListIndex
-    e_WorkChapterWindowFillEvent --> w_indexWorkTexts
     e_WorkChapterWindowFillEvent --> w_makeSiteItemSetVectors
     e_WorkDocumentWriteEvent --> w_encodeSiteItemCasts
     e_WorkDocumentWriteEvent --> w_encodeSiteItemChapters
     e_WorkDocumentWriteEvent --> w_encodeSiteItemTexts
     e_WorkDocumentWriteEvent --> w_fillWorkFields
+    e_WorkDocumentWriteEvent --> w_fitFullTextCentre
     e_WorkDocumentWriteEvent --> w_fitPieceProjection
     e_WorkDocumentWriteEvent --> w_indexWorkTexts
     e_WorkDocumentWriteEvent --> w_makeSiteItemSetVectors
@@ -260,7 +265,6 @@ flowchart LR
     e_WorkSetVectorFillEvent --> w_fillWorkFields
     e_WorkSetVectorFillEvent --> w_predictWorks
     e_WorkTextVectorFillEvent --> w_fillWorkFields
-    e_WorkTextVectorFillEvent --> w_indexWorkTexts
     e_WorkTextVectorFillEvent --> w_predictWorks
     w_analyseSiteItemPictures --> e_SiteItemPictureAnalysisEvent
     w_compareGradeScorers --> w_readScorerInput
@@ -275,6 +279,7 @@ flowchart LR
     w_fillWorkFields --> e_RatedWorkValueFillEvent
     w_fillWorkFields --> e_WorkFieldFillEvent
     w_fitFieldModels --> e_FieldModelFitEvent
+    w_fitFullTextCentre --> e_FullTextCentreFitEvent
     w_fitGradeModels --> w_predictWorks
     w_fitPieceProjection --> e_PieceProjectionFitEvent
     w_keepOutWorks --> e_SiteItemRemoveEvent

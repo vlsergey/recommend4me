@@ -29,7 +29,10 @@ class KeptParagraph(val vector: FloatArray, val hash: String)
  * - the vectors of its windows in [WINDOWS] and of its paragraphs with the hashes of their texts in [PARAGRAPHS], half
  *   precision, as they are: numbers do not compress. Kept apart from their keys, in files shared by thousands of parts;
  * - the codes of the vectors of its pieces in [PIECES], 32 bytes a piece — and of the texts of the item's fields by the
- *   key `text:<field>` in the place of a part's id.
+ *   key `text:<field>` in the place of a part's id;
+ * - the full-text vectors of its windows in [FULL_TEXT] ([io.github.vlsergey.recommend4me.fulltext.FullTextVectors]),
+ *   of its text fields' too: what a search reads whole, in the order of the keys — in files of their own, not apart
+ *   from their keys, the store's files of tens of megabytes read one after another.
  *
  * What a part has — whether its text is kept, its windows encoded and by what — the database says ([PartRepository]);
  * this holds the bytes. A value written goes to the store's log first: a stop between keeps it, or loses it whole.
@@ -62,6 +65,9 @@ class PartStore(folder: Path) : AutoCloseable {
             .setBlobFileSize(BLOB_FILE)
             .setBlobCompressionType(CompressionType.NO_COMPRESSION)
             .setEnableBlobGarbageCollection(true)
+    // The full-text vectors: read whole by every search, a part's few kilobytes beside its key, numbers that do not
+    // compress
+    private val fullTextOptions = ColumnFamilyOptions().setCompressionType(CompressionType.NO_COMPRESSION)
     private val db: RocksDB
 
     init {
@@ -77,6 +83,7 @@ class PartStore(folder: Path) : AutoCloseable {
                     ColumnFamilyDescriptor(WINDOWS.toByteArray(), vectorOptions),
                     ColumnFamilyDescriptor(PARAGRAPHS.toByteArray(), vectorOptions),
                     ColumnFamilyDescriptor(PIECES.toByteArray(), vectorOptions),
+                    ColumnFamilyDescriptor(FULL_TEXT.toByteArray(), fullTextOptions),
                 ),
                 handles,
             )
@@ -92,6 +99,14 @@ class PartStore(folder: Path) : AutoCloseable {
      * another ([io.github.vlsergey.recommend4me.piece.PieceCodebook]).
      */
     val pieces = PartValues(db, piecesFamily)
+
+    private val fullTextFamily = handles[5]
+
+    /**
+     * The full-text vectors of the windows of every text of an item, by its id as [pieces]
+     * ([FullTextVectorRepository]).
+     */
+    val fullText = PartValues(db, fullTextFamily)
 
     fun text(itemId: String, partId: String): String? = db.get(texts, key(itemId, partId))?.toString(Charsets.UTF_8)
 
@@ -154,13 +169,13 @@ class PartStore(folder: Path) : AutoCloseable {
     fun forget(itemId: String) {
         val from = (itemId + SEPARATOR).toByteArray(Charsets.UTF_8)
         val to = (itemId + AFTER_SEPARATOR).toByteArray(Charsets.UTF_8)
-        listOf(texts, windows, paragraphs, piecesFamily).forEach { db.deleteRange(it, from, to) }
+        listOf(texts, windows, paragraphs, piecesFamily, fullTextFamily).forEach { db.deleteRange(it, from, to) }
     }
 
     override fun close() {
         handles.forEach(ColumnFamilyHandle::close)
         db.close()
-        listOf(options, textOptions, vectorOptions).forEach { it.close() }
+        listOf(options, textOptions, vectorOptions, fullTextOptions).forEach { it.close() }
     }
 
     private fun <T> multi(
@@ -178,6 +193,7 @@ class PartStore(folder: Path) : AutoCloseable {
         const val WINDOWS = "windows"
         const val PARAGRAPHS = "paragraphs"
         const val PIECES = "pieces"
+        const val FULL_TEXT = "fullText"
 
         /** Between the item and the part in a key: no id has it. */
         const val SEPARATOR = '\u0000'
@@ -234,9 +250,27 @@ class PartStore(folder: Path) : AutoCloseable {
 class PartValues(private val db: RocksDB, private val family: ColumnFamilyHandle) {
     fun put(itemId: String, partId: String, bytes: ByteArray) = db.put(family, PartStore.key(itemId, partId), bytes)
 
+    fun delete(itemId: String, partId: String) = db.delete(family, PartStore.key(itemId, partId))
+
     /** The values of the texts [partIds] of the item, by text; a text of none left out. */
     fun of(itemId: String, partIds: Collection<String>): Map<String, ByteArray> =
         multiGet(db, family, itemId, partIds) { it }
+
+    /** Every value kept, in the order of the keys — read as one pass of the store —: its item, its text, its bytes. */
+    fun forEach(action: (itemId: String, partId: String, bytes: ByteArray) -> Unit) {
+        db.newIterator(family).use { cursor ->
+            cursor.seekToFirst()
+            while (cursor.isValid) {
+                val key = cursor.key().toString(Charsets.UTF_8)
+                action(
+                    key.substringBefore(PartStore.SEPARATOR),
+                    key.substringAfter(PartStore.SEPARATOR),
+                    cursor.value(),
+                )
+                cursor.next()
+            }
+        }
+    }
 }
 
 /** The values of the [family] of the texts [partIds] of the item, read together, by text; a text of none left out. */

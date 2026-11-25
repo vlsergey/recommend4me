@@ -2,14 +2,12 @@ package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
-import io.github.vlsergey.recommend4me.part.WorkChapterWindowFillEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
-import io.github.vlsergey.recommend4me.textvector.WorkTextVectorFillEvent
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
@@ -26,13 +24,13 @@ private val log = LoggerFactory.getLogger(WorkTexts::class.java)
 
 /**
  * THE DOCUMENTS OF THE SEARCH OF THE WORKS — THE STAGE [WorkStage.TEXTS] ([StageSweeps]; docs/computations.md, 9 and
- * 10): of the works whose data, answers, chapters, vectors or chapters' windows changed past its mark — the vectors and
- * the windows done of them first —; a task of the marked and rated works, and one of the others after every other task,
- * a [PORTION] of them a turn ([turn]) — the highest expected first, from where the last turn left —: their documents
- * brought into the search plugin's index ([SourceCatchUp]: of the site's and the user's values alone, a document whose
- * fingerprint did not change not written again), every one marked done. An index of the plugin not of its format, or
- * never brought to every work ([SearchProvider.current]), is made anew empty as the task begins, and every work's
- * document written again since.
+ * 10): of the works whose data, answers or chapters changed past its mark — what is searched by meaning, the full-text
+ * vectors of the windows, is not in the documents, and waited for by none —; a task of the marked and rated works, and
+ * one of the others after every other task, a [PORTION] of them a turn ([turn]) — the highest expected first, from
+ * where the last turn left —: their documents brought into the search plugin's index ([SourceCatchUp]: of the site's
+ * and the user's values alone, a document whose fingerprint did not change not written again), every one marked done.
+ * An index of the plugin not of its format, or never brought to every work ([SearchProvider.current]), is made anew
+ * empty as the task begins, and every work's document written again since.
  */
 @Component
 class WorkTexts(
@@ -72,14 +70,6 @@ class WorkTexts(
     fun documentsWritten(event: WorkDocumentWriteEvent) {
         if (STAGE in event.stages) WorkScope.entries.forEach { plan(event.type, it, "items", TaskCursor.FIRST) }
     }
-
-    /** The vectors of the texts the search waits for done: the documents of the works they got past written. */
-    @EventListener
-    fun vectorsFilled(event: WorkTextVectorFillEvent) = plan(event.type, event.scope, "texts", TaskCursor.FIRST)
-
-    /** The chapters' windows the search waits for done: the documents of the works they got past written. */
-    @EventListener
-    fun windowsFilled(event: WorkChapterWindowFillEvent) = plan(event.type, event.scope, "parts", TaskCursor.FIRST)
 
     /** The documents of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =

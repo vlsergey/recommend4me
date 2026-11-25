@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.draft.DictionaryChanges
 import io.github.vlsergey.recommend4me.draft.DraftDictionary
 import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentreRepository
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemChanges
@@ -356,6 +357,7 @@ class TypeStore(
 
     /** The projection of the pieces' vectors learnt of the type's own chapters. */
     val pieceProjections = PieceProjectionRepository(databases.model(type.id))
+    val fullTextCentres = FullTextCentreRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))

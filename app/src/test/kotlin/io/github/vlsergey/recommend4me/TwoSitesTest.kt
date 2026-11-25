@@ -683,7 +683,7 @@ class TwoSitesTest : TwoSitesTestBase() {
                 .any { it.item == "q3" },
             "document ${
                 searchDocuments
-                    .documents(stores.source("alpha")!!, listOf("q3"), passages = false)
+                    .documents(stores.source("alpha")!!, listOf("q3"))
                     .values
                     .single()
                     .fields

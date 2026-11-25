@@ -35,6 +35,7 @@ import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
 import io.github.vlsergey.recommend4me.tagtext.TextTags
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.textvector.encodeNow
 import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
 import io.github.vlsergey.recommend4me.worklist.ListIndexing

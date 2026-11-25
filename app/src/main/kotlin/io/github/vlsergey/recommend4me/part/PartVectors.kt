@@ -2,19 +2,17 @@ package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
-import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentreFitEvent
+import io.github.vlsergey.recommend4me.fulltext.FullTextCentres
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.piece.FittedPieces
 import io.github.vlsergey.recommend4me.piece.PieceProjectionFitEvent
 import io.github.vlsergey.recommend4me.piece.PieceProjections
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
-import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
@@ -55,6 +53,7 @@ class PartVectors(
     private val lists: ListIndexes,
     private val sweeps: StageSweeps,
     private val projections: PieceProjections,
+    private val centres: FullTextCentres,
 ) {
 
     @Volatile private var busy = false
@@ -88,13 +87,20 @@ class PartVectors(
     fun start() {
         val encoder = plugins.textEncoder() ?: return
         stores.types
-            .filter { !madeBy(lists.of(it.id), Encoding(encoder, projections.of(it))) }
+            .filter { !madeBy(lists.of(it.id), Encoding(encoder, projections.of(it), centres.of(it))) }
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
     }
 
     /** The projection of the pieces of a type learnt anew: every chapter of it to be read again for its pieces. */
     @EventListener
     fun projectionFitted(event: PieceProjectionFitEvent) =
+        WorkScope.entries.forEach { plan(event.type, it, "encoder", TaskCursor.FIRST) }
+
+    /**
+     * The centre of the windows of a type learnt anew: every chapter of it to be read again for its full-text vectors.
+     */
+    @EventListener
+    fun centreFitted(event: FullTextCentreFitEvent) =
         WorkScope.entries.forEach { plan(event.type, it, "encoder", TaskCursor.FIRST) }
 
     /**
@@ -135,7 +141,7 @@ class PartVectors(
         val type = stores.type(typeId)
         val textEncoder = plugins.textEncoder()
         if (type == null || textEncoder == null) return null
-        val encoder = Encoding(textEncoder, projections.of(type))
+        val encoder = Encoding(textEncoder, projections.of(type), centres.of(type))
         madeBy(type, encoder)
         // The works of the chapters changed past the stage's mark, the parts of each read by its key: no work's parts
         // are read to find what waits (owner, 2026-11-25: every turn of 50 works read the 4.6 million parts of ficbook)
@@ -166,10 +172,15 @@ class PartVectors(
         encoded: MutableSet<ItemKey>,
     ): Boolean {
         var gaveWay = false
+        val encoding = ChapterEncoding(encoder, events)
         try {
-            val batches = batchesOf(works, encoder).iterator()
-            while (!tasks.stopping && !gaveWay && batches.hasNext()) {
-                encode(batches.next(), encoder, encoded)
+            val batches = works.flatMap { (source, ids) ->
+                stores.source(source)?.let { encoding.batchesOf(it, ids) }.orEmpty()
+            }
+            val each = batches.iterator()
+            while (!tasks.stopping && !gaveWay && each.hasNext()) {
+                busy = true
+                encoding.encode(each.next(), encoded)
                 gaveWay = tasks.outranked
             }
         } finally {
@@ -178,84 +189,7 @@ class PartVectors(
         return gaveWay
     }
 
-    /** A batch of parts of one source to encode: their windows, or their paragraphs. */
-    private class Batch(val source: SourceStore, val parts: List<PartWaiting>, val windows: Boolean)
-
-    /**
-     * The batches of the parts of the [works] of every source waiting to be encoded, [BATCH] parts each: their windows,
-     * then their paragraphs — the parts of the portion read once, by their works.
-     */
-    private fun batchesOf(works: Map<String, List<String>>, encoder: Encoding): List<Batch> =
-        works.flatMap { (source, ids) ->
-            val s = stores.source(source) ?: return@flatMap emptyList()
-            val e = encoder.encoder
-            val waiting =
-                s.parts.windows.waitingOf(ids, e.windowsId, Paragraphs.keyOf(e.id), encoder.pieces?.projection?.key)
-            waiting.filter { it.windows || it.pieces }.chunked(BATCH).map { Batch(s, it, windows = true) } +
-                waiting.filter { it.paragraphs }.chunked(BATCH).map { Batch(s, it, windows = false) }
-        }
-
-    /**
-     * The parts of the [batch] encoded — their windows with their pieces when the type has a projection of them, or
-     * their paragraphs —, the works of windows kept in [encoded].
-     */
-    private fun encode(batch: Batch, with: Encoding, encoded: MutableSet<ItemKey>) {
-        val s = batch.source
-        val todo = s.parts.windows.texts(batch.parts)
-        if (todo.isEmpty()) return
-        busy = true
-        val encoder = with.encoder
-        if (batch.windows) {
-            // The pieces made by the run of the windows: the windows' vectors of it, the pieces' codes kept beside
-            val fitted = with.pieces
-            val pieces = fitted?.let { f -> encoder.pieces?.encode(todo.map { it.content }, f.projection) }
-            val windows = pieces?.map { it.windows } ?: encoder.encodeWindows(todo.map { it.content })
-            // A part whose windows are made, of its pieces alone, has its windows as they were: nothing read changed
-            val ofWindows = batch.parts.filter { it.windows }.map { it.itemId to it.partId }.toSet()
-            val changed = todo.filter { (it.itemId to it.partId) in ofWindows }
-            todo.forEachIndexed { i, part ->
-                if ((part.itemId to part.partId) in ofWindows)
-                    s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
-                if (fitted != null && pieces != null)
-                    s.parts.pieces.save(
-                        part.itemId,
-                        part.partId,
-                        fitted.projection.key,
-                        fitted.codebook.codes(pieces[i].pieces),
-                    )
-            }
-            // What the models learnt of these works read: told, the models fitted of them fitted again
-            if (changed.isNotEmpty())
-                events.publishEvent(SiteItemChapterVectorChangeEvent(s.id, changed.map { it.itemId }.distinct()))
-            changed.forEach { encoded += ItemKey(s.id, it.itemId) }
-            return
-        }
-        // The paragraphs of every part of the batch encoded together, then given back to their parts: a chapter's few
-        // dozen alone ran the graph's batches half empty
-        val texts = todo.map { Paragraphs.of(it.content) }
-        val vectors = texts.flatten().chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-        var from = 0
-        todo.forEachIndexed { i, part ->
-            val own = texts[i]
-            s.parts.paragraphs.saveParagraphVectors(
-                part.itemId,
-                part.partId,
-                Paragraphs.keyOf(encoder.id),
-                part.hash,
-                vectors.subList(from, from + own.size),
-                own.map(Vectors::hash),
-            )
-            from += own.size
-        }
-    }
-
     companion object {
-        /** Parts per encoder call: a chapter is tens of windows already. */
-        private const val BATCH = 8
-
-        /** Paragraphs per encoder call: a chapter is hundreds of them. */
-        private const val PARAGRAPHS = 256
-
         /**
          * The works whose parts a turn encodes: a work is tens of chapters, and a turn of a thousand would hold the
          * queue for hours — minutes, not days (user, 2026-11-17).
@@ -276,11 +210,7 @@ private const val WINDOWS_SINCE = "windows"
 
 /**
  * What the index of the list tells of since when the chapters were encoded by the [encoder], when last told: its
- * windows, its paragraphs and the projection of its pieces — a new one of any of them makes every chapter again.
+ * windows, its paragraphs, the projection of its pieces and the centre of its full-text vectors — a new one of any of
+ * them makes every chapter again.
  */
-private fun windowsBy(encoder: Encoding) =
-    "windowsBy:${encoder.encoder.windowsId}|${Paragraphs.keyOf(encoder.encoder.id)}" +
-        (encoder.pieces?.let { "|pieces:${it.projection.key}" } ?: "")
-
-/** The encoder of the texts, and what the pieces of the type are made with — none of no projection of them. */
-private class Encoding(val encoder: TextEncoder, val pieces: FittedPieces?)
+private fun windowsBy(encoder: Encoding) = "windowsBy:${encoder.key}"

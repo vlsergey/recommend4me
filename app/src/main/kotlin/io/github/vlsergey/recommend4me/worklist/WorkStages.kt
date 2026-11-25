@@ -97,12 +97,8 @@ enum class WorkStage(
         null,
         "predicted",
     ),
-    TEXTS(
-        listOf(WorkDatum.DATA, WorkDatum.ANSWERS, WorkDatum.CHAPTERS, WorkDatum.VECTORS, WorkDatum.WINDOWS),
-        listOf(VECTORS, WINDOWS),
-        null,
-        "texts",
-    );
+    // The documents of the search by words: what is searched by meaning, the windows' full-text vectors, is not in them
+    TEXTS(listOf(WorkDatum.DATA, WorkDatum.ANSWERS, WorkDatum.CHAPTERS), emptyList(), null, "texts");
 
     /** The column of the row of an item of the sweep of the stage that last did it, milliseconds; none of never. */
     val column: Field<Long?> = ITEM.columnOf("${name.lowercase()}_done")

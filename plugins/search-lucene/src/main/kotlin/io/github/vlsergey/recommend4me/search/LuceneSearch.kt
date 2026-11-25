@@ -37,34 +37,29 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
     ): Int = indexes.of(contentType).update(fingerprints, documents, removed)
 
     /**
-     * What [matches] needs of a search: the line's words, the language it is read as, its vector and the passage of
-     * every item nearest by meaning.
+     * What [matches] needs of a search: the line's words, the language it is read as and the passage of every item
+     * nearest by meaning.
      */
-    private class State(
-        val terms: List<String>,
-        val language: String,
-        val vector: FloatArray?,
-        val nearest: Map<ItemKey, SearchPassage>,
-    )
+    private class State(val terms: List<String>, val language: String, val nearest: Map<ItemKey, SearchPassage>)
 
     override fun search(contentType: String, line: String, language: String, context: SearchContext): SearchResult {
         val q = line.trim().lowercase()
         // The interface's language, unless the line is written in letters of another ([LineLanguages])
         val read = LineLanguages.of(q, language)
-        if (q.isEmpty()) return SearchResult(q, emptyList(), State(emptyList(), read, null, emptyMap()))
+        if (q.isEmpty()) return SearchResult(q, emptyList(), State(emptyList(), read, emptyMap()))
         val started = System.currentTimeMillis()
         val index = indexes.of(contentType)
         val scores = HashMap<ItemKey, Double>()
         val features = HashMap<ItemKey, HashMap<String, Double>>()
 
-        val vector = context.queryVector(q)
+        // The application's, of its windows' full-text vectors read whole: the line's vector against every window's
+        val nearest = context.nearest(q)
         // The function words of English and of the line's language
         val stops =
             CharArraySet(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET, true).apply { addAll(Stemmers.stopWords(read)) }
         val terms = q.split(Regex("[^\\p{L}\\p{N}']+")).filter { it.length >= 2 && !stops.contains(it) }.distinct()
-        val nearest = index.search { searcher ->
+        index.search { searcher ->
             val fields = index.fields(searcher).searched()
-            val nearest = vector?.takeIf { fields.vectors }?.let { MeaningSearch.nearest(searcher, it) }.orEmpty()
             val semantic = MeaningSearch.closeness(nearest, index.items(searcher))
             semantic.forEach { (key, closeness) ->
                 if (closeness >= SEMANTIC_FLOOR) scores[key] = SEMANTIC_WEIGHT * closeness
@@ -76,7 +71,6 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
                     (scores[key] ?: (SEMANTIC_WEIGHT * (semantic[key] ?: 0.0))) + WORD_WEIGHT * parts.values.sum()
                 features.getOrPut(key) { HashMap() } += parts
             }
-            nearest
         }
         val ranked = scores.entries.sortedByDescending { it.value }.take(MAX_RESULTS).map { it.key }
         log.info("'{}' in {}: {} items in {} ms", line, contentType, ranked.size, System.currentTimeMillis() - started)
@@ -86,7 +80,7 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         return SearchResult(
             q,
             ranked,
-            State(terms, read, vector, passages),
+            State(terms, read, passages),
             passages,
             prints,
             ranked.associateWith { features[it].orEmpty() },
