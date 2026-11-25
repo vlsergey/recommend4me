@@ -27,8 +27,7 @@ class KeptParagraph(val vector: FloatArray, val hash: String)
  * - its text in [TEXT], compressed by zstd with a dictionary trained on the texts themselves, the same words of every
  *   chapter compressed once;
  * - the vectors of its windows in [WINDOWS] and of its paragraphs with the hashes of their texts in [PARAGRAPHS], half
- *   precision, as they are: numbers do not compress. Kept apart from their keys, in files shared by thousands of
- *   parts.
+ *   precision, as they are: numbers do not compress. Kept apart from their keys, in files shared by thousands of parts.
  *
  * What a part has — whether its text is kept, its windows encoded and by what — the database says ([PartRepository]);
  * this holds the bytes. A value written goes to the store's log first: a stop between keeps it, or loses it whole.
