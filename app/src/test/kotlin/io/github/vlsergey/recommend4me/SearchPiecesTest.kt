@@ -35,9 +35,13 @@ class SearchPiecesTest : SiteTestBase() {
 
     private val ids = (1..5).map { "spc$it" }
 
+    /**
+     * The words of the chapters, every one of five letters of two bytes, as every other class's chapters are: the words
+     * to a character the type's model of sizes learns of them stay what the others learn.
+     */
     private val filler =
-        ("road day walk sea wind ship sail rope deck mast bread salt rain hill town gate wall door bell stone " +
-                "river field cart horse inn fire smoke cloud star moon")
+        ("время ветер берег огонь камни дождь лодка город птица трава волна ночью песок месяц тучей полем рекой " +
+                "домой хлеба сосна")
             .split(" ")
 
     /** A chapter of 210 words drawn of the [filler], the [words] put at the places they are given. */
@@ -61,8 +65,8 @@ class SearchPiecesTest : SiteTestBase() {
                 (1..12).map { n ->
                     val words =
                         when {
-                            id == "spc1" && n == 3 -> mapOf(100 to "lantern", 101 to "reef", 102 to "harbour")
-                            id == "spc2" && n == 3 -> mapOf(20 to "lantern", 120 to "reef", 200 to "harbour")
+                            id == "spc1" && n == 3 -> mapOf(100 to "маяки", 101 to "рифов", 102 to "бухта")
+                            id == "spc2" && n == 3 -> mapOf(20 to "маяки", 120 to "рифов", 200 to "бухта")
                             else -> emptyMap()
                         }
                     PartData("c$n", n, "Chapter $n", chapter(k * 100 + n, words), null)
@@ -86,7 +90,7 @@ class SearchPiecesTest : SiteTestBase() {
         val codes = store.parts.pieces.of("spc1", listOf("c3"))["c3"]
         assertEquals(210 * fitted.codebook.bytes, codes?.size, "a code of every word")
 
-        val found = search.search("books", "lantern reef harbour", "en", rerank = false, learnt = false)!!
+        val found = search.search("books", "маяки рифов бухта", "ru", rerank = false, learnt = false)!!
         val together = ItemKey(site, "spc1")
         val apart = ItemKey(site, "spc2")
         fun piecesOf(key: ItemKey) = found.features[key]?.get(SearchPieces.PIECES) ?: 0.0
