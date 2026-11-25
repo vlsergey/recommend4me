@@ -202,7 +202,10 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         /** The pieces of the text a window holds besides its two special ones. */
         private const val SCENE_ROOM = SCENE - 2
 
-        /** How far a window begins after the one before: half of it, so each overlaps the next by half. */
+        /**
+         * How far a window begins after the one before: half of it, so each overlaps the next by half — every piece
+         * encoded twice, kept so till there are good ways of finding a meaning in a text (owner, 2026-11-25).
+         */
         private const val SCENE_STEP = SCENE_ROOM / 2
 
         /** The pages of one text's vector at most: the 8192 pieces bge-m3 reads of one text. */
