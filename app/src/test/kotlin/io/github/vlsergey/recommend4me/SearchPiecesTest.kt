@@ -2,12 +2,14 @@ package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.fulltext.FullTextCentres
+import io.github.vlsergey.recommend4me.fulltext.FullTextNearest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.part.Paragraphs
 import io.github.vlsergey.recommend4me.piece.PieceProjections
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.search.Search
 import io.github.vlsergey.recommend4me.search.SearchPieces
+import io.github.vlsergey.recommend4me.search.WindowTexts
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.inBackground
@@ -41,6 +43,10 @@ class SearchPiecesTest : SiteTestBase() {
     @Autowired lateinit var centres: FullTextCentres
 
     @Autowired lateinit var plugins: Plugins
+
+    @Autowired lateinit var meaning: FullTextNearest
+
+    @Autowired lateinit var windowTexts: WindowTexts
 
     private val ids = (1..5).map { "spc$it" }
 
@@ -109,6 +115,12 @@ class SearchPiecesTest : SiteTestBase() {
         val place = assertNotNull(found.places[together])
         assertEquals("part:c3", place.field)
         assertEquals(listOf(100, 101, 102), place.marked)
+
+        // The windows nearest read as the reranker reads them: of the chapter's own text, by their characters
+        val near = meaning.nearest(stores.type(TYPE)!!, textVectors.query("маяки рифов бухта")!!)
+        val window = near.windows.first { it.key == together }
+        val text = assertNotNull(windowTexts.of(listOf(window))[window])
+        assertTrue("маяки рифов бухта" in text, text)
 
         // A search reading twice the windows the centre was learnt with: one learnt anew of what the type has now
         val type = stores.type(TYPE)!!

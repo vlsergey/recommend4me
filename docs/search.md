@@ -63,10 +63,20 @@ centre they were made by kept with the part (`part.full_text`) and with the text
 4. **The pieces** (below, `SearchPieces`): of the items found by meaning, the first `SearchPieces.READ` (300) by the
    order so far, the line's pieces against the pieces of the text of the passage nearest — the best span of it, its
    score the item's feature `pieces`, the span its place (`SearchResult.places`).
-5. **The order** (`SearchWeights`): a weighed sum of the features — the meaning, the words, the line in the name, the
-   pieces, the reranker's score (`SearchReranking`, the reranker reading the title and the passage nearest) — the
-   weights learnt of the user's judgments, none below half its share; the first of every way of finding at the top.
-6. **What is shown** (`Search.matches`): where the words stand together; else the best span of the pieces, from the
+5. **The reranker** (`SearchReranking`): bge-reranker-v2-m3 reads every work found together with the line — a work
+   with windows among the first `SearchReranking.WINDOWS` (1 000) of the 8 000 nearest by meaning by those windows,
+   each apart, the work's score the best of them (their texts of the store of the parts and the corrected texts,
+   `WindowTexts`, no document made); any other work by its document, its title and passage nearest first. About
+   2.7 ms a window on the card; what was read for a line is kept by its texts' hash (`SearchScoreRepository`), the
+   line searched again reading nothing anew. Measured on 85 retellings among the 7.5 million windows of 48 966 works
+   (2026-11-25): the work of the scene first 4 times by the windows' vectors and 26 by the first 1 000 windows read so;
+   among the first ten 14 and 38 (300 windows: 33; 2 000: 40; 5 000: 43); a fusion of the two orders by their ranks
+   is worse than the reranker's alone. Qwen3-Embedding-0.6B in place of bge-m3, measured alike on 791 134 windows,
+   put the work among the first ten 28 times against bge-m3's 40.
+6. **The order** (`SearchWeights`): a weighed sum of the features — the meaning, the words, the line in the name, the
+   pieces, the reranker's score — the weights learnt of the user's judgments, none below half its share; the first of
+   every way of finding at the top; of none learnt, the reranker's order.
+7. **What is shown** (`Search.matches`): where the words stand together; else the best span of the pieces, from the
    beginning of the word of its first piece to the end of the word of its last, the words of the pieces that matched
    the line's best marked (`PlaceShown`); else the passage nearest by meaning, whole.
 

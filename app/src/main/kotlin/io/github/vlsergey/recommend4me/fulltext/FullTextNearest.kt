@@ -17,17 +17,18 @@ private val log = LoggerFactory.getLogger(FullTextNearest::class.java)
  * by meaning of a type ([FullTextVectors]) read whole, one source after another in the order of its store — no graph
  * and no index of them: one pass over the files of the store, what the disk of the data reads well; the vectors of the
  * windows in a graph of Lucene's were minutes of random reads a search (2026-11-25). The [PASSAGES] windows of the best
- * scores, an item by its best.
+ * scores, the nearest first, and every item by its best.
  */
 @Component
 class FullTextNearest(private val centres: FullTextCentres) {
 
-    /** The items of the [type] nearest to the line's vector [q], their windows nearest; none of no centre learnt. */
-    fun nearest(type: TypeStore, q: FloatArray): Map<ItemKey, SearchNearest> {
-        val centre = centres.of(type)?.takeIf { it.centre.size == q.size } ?: return emptyMap()
+    /** The windows of the [type] nearest to the line's vector [q], and its items by them; none of no centre learnt. */
+    fun nearest(type: TypeStore, q: FloatArray): FullTextFound {
+        val centre =
+            centres.of(type)?.takeIf { it.centre.size == q.size } ?: return FullTextFound(emptyMap(), emptyList())
         val started = System.currentTimeMillis()
         val query = FullTextVectors.query(q, centre)
-        val best = PriorityQueue<Found>(compareBy { it.score })
+        val best = PriorityQueue<NearWindow>(compareBy { it.score })
         var windows = 0L
         type.sources.forEach { s ->
             s.parts.fullText.forEach { item, text, packed ->
@@ -36,19 +37,16 @@ class FullTextNearest(private val centres: FullTextCentres) {
                     val score = query.score(packed, at)
                     if (best.size < PASSAGES || score > best.peek().score) {
                         if (best.size == PASSAGES) best.poll()
-                        best += Found(ItemKey(s.id, item), text, from, to, score)
+                        best += NearWindow(ItemKey(s.id, item), text, from, to, score)
                     }
                 }
             }
         }
         // Of a type grown to twice what its centre was learnt with, one learnt anew
         centres.read(type, windows)
+        val nearest = best.sortedByDescending { it.score }
         val out = LinkedHashMap<ItemKey, SearchNearest>()
-        best
-            .sortedByDescending { it.score }
-            .forEach { f ->
-                out.putIfAbsent(f.key, SearchNearest(f.score.toDouble(), SearchPassage(fieldOf(f.text), f.from, f.to)))
-            }
+        nearest.forEach { w -> out.putIfAbsent(w.key, SearchNearest(w.score.toDouble(), w.passage)) }
         log.info(
             "{}: {} windows read by their full-text vectors, {} items nearest, in {} ms",
             type.id,
@@ -56,11 +54,8 @@ class FullTextNearest(private val centres: FullTextCentres) {
             out.size,
             System.currentTimeMillis() - started,
         )
-        return out
+        return FullTextFound(out, nearest)
     }
-
-    /** A window found: its item, its text, its characters, its score. */
-    private class Found(val key: ItemKey, val text: String, val from: Int, val to: Int, val score: Float)
 
     companion object {
         /**
@@ -74,4 +69,17 @@ class FullTextNearest(private val centres: FullTextCentres) {
             if (text.startsWith(PieceRepository.textKey(""))) text.removePrefix(PieceRepository.textKey(""))
             else SearchDocuments.PART + text
     }
+}
+
+/** What a line found by the full-text vectors: the items by their nearest windows, the windows the nearest first. */
+class FullTextFound(val items: Map<ItemKey, SearchNearest>, val windows: List<NearWindow>)
+
+/**
+ * A window found near a line: its item, the text of the store it is of ([text]: a chapter by its part, a text by
+ * [PieceRepository.textKey]), its characters in that text, its score.
+ */
+class NearWindow(val key: ItemKey, val text: String, val from: Int, val to: Int, val score: Float) {
+    /** The window as a passage of the item's document. */
+    val passage
+        get() = SearchPassage(FullTextNearest.fieldOf(text), from, to)
 }

@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.fulltext.FullTextNearest
+import io.github.vlsergey.recommend4me.fulltext.NearWindow
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.piece.PieceProjections
@@ -36,21 +37,30 @@ class Search(
 
     /**
      * What the plugin is given to search the [type] with: the items nearest by meaning to the line's vector moved by
-     * the correction [shift] learnt, if any, by the full-text vectors of the windows ([FullTextNearest]).
+     * the correction [shift] learnt, if any, by the full-text vectors of the windows ([FullTextNearest]); the windows
+     * it found kept for the reranker of this search ([windows]).
      */
-    private fun context(type: TypeStore, shift: QueryShift? = null) =
-        object : SearchContext {
-            override fun nearest(line: String): Map<ItemKey, SearchNearest> =
-                textVectors.query(line)?.let { meaning.nearest(type, shift?.of(it) ?: it) }.orEmpty()
+    private inner class Context(private val type: TypeStore, private val shift: QueryShift? = null) : SearchContext {
+        /** The windows nearest to the line the plugin asked for, the nearest first. */
+        var windows: List<NearWindow> = emptyList()
+            private set
 
-            override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
-                keys
-                    .groupBy { it.source }
-                    .flatMap { (source, list) ->
-                        stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
-                    }
-                    .associate { it.key to it.value }
-        }
+        override fun nearest(line: String): Map<ItemKey, SearchNearest> =
+            textVectors
+                .query(line)
+                ?.let { meaning.nearest(type, shift?.of(it) ?: it) }
+                ?.also { windows = it.windows }
+                ?.items
+                .orEmpty()
+
+        override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
+            keys
+                .groupBy { it.source }
+                .flatMap { (source, list) ->
+                    stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
+                }
+                .associate { it.key to it.value }
+    }
 
     /**
      * The works matching [line], read as the [language] (ISO 639-1), most relevant first; null without a search plugin.
@@ -73,8 +83,9 @@ class Search(
         if (provider == null || type == null) return null
         val own = if (learnt) with ?: kept(type) else null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
-        val found = pieces.read(type, provider.search(typeId, line, language, context(type, own?.shift)))
-        val read = if (rerank) reranking.reranked(type, found) else found
+        val context = Context(type, own?.shift)
+        val found = pieces.read(type, provider.search(typeId, line, language, context))
+        val read = if (rerank) reranking.reranked(type, found, context.windows) else found
         return own?.weights?.ordered(read) ?: read
     }
 
@@ -94,7 +105,7 @@ class Search(
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return emptyMap()
-        val context = context(type)
+        val context = Context(type)
         val found = provider.matches(typeId, result, keys, context)
         // Of a work whose words stand together, they are shown; else its place by the pieces, when it has one
         val placed = keys.filter { it in result.places && found[it]?.byMeaning != false }
