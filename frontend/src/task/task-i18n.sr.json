@@ -111,6 +111,7 @@
   "What.fitFandomLikeness": "Sličnost naziva fandoma po vašim odgovorima o univerzumima",
   "What.fitFieldModels": "Obučavanje modela polja",
   "What.fitGradeModels": "Obučavanje modela ocene i interesovanja",
+  "What.fitPieceProjection": "Učenje projekcije vektora tokena tekstova",
   "What.fitHeldOutModel": "Model bez ocene dela",
   "What.fitSearchWeights": "Težine pretrage po vašim ocenama",
   "What.fitSetDirections": "Pravci skupova",

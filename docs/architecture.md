@@ -15,7 +15,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `libs/onnx` | ONNX Runtime sessions on the CPU or CUDA, shared by the encoder plugins. |
 | `app` | The application: storage, background work, training, the HTTP API, the web interface, the plugin loader. |
 | `frontend` | The web interface (React), built into the application's static resources. |
-| `plugins/encoder-bge-m3` | Text encoder: bge-m3, the one used when its files are there. |
+| `plugins/encoder-bge-m3` | Text encoder: bge-m3, the one used when its files are there; with the file of its ColBERT head, the vector of every piece of a text too (`BgeM3Pieces`, docs/search.md). |
 | `plugins/encoder-e5` | Text encoder: multilingual-e5-small, without bge-m3's files. |
 | `plugins/encoder-siglip2` | Picture encoder: SigLIP2 NaFlex. |
 | `plugins/reranker-bge` | Reranker: bge-reranker-v2-m3 reads two texts together: the line searched and every work found. The works found are put in the order of a weighed sum of what they were found by — the plugin's features (`SearchResult.features`) and the reranker's score — the weights learnt in the background from the user's "fits / doesn't fit" (`SearchLearning`, `SearchWeights`); the reranker's order till a line has both. Learnt of them too, the closeness of the line and a passage by meaning: q·p + (q·a)(b·p), the line's vector moved before it is searched (`QueryShift`). |
@@ -24,7 +24,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/scorer-fm` | Pairwise factorization machine: the line and every two features meeting through vectors of rank 8; C chosen by cross-validation. |
 | `plugins/scorer-kernel` | Pairwise kernel ranking with the arc-cosine kernel (no width to choose); C chosen by cross-validation. |
 | `plugins/scorer-boosting` | Gradient boosted trees on the pairwise logistic loss, Newton leaves; the number of trees chosen by cross-validation. |
-| `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type. |
+| `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type; the texts of the works found read again by the pieces of their texts (`SearchPieces`), how a search goes in docs/search.md. |
 | `plugins/catalogue-wikidata` | The universes of fan fiction and their characters, from Wikidata. |
 | `plugins/pair-logistic` | The works of different sites that may be one work, or one series of works: a logistic model of how alike their layers are, one a kind, fitted on the user's answers on pairs; and the search of the pairs by both at once, on the card when there is one. |
 | `plugins/cast-reading` | The ways the sites' lines of characters and pairings — split by each site's habit into names and pairings, a half structure with no guarantee — are given to the models of the characters and the pairings: the line whole as one vector (as from the first), every name a vector and the mean of them, every name and pairing a feature, the names found in the dictionary of the universes as the site's word on its characters, or all at once; one chosen for each such facet on the page of the models. |
@@ -119,8 +119,10 @@ preferences.mv.db                  the user's preferences, every content type's:
 sources/<source>/source.mv.db      what the site says: works, facets, numbers, texts, pictures,
                                    reviews, text parts, captured pages — and their vectors, a
                                    compressed form of the same scrape
-sources/<source>/parts/            the texts of the parts and the vectors of their windows and
-                                   paragraphs, outside the database (RocksDB, the texts compressed
+sources/<source>/parts/            the texts of the parts, the vectors of their windows and
+                                   paragraphs, the codes of the pieces of their texts and of the
+                                   items' text fields (docs/search.md), outside the database
+                                   (RocksDB, the texts compressed
                                    by zstd with a dictionary of their own, the vectors in blob
                                    files shared by thousands of parts, apart from their keys):
                                    tens of gigabytes of chapters, which an H2 file holds badly

@@ -1,6 +1,9 @@
 package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.contenttype.Books
+import io.github.vlsergey.recommend4me.encoder.EncodedPieces
+import io.github.vlsergey.recommend4me.encoder.PieceEncoder
+import io.github.vlsergey.recommend4me.encoder.PieceProjection
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.source.CapturedPage
@@ -391,5 +394,43 @@ class SitePlugins {
 
         override fun windowSpans(text: String): List<IntRange> =
             if (text.isBlank()) emptyList() else listOf(text.indices)
+
+        override val pieces: PieceEncoder = WordPieces(this)
+    }
+
+    /**
+     * The pieces of the tests: every word of a text a piece, its vector one of numbers drawn at random by the word — of
+     * a word the same wherever it stands, of two words far apart — projected as asked, of unit length.
+     */
+    class WordPieces(private val words: WordsEncoder) : PieceEncoder {
+        override val id = "words/pieces"
+        override val width = 64
+
+        override fun ready() = true
+
+        private val word = Regex("\\p{L}+")
+
+        private fun vectorOf(w: String, projection: PieceProjection?): FloatArray {
+            val draw = java.util.Random(w.lowercase().hashCode().toLong())
+            val v = FloatArray(width) { draw.nextGaussian().toFloat() }
+            val p =
+                projection?.rows?.let { rows ->
+                    FloatArray(rows.size) { k -> rows[k].indices.sumOf { rows[k][it].toDouble() * v[it] }.toFloat() }
+                } ?: v
+            val n = sqrt(p.sumOf { it.toDouble() * it }).toFloat()
+            return if (n > 0) FloatArray(p.size) { p[it] / n } else p
+        }
+
+        override fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> = texts.map { t ->
+            EncodedPieces(
+                words.encodeWindows(listOf(t)).first(),
+                word.findAll(t).map { vectorOf(it.value, projection) }.toList(),
+            )
+        }
+
+        override fun query(line: String, projection: PieceProjection?): List<FloatArray> =
+            word.findAll(line).map { vectorOf(it.value, projection) }.toList()
+
+        override fun pieceSpans(text: String): List<IntRange?> = word.findAll(text).map { it.range }.toList()
     }
 }

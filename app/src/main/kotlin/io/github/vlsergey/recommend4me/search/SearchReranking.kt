@@ -73,7 +73,7 @@ class SearchReranking(
             found.keys.associateWith { key ->
                 found.features[key].orEmpty() + scores[key]?.let { mapOf(RERANKER to it.score.toDouble()) }.orEmpty()
             }
-        return SearchResult(found.line, order, found.state, found.nearest, found.prints, features)
+        return SearchResult(found.line, order, found.state, found.nearest, found.prints, features, found.places)
     }
 
     /**

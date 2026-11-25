@@ -5078,6 +5078,7 @@ components:
           - fitFandomLikeness
           - fitFieldModels
           - fitGradeModels
+          - fitPieceProjection
           - fitHeldOutModel
           - fitSearchWeights
           - fitSetDirections

@@ -38,6 +38,7 @@ flowchart LR
     e_FandomRelationChangeEvent["FandomRelationChangeEvent"]
     e_FandomVectorChangeEvent["FandomVectorChangeEvent"]
     e_FieldModelFitEvent["FieldModelFitEvent"]
+    e_PieceProjectionFitEvent["PieceProjectionFitEvent"]
     e_RatedWorkValueFillEvent["RatedWorkValueFillEvent"]
     e_SearchJudgmentEvent["SearchJudgmentEvent"]
     e_SiteFandomBindingChangeEvent["SiteFandomBindingChangeEvent"]
@@ -91,6 +92,7 @@ flowchart LR
     w_fitFieldModels{{"fitFieldModels"}}
     w_fitGradeModels{{"fitGradeModels"}}
     w_fitHeldOutModel{{"fitHeldOutModel"}}
+    w_fitPieceProjection{{"fitPieceProjection"}}
     w_fitSearchWeights{{"fitSearchWeights"}}
     w_fitSetDirections{{"fitSetDirections"}}
     w_fitTagTextModel{{"fitTagTextModel"}}
@@ -158,6 +160,7 @@ flowchart LR
     o_start --> w_encodeSiteItemChapters
     o_start --> w_encodeSiteItemTexts
     o_start --> w_fitGradeModels
+    o_start --> w_fitPieceProjection
     o_start --> w_fitTagTextModel
     o_start --> w_indexWorkTexts
     o_start --> w_makeSiteItemSetVectors
@@ -168,6 +171,8 @@ flowchart LR
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
     e_FieldModelFitEvent --> w_fillWorkFields
+    e_PieceProjectionFitEvent --> w_encodeSiteItemChapters
+    e_PieceProjectionFitEvent --> w_encodeSiteItemTexts
     e_RatedWorkValueFillEvent --> w_fitGradeModels
     e_SearchJudgmentEvent --> w_fitSearchWeights
     e_SiteFandomBindingChangeEvent --> e_FandomRelationChangeEvent
@@ -234,6 +239,7 @@ flowchart LR
     e_WorkDocumentWriteEvent --> w_encodeSiteItemChapters
     e_WorkDocumentWriteEvent --> w_encodeSiteItemTexts
     e_WorkDocumentWriteEvent --> w_fillWorkFields
+    e_WorkDocumentWriteEvent --> w_fitPieceProjection
     e_WorkDocumentWriteEvent --> w_indexWorkTexts
     e_WorkDocumentWriteEvent --> w_makeSiteItemSetVectors
     e_WorkDocumentWriteEvent --> w_predictWorks
@@ -270,6 +276,7 @@ flowchart LR
     w_fillWorkFields --> e_WorkFieldFillEvent
     w_fitFieldModels --> e_FieldModelFitEvent
     w_fitGradeModels --> w_predictWorks
+    w_fitPieceProjection --> e_PieceProjectionFitEvent
     w_keepOutWorks --> e_SiteItemRemoveEvent
     w_makeSiteItemSetVectors --> e_SiteItemSetVectorChangeEvent
     w_makeSiteItemSetVectors --> e_WorkSetVectorFillEvent

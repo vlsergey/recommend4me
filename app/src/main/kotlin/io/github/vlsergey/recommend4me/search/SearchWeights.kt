@@ -52,6 +52,7 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
             found.nearest,
             found.prints,
             found.features,
+            found.places,
         )
     }
 

@@ -97,6 +97,13 @@ curl -L -o "data/models/bge-m3-fp16.onnx" https://huggingface.co/Xenova/bge-m3/r
 curl -L -o "data/models/bge-m3-tokenizer.json" https://huggingface.co/Xenova/bge-m3/resolve/main/tokenizer.json
 ```
 
+Its ColBERT head (2 MB): the vector of every piece of a text, what the search finds the place of a line in a text by
+(docs/search.md):
+
+```bash
+curl -L -o "data/models/bge-m3-colbert-linear.pt" https://huggingface.co/BAAI/bge-m3/resolve/main/colbert_linear.pt
+```
+
 Without it, multilingual-e5-small (small and fast, weaker by far):
 
 ```bash

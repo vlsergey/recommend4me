@@ -111,6 +111,7 @@
   "What.fitFandomLikeness": "Похожесть названий фандомов по вашим ответам о вселенных",
   "What.fitFieldModels": "Обучение моделей полей",
   "What.fitGradeModels": "Обучение моделей оценки и интереса",
+  "What.fitPieceProjection": "Обучение проекции векторов токенов текстов",
   "What.fitHeldOutModel": "Модель без оценки работы",
   "What.fitSearchWeights": "Веса поиска по вашим оценкам найденного",
   "What.fitSetDirections": "Направления наборов",

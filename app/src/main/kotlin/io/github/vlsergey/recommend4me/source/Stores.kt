@@ -34,6 +34,7 @@ import io.github.vlsergey.recommend4me.model.ScoreSweepRepository
 import io.github.vlsergey.recommend4me.part.PartRepository
 import io.github.vlsergey.recommend4me.picture.PictureFiles
 import io.github.vlsergey.recommend4me.picture.PictureRepository
+import io.github.vlsergey.recommend4me.piece.PieceProjectionRepository
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.rating.RatingRepository
@@ -352,6 +353,9 @@ class TypeStore(
 
     /** The changes of no word of the user's counted beside the models of the grades and of the fields. */
     val autoChanges = ModelAutoChanges(databases.model(type.id))
+
+    /** The projection of the pieces' vectors learnt of the type's own chapters. */
+    val pieceProjections = PieceProjectionRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))

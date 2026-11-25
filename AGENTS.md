@@ -139,8 +139,8 @@ user's machine. A request writes what it was told, plans the work that follows (
 answers with what there is — what the works made and kept, with a mark that more is coming (202,
 `pending`), the interface asking again till it is there. A test standing for the background runs it
 in `inBackground` (the thread of a Spring test is bound to a request). The computations of a
-request are two: the vector of the line searched for (`TextVectors.query`): the search is the answer, one
-short line through the encoder; and the work the user opens, made on the spot, no model touched —
+request are two: the vector of the line searched for (`TextVectors.query`) and its pieces' vectors
+(`SearchPieces`, docs/search.md): the search is the answer, one short line through the encoder; and the work the user opens, made on the spot, no model touched —
 its texts' vectors where there are none (`TextVectors.encodeOwn`), its chances, its expectation
 (`Scoring.scoreItem`) — the user marks it at once (owner, 2026-11-19: "when we open the page, I want
 to begin marking"), on its screen and on the site's page alike.

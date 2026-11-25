@@ -41,6 +41,55 @@ interface TextEncoder {
      * do: the piece of the text a window's vector is of, read by a reranker, shown as what was found.
      */
     fun windowSpans(text: String): List<IntRange>
+
+    /** The vectors of every piece of a text ([PieceEncoder]); none of an encoder that makes none. */
+    val pieces: PieceEncoder?
+        get() = null
+}
+
+/**
+ * A PROJECTION OF THE PIECES' VECTORS, learnt by the application of its own texts: its rows the directions — of the
+ * width of the head's vectors ([PieceEncoder.width]) — a piece's vector is read along; [key] names it, kept with the
+ * vectors it made.
+ */
+class PieceProjection(val key: String, val rows: List<FloatArray>)
+
+/**
+ * A text encoded with its pieces: the vector of every window, as [TextEncoder.encodeWindows] gives them, and of every
+ * piece.
+ */
+class EncodedPieces(val windows: List<FloatArray>, val pieces: List<FloatArray>)
+
+/**
+ * THE VECTOR OF EVERY PIECE (TOKEN) OF A TEXT, of the context of the window it is read in — so a meaning is found where
+ * it is said, a line's pieces each matched with the best piece of a span of the text (owner, 2026-11-25) — made by the
+ * same run of the encoder as the windows' vectors.
+ */
+interface PieceEncoder {
+    /** What the pieces are made by — the encoder, its head, how it cuts a text into windows; kept with them. */
+    val id: String
+
+    /** The numbers of a piece's vector as the head makes it, before a projection. */
+    val width: Int
+
+    /** Whether its files are in place. */
+    fun ready(): Boolean
+
+    /**
+     * Of every text, the vector of every window and of every piece in order — a piece read in the window where it
+     * stands farthest from an edge, of its text on both sides —, the head's vector projected by the [projection]'s rows
+     * (as it is, of none), of unit length; a blank text has none.
+     */
+    fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces>
+
+    /** The vector of every piece of a line searched for, projected and of unit length as [encode] makes them. */
+    fun query(line: String, projection: PieceProjection?): List<FloatArray>
+
+    /**
+     * Where every piece [encode] makes of the text lies in it, in characters; null of a piece of no characters of its
+     * own.
+     */
+    fun pieceSpans(text: String): List<IntRange?>
 }
 
 /**

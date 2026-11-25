@@ -111,6 +111,7 @@
   "What.fitFandomLikeness": "The likeness of the fandoms' names by your word on the universes",
   "What.fitFieldModels": "The fields' models fitted",
   "What.fitGradeModels": "Models of grade and interest trained",
+  "What.fitPieceProjection": "Projection of the pieces of the texts learnt",
   "What.fitHeldOutModel": "The model that has not seen a graded work",
   "What.fitSearchWeights": "The search's weights by your judgments",
   "What.fitSetDirections": "Directions of sets",

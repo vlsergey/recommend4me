@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.piece.PieceProjections
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.search.SearchDocuments.Companion.FACET
 import io.github.vlsergey.recommend4me.search.SearchDocuments.Companion.PART
@@ -27,6 +28,8 @@ class Search(
     private val textVectors: TextVectors,
     private val documents: SearchDocuments,
     private val reranking: SearchReranking,
+    private val pieces: SearchPieces,
+    private val projections: PieceProjections,
 ) {
 
     /** What the plugin is given to search with: the line's vector moved by the correction [shift] learnt, if any. */
@@ -48,10 +51,11 @@ class Search(
 
     /**
      * The works matching [line], read as the [language] (ISO 639-1), most relevant first; null without a search plugin.
-     * Found by the plugin — by meaning and by words — and then, with a reranker ([rerank]), every one of them read
-     * together with the line ([SearchReranking]). With what was learnt of the user's judgments ([learnt]) — [with],
-     * else what is kept ([kept]) — searched by meaning with the closeness corrected ([QueryShift]) and put in the order
-     * learnt ([SearchWeights]); of none learnt, in the order of what the reranker said.
+     * Found by the plugin — by meaning and by words —, the texts of the first of them read by their pieces
+     * ([SearchPieces]), and then, with a reranker ([rerank]), every one of them read together with the line
+     * ([SearchReranking]). With what was learnt of the user's judgments ([learnt]) — [with], else what is kept ([kept])
+     * — searched by meaning with the closeness corrected ([QueryShift]) and put in the order learnt ([SearchWeights]);
+     * of none learnt, in the order of what the reranker said.
      */
     fun search(
         typeId: String,
@@ -66,7 +70,7 @@ class Search(
         if (provider == null || type == null) return null
         val own = if (learnt) with ?: kept(type) else null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
-        val found = provider.search(typeId, line, language, context(own?.shift))
+        val found = pieces.read(type, provider.search(typeId, line, language, context(own?.shift)))
         val read = if (rerank) reranking.reranked(type, found) else found
         return own?.weights?.ordered(read) ?: read
     }
@@ -78,10 +82,38 @@ class Search(
             type.searchWeights.read()?.first,
         )
 
+    /**
+     * What is shown of every work of [keys] found by [result]: where its words stand together, as the plugin finds it;
+     * else the place of the line its pieces found ([SearchResult.places]), the pieces that matched the line's best
+     * marked; else what the plugin shows — the passage nearest by meaning, whole.
+     */
     fun matches(typeId: String, result: SearchResult, keys: Collection<ItemKey>): Map<ItemKey, SearchMatch> {
         val provider = plugins.search
         val type = stores.type(typeId)
-        return if (provider == null || type == null) emptyMap() else provider.matches(typeId, result, keys, context())
+        if (provider == null || type == null) return emptyMap()
+        val context = context()
+        val found = provider.matches(typeId, result, keys, context)
+        // Of a work whose words stand together, they are shown; else its place by the pieces, when it has one
+        val placed = keys.filter { it in result.places && found[it]?.byMeaning != false }
+        return found + placesShown(result, placed, context)
+    }
+
+    /** What is shown of the works [placed] of the places of the line their pieces found in their texts. */
+    private fun placesShown(
+        result: SearchResult,
+        placed: List<ItemKey>,
+        context: SearchContext,
+    ): Map<ItemKey, SearchMatch> {
+        val encoder = projections.encoder()
+        if (placed.isEmpty() || encoder == null) return emptyMap()
+        val docs = context.documents(placed)
+        return placed
+            .mapNotNull { key ->
+                val place = result.places.getValue(key)
+                val text = docs[key]?.fields?.firstOrNull { it.key == place.field }?.text
+                text?.let { PlaceShown.of(place, it, encoder.pieceSpans(it)) }?.let { key to it }
+            }
+            .toMap()
     }
 
     /**

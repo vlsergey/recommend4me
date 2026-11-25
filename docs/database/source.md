@@ -14,7 +14,7 @@
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |
 | `item_text` | a work's text by role: the description, the notes… |
-| `text_vector` | the vector of a text, with the hash of the text and the encoder; how many windows it has, and what they were made by (`windows_by`: the encoder and its way of cutting a text) |
+| `text_vector` | the vector of a text, with the hash of the text and the encoder; how many windows it has, and what they were made by (`windows_by`: the encoder and its way of cutting a text); the key of the projection its pieces' codes were made by (`pieces`), the codes in the store of the parts under `text:<key>` |
 | `text_window` | the vector of every window of a text longer than one window of the encoder: a scene of it, overlapping the next by half — what the search finds a piece of a long text by |
 | `phrase_vector` | the vector of a short text — a review, a tag's name, a phrase of the search — by the key of the text |
 | `picture` | a work's picture: the cover first, then the screenshots |
@@ -22,7 +22,7 @@
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
 | `series` | a series of the site — a cycle of works — as its own page, or a list of an author's series, said it last: its page, title, description, status and dates |
 | `series_place` | the number of a work in a series of the site, as the site tells it; that the work is of the series is its facet of the series |
-| `part` | a part of a work's text — a chapter: what it has, its text and its vectors kept outside the database, in the source's store of parts (`sources/<source>/parts/`, `PartStore`, RocksDB): the hash of its text (a part has a text when it is written), its characters and words counted as its text is written; of its windows' vectors — overlapping by half, what the search finds a scene of a chapter by and what the models read of it — the encoder, the text's hash and how many (`windows`); of its paragraphs' vectors — what the tags are held against to be offered by the text — the encoder and the text's hash; when a whole table of contents of its site no longer named it (`taken_off_at`), its text kept but nothing of the work made of it |
+| `part` | a part of a work's text — a chapter: what it has, its text and its vectors kept outside the database, in the source's store of parts (`sources/<source>/parts/`, `PartStore`, RocksDB): the hash of its text (a part has a text when it is written), its characters and words counted as its text is written; of its windows' vectors — overlapping by half, what the search finds a scene of a chapter by and what the models read of it — the encoder, the text's hash and how many (`windows`); of its paragraphs' vectors — what the tags are held against to be offered by the text — the encoder and the text's hash; of its pieces' codes — what the search finds the place of a line in it by — the key of the projection they were made by (`pieces`); when a whole table of contents of its site no longer named it (`taken_off_at`), its text kept but nothing of the work made of it |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `item_manner` | the manner of a work's text: the share in it of every word its content type measures a manner by, standardised, and the hash of the texts it was made of |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
@@ -139,6 +139,7 @@ erDiagram
         VARCHAR content_hash "null"
         INTEGER windows "null"
         TIMESTAMPTZ taken_off_at "null"
+        VARCHAR pieces "null"
     }
     phrase_vector {
         BIGINT text_key PK
@@ -198,6 +199,7 @@ erDiagram
         VARBINARY vec
         INTEGER windows "null"
         VARCHAR windows_by "null"
+        VARCHAR pieces "null"
     }
     text_window {
         VARCHAR item_id PK, FK

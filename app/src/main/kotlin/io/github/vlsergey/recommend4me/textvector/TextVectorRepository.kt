@@ -9,6 +9,9 @@ import kotlin.concurrent.withLock
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
+/** A text's vector kept: the hash of its text, null of a vector by another encoder; whether its pieces are made. */
+class KeptText(val hash: String?, val pieces: Boolean)
+
 /**
  * The vectors of the texts of one source's items, kept with the hash of the text and the encoder that made them: a text
  * is encoded again when it or the encoder changed, and vectors of another encoder are never read. The windows of the
@@ -43,16 +46,31 @@ class TextVectorRepository(private val db: DSLContext) {
 
     /**
      * Every stored text of the items [ids] (every item when null), of any encoder, in one read: (item, text key) to the
-     * hash of its vector by [encoder], null of a vector of another.
+     * hash of its vector by [encoder] — null of a vector of another —, and whether its pieces are made by the
+     * projection [pieces] (of none, they are).
      */
-    fun kept(encoder: String, ids: Collection<String>? = null): Map<Pair<String, String>, String?> {
-        val out = HashMap<Pair<String, String>, String?>()
+    fun kept(
+        encoder: String,
+        ids: Collection<String>? = null,
+        pieces: String? = null,
+    ): Map<Pair<String, String>, KeptText> {
+        val out = HashMap<Pair<String, String>, KeptText>()
         fun read(only: Collection<String>?) =
-            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.ENCODER, TEXT_VECTOR.TEXT_HASH)
+            db.select(
+                    TEXT_VECTOR.ITEM_ID,
+                    TEXT_VECTOR.TEXT_KEY,
+                    TEXT_VECTOR.ENCODER,
+                    TEXT_VECTOR.TEXT_HASH,
+                    TEXT_VECTOR.PIECES,
+                )
                 .from(TEXT_VECTOR)
                 .where(only?.let { TEXT_VECTOR.ITEM_ID.`in`(it) } ?: DSL.noCondition())
                 .fetch {
-                    out[it.value1()!! to it.value2()!!] = if (it.value3() == encoder) it.value4() else null
+                    out[it.value1()!! to it.value2()!!] =
+                        KeptText(
+                            it.value4().takeIf { _ -> it.value3() == encoder },
+                            pieces == null || it.value5() == pieces,
+                        )
                 }
         if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
         return out
@@ -116,6 +134,7 @@ class TextVectorRepository(private val db: DSLContext) {
                     .set(TEXT_VECTOR.VEC, packed)
                     .setNull(TEXT_VECTOR.WINDOWS)
                     .setNull(TEXT_VECTOR.WINDOWS_BY)
+                    .setNull(TEXT_VECTOR.PIECES)
                     .execute()
                 tx.deleteFrom(TEXT_WINDOW)
                     .where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey))

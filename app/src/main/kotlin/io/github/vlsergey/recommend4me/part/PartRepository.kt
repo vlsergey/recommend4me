@@ -39,6 +39,9 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
     /** The vector of every paragraph of every part. */
     val paragraphs = ParagraphVectorRepository(db, store)
 
+    /** The codes of the pieces of the chapters and of the text fields. */
+    val pieces = PieceRepository(db, store)
+
     /** What every part is made of, its text not read. */
     val marks = PartMarks(db)
 
@@ -92,6 +95,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                         .setNull(PART.WINDOWS)
                         .setNull(PART.PARAGRAPHS_ENCODER)
                         .setNull(PART.PARAGRAPHS_HASH)
+                        .setNull(PART.PIECES)
                         .set(PART.CHARS, content?.length)
                         .set(PART.WORDS, words)
             }

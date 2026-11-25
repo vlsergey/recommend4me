@@ -11,6 +11,12 @@ import java.nio.ByteBuffer
  * all it computes: bge-m3's vector is the first piece's hidden state of the last layer, and its output was every
  * piece's (owner, 2026-11-25: a batch of 64 windows of 256 pieces brought back 64 MB of the card for 256 KB used).
  */
+/**
+ * An output of every piece of a sequence: its row multiplied by [matrix] — [width of the sequence, out], row after row
+ * — and [bias] — [out] — added, named [name].
+ */
+class PiecesOutput(val name: String, val matrix: FloatArray, val bias: FloatArray)
+
 object OnnxSplice {
 
     /**
@@ -18,17 +24,36 @@ object OnnxSplice {
      * [batch, width], named [output]: in the precision the model computes it in — the half one of a model whose output
      * is cast to floats, the cast left out.
      */
-    fun firstPiece(model: ByteBuffer, sequence: String, output: String): ByteBuffer {
+    fun firstPiece(model: ByteBuffer, sequence: String, output: String): ByteBuffer =
+        withOutputs(model, sequence, output, null)
+
+    /**
+     * The model [model] whose output [sequence] — of [batch, pieces, width] — is replaced by its first piece's row
+     * named [first], and, when [pieces] is given, every piece's row multiplied by its matrix and its bias added, named
+     * by it: [batch, pieces, out] — a head and a projection of every piece on the card, nothing of a width brought back
+     * but what is read. In the precision the model computes in.
+     */
+    fun withOutputs(model: ByteBuffer, sequence: String, first: String, pieces: PiecesOutput?): ByteBuffer {
         val graph = fieldsOf(model).single { it.number == MODEL_GRAPH }
         val nodes = fieldsOf(model, graph.valueStart, graph.valueEnd).filter { it.number == GRAPH_NODE }
         val maker = nodes.firstOrNull { sequence in stringsOf(model, it, NODE_OUTPUT) }
         val cast = maker?.takeIf { stringsOf(model, it, NODE_OP_TYPE).singleOrNull() == "Cast" }
         val from = cast?.let { stringsOf(model, it, NODE_INPUT).first() } ?: sequence
+        val type = if (cast != null) OnnxGraph.FLOAT16 else OnnxGraph.FLOAT
         val added =
-            OnnxGraph(output)
-                .constant("${output}_place", longArrayOf(0))
-                .node("Gather", listOf(from, "${output}_place"), listOf(output), mapOf("axis" to 1L))
-                .output(output, if (cast != null) OnnxGraph.FLOAT16 else OnnxGraph.FLOAT, "batch", "width")
+            OnnxGraph(first)
+                .constant("${first}_place", longArrayOf(0))
+                .node("Gather", listOf(from, "${first}_place"), listOf(first), mapOf("axis" to 1L))
+                .output(first, type, "batch", "width")
+        if (pieces != null) {
+            val width = pieces.bias.size.toLong()
+            added
+                .constant("${pieces.name}_matrix", pieces.matrix, type, pieces.matrix.size / width, width)
+                .constant("${pieces.name}_bias", pieces.bias, type, width)
+                .node("MatMul", listOf(from, "${pieces.name}_matrix"), listOf("${pieces.name}_product"))
+                .node("Add", listOf("${pieces.name}_product", "${pieces.name}_bias"), listOf(pieces.name))
+                .output(pieces.name, type, "batch", "pieces", width)
+        }
         return replaced(model, graph, added.fields()) { it.number == GRAPH_OUTPUT || it.start == cast?.start }
     }
 

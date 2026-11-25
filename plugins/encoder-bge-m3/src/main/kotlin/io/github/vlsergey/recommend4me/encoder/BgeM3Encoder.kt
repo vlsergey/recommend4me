@@ -30,7 +30,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         onnx.madeOf(FIRST_PIECE, MODEL) { OnnxSplice.firstPiece(it, HIDDEN_STATE, FIRST_PIECE_OUTPUT) }
     }
 
-    private val tokenizer: HuggingFaceTokenizer by lazy {
+    internal val tokenizer: HuggingFaceTokenizer by lazy {
         val p = onnx.path(TOKENIZER)
         check(Files.isRegularFile(p)) { "The bge-m3 tokenizer is missing: ${p.toAbsolutePath()}" }
         HuggingFaceTokenizer.newInstance(
@@ -40,16 +40,19 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /** The ids that open and close every window: <s> and </s> of XLM-RoBERTa. */
-    private val bos: Long by lazy { tokenizer.encode("", true, false).ids.first() }
-    private val eos: Long by lazy { tokenizer.encode("", true, false).ids.last() }
+    internal val bos: Long by lazy { tokenizer.encode("", true, false).ids.first() }
+    internal val eos: Long by lazy { tokenizer.encode("", true, false).ids.last() }
 
     override val id = ENCODER
     override val dim = DIM
 
     override fun ready(): Boolean = onnx.has(MODEL) && onnx.has(TOKENIZER)
 
+    /** The vectors of every piece by bge-m3's ColBERT head ([BgeM3Pieces]): of the head's file beside the model's. */
+    override val pieces: PieceEncoder = BgeM3Pieces(onnx, this)
+
     /** Token ids of every text of [texts], without special tokens: the texts handed to the tokenizer together. */
-    private fun piecesOf(texts: List<String>): List<LongArray> =
+    internal fun piecesOf(texts: List<String>): List<LongArray> =
         if (texts.isEmpty()) emptyList() else tokenizer.batchEncode(texts, false, false).map { it.ids }
 
     /** Vectors of texts of any length, unit length; an empty text gets null. A query and a passage are read alike. */
@@ -92,7 +95,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /** The places of the pieces of every window [encodeWindows] makes of a text of [size] pieces, in order. */
-    private fun scenesOf(size: Int): List<IntRange> {
+    internal fun scenesOf(size: Int): List<IntRange> {
         val out = ArrayList<IntRange>()
         var from = 0
         while (from < size) {
@@ -185,10 +188,10 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
          * The graph run, made of the [MODEL]: its output [HIDDEN_STATE] cut to the first piece's, [FIRST_PIECE_OUTPUT].
          */
         private const val FIRST_PIECE = "bge-m3-first-piece"
-        private const val HIDDEN_STATE = "last_hidden_state"
-        private const val FIRST_PIECE_OUTPUT = "first_piece"
+        internal const val HIDDEN_STATE = "last_hidden_state"
+        internal const val FIRST_PIECE_OUTPUT = "first_piece"
         const val DIM = 1024
-        private const val PAD = 1L
+        internal const val PAD = 1L
 
         /** The pieces of a window, its two special ones among them: the positions XLM-RoBERTa was pretrained at. */
         private const val WINDOW = 512
@@ -197,7 +200,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         private const val ROOM = WINDOW - 2
 
         /** The pieces of a window ([encodeWindows]), its two special ones among them: a scene, not a page. */
-        private const val SCENE = 256
+        internal const val SCENE = 256
 
         /** The pieces of the text a window holds besides its two special ones. */
         private const val SCENE_ROOM = SCENE - 2
@@ -206,13 +209,13 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
          * How far a window begins after the one before: half of it, so each overlaps the next by half — every piece
          * encoded twice, kept so till there are good ways of finding a meaning in a text (owner, 2026-11-25).
          */
-        private const val SCENE_STEP = SCENE_ROOM / 2
+        internal const val SCENE_STEP = SCENE_ROOM / 2
 
         /** The pages of one text's vector at most: the 8192 pieces bge-m3 reads of one text. */
         private const val MAX_WINDOWS = 8192 / WINDOW
 
         /** Windows per run, on the processor and on the card: memory, not meaning. */
-        private const val BATCH = 8
-        private const val GPU_BATCH = 64
+        internal const val BATCH = 8
+        internal const val GPU_BATCH = 64
     }
 }

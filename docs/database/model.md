@@ -18,6 +18,7 @@
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
 | `facet_suggester` | the fitted state of the suggester of a facet — the model the chances of a work's values are made by when the work is read, none of them kept — the values it chooses from, its scoring of them apart from their names (every value's coordinates and bias, read by a page in place of the dictionary), its calibration by the user's answers with the cutoff of the likely (`calibration`), and how it was fitted: the report of what it tried and chose, how long it took, how many works and values it learnt from |
+| `piece_projection` | the projection of the pieces' vectors learnt of the type's own chapters, of every encoder of pieces one: its rows — the leading directions of the head's vectors of a sample of pieces —, the cuts and the means of the codes of 2 bits a number, of how many pieces it was learnt, and its key, kept with every text whose pieces it made (`part.pieces`, `text_vector.pieces`): a new one makes them all anew
 | `search_score` | the reranker's score of a work for a line searched |
 | `search_query_shift` | the closeness of a line and a passage by meaning corrected by the user's judgments: q·p + (q·a)(b·p), the two vectors of weights of the dimensions of the text encoder's vectors; the line's vector moved by it before it is searched |
 | `search_weight` | the order of what a search finds learnt of the user's judgments: of every feature a work is found by — how close by meaning, how its words matched, the reranker's score — its weight on its own scale |
@@ -123,6 +124,16 @@ erDiagram
         VARCHAR model PK
         INTEGER learnt "null"
         INTEGER changes
+    }
+    piece_projection {
+        VARCHAR encoder PK
+        VARCHAR projection_key
+        TIMESTAMPTZ fitted_at
+        INTEGER rows_count
+        INTEGER width
+        BLOB projection
+        BLOB codebook
+        INTEGER pieces
     }
     score_sweep {
         INTEGER id PK

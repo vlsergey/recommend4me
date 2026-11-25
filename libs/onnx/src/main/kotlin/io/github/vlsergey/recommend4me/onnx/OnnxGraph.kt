@@ -22,14 +22,20 @@ class OnnxGraph(private val name: String) {
 
     fun output(name: String, type: Int, vararg dims: Any) = apply { outputs += valueInfo(name, type, dims) }
 
-    /** A tensor of floats known when the graph is made. */
-    fun constant(name: String, values: FloatArray, vararg dims: Long) = apply {
+    /**
+     * A tensor of floats known when the graph is made, kept as the [type] — [FLOAT], or [FLOAT16] in half precision:
+     * what a graph of half precision multiplies by.
+     */
+    fun constant(name: String, values: FloatArray, type: Int, vararg dims: Long) = apply {
+        val half = type == FLOAT16
         val raw =
-            ByteBuffer.allocate(values.size * Float.SIZE_BYTES)
+            ByteBuffer.allocate(values.size * (if (half) Short.SIZE_BYTES else Float.SIZE_BYTES))
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .also { b -> values.forEach { b.putFloat(it) } }
+                .also { b ->
+                    values.forEach { if (half) b.putShort(java.lang.Float.floatToFloat16(it)) else b.putFloat(it) }
+                }
                 .array()
-        constants += tensor(name, FLOAT, dims, raw)
+        constants += tensor(name, type, dims, raw)
     }
 
     /**

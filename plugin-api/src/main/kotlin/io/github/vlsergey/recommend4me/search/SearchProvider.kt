@@ -83,7 +83,16 @@ class SearchResult(
      * answers a line and what does not. An item lacking one has 0 of it.
      */
     val features: Map<ItemKey, Map<String, Double>> = emptyMap(),
+    /** Of the items whose place of the line in a text the application found by its pieces, that place. */
+    val places: Map<ItemKey, SearchPlace> = emptyMap(),
 )
+
+/**
+ * Where in an item's text the application found what the line says: of the field [field] (a [SearchField.key]), the
+ * pieces [from] until [to] of its text, as the application's text encoder cuts it into pieces, and of them those that
+ * matched the line's best ([marked]) — what is shown of the item, unless its words stand together.
+ */
+class SearchPlace(val field: String, val from: Int, val to: Int, val marked: List<Int>)
 
 /**
  * The piece of an item's text a search found it by, with the words found marked ([highlights], start until end);

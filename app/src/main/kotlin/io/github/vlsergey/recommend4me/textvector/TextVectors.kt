@@ -5,6 +5,9 @@ import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.piece.FittedPieces
+import io.github.vlsergey.recommend4me.piece.PieceProjectionFitEvent
+import io.github.vlsergey.recommend4me.piece.PieceProjections
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -62,6 +65,7 @@ class TextVectors(
     private val lists: ListIndexes,
     private val sweeps: StageSweeps,
     private val documents: ListVectors,
+    private val projections: PieceProjections,
 ) {
     /** Whether texts are being encoded now. */
     val running: Boolean
@@ -86,9 +90,14 @@ class TextVectors(
     fun start() {
         val encoder = plugins.textEncoder() ?: return
         stores.types
-            .filter { !madeBy(lists.of(it.id), encoder) }
+            .filter { !madeBy(lists.of(it.id), keyOf(encoder, projections.of(it))) }
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
     }
+
+    /** The projection of the pieces of a type learnt anew: every text of it to be encoded again for its pieces. */
+    @EventListener
+    fun projectionFitted(event: PieceProjectionFitEvent) =
+        WorkScope.entries.forEach { plan(event.type, it, "encoder", TaskCursor.FIRST) }
 
     /** The documents of works written anew, of what the texts are made of changed: the works of it encoded. */
     @EventListener
@@ -130,24 +139,26 @@ class TextVectors(
         val type = stores.type(typeId)
         val encoder = plugins.textEncoder()
         if (type == null || encoder == null) return null
-        madeBy(type, encoder)
+        val fitted = projections.of(type)
+        madeBy(type, keyOf(encoder, fitted))
         val items = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
-        val gaveWay = items.isNotEmpty() && !done(type, scope, encoder, items.map { it.key })
+        val gaveWay = items.isNotEmpty() && !done(type, scope, Encoding(encoder, fitted), items.map { it.key })
         if (!gaveWay && items.size < portion && sweeps.complete(STAGE, typeId, scope))
             events.publishEvent(WorkTextVectorFillEvent(typeId, scope))
         return if (gaveWay) cursor else items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
     /**
-     * The vectors of the [type] by the [encoder]: of an encoder other than the one they were made by last — never seen,
-     * or seen before another —, told so, and the stage to be done of every work again.
+     * The vectors of the [type] by the encoder and the projection of the pieces of [key] ([keyOf]): of one other than
+     * the one they were made by last — never seen, or seen before another —, told so, and the stage to be done of every
+     * work again.
      */
-    private fun madeBy(type: TypeStore, encoder: TextEncoder) {
+    private fun madeBy(type: TypeStore, key: String) {
         val index = lists.of(type.id)
-        if (madeBy(index, encoder)) return
+        if (madeBy(index, key)) return
         val now = System.currentTimeMillis()
         index.stages.changed(VECTORS_SINCE, now)
-        index.stages.changed(vectorsBy(encoder.id), now)
+        index.stages.changed(vectorsBy(key), now)
         sweeps.reset(STAGE, type.id, type.sources.map { it.id })
     }
 
@@ -157,7 +168,7 @@ class TextVectors(
      * changed dated so ([StageSweeps.made]); committed. False, nothing marked done, of a turn that gave way to a work
      * the user asked for ([Tasks.outranked]).
      */
-    private fun done(type: TypeStore, scope: WorkScope, encoder: TextEncoder, keys: List<ItemKey>): Boolean {
+    private fun done(type: TypeStore, scope: WorkScope, encoder: Encoding, keys: List<ItemKey>): Boolean {
         val started = System.currentTimeMillis()
         busy = true
         val changed =
@@ -189,21 +200,23 @@ class TextVectors(
     }
 
     /**
-     * The texts of the items [ids] of the source [store] encoded by [encoder] where new or changed, and kept with their
-     * windows, a batch at a time; those gone dropped. The items whose vectors changed.
+     * The texts of the items [ids] of the source [store] encoded by [with] where new or changed, and kept with their
+     * windows and their pieces, a batch at a time; those gone dropped. The items whose vectors changed.
      */
     private fun encoded(
         store: SourceStore,
-        encoder: TextEncoder,
+        with: Encoding,
         ids: List<String>,
         giveWay: () -> Boolean = { false },
     ): List<ItemKey> {
-        val scan = TextScan(store, ids, encoder.id)
+        val encoder = with.encoder
+        val scan = TextScan(store, ids, encoder.id, with.pieces?.projection?.key)
         val gone = scan.gone()
         gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
         if (gone.isNotEmpty())
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, gone.map { it.first }.distinct()))
-        for (batch in scan.todo.chunked(BATCH)) {
+        val (piecesOnly, changed) = scan.todo.partition { it.piecesOnly }
+        for (batch in changed.chunked(BATCH)) {
             if (giveWay()) break
             val vectors = encoder.encode(batch.map { it.text })
             batch.forEachIndexed { i, t ->
@@ -212,10 +225,17 @@ class TextVectors(
             windows.keepWindows(
                 store,
                 batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
+                with.pieces,
             )
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, batch.map { it.itemId }.distinct()))
         }
-        return (scan.todo.map { it.itemId } + gone.map { it.first }).distinct().map { ItemKey(store.id, it) }
+        // The texts whose vectors are made and whose pieces are not, of a projection learnt anew: their pieces made,
+        // their windows of the same run; nothing the models or the index read changed
+        for (batch in piecesOnly.chunked(BATCH)) {
+            if (giveWay()) break
+            windows.keepWindows(store, batch.map { Triple(it.itemId, it.key, it.text) }, with.pieces)
+        }
+        return (changed.map { it.itemId } + gone.map { it.first }).distinct().map { ItemKey(store.id, it) }
     }
 
     /**
@@ -229,7 +249,9 @@ class TextVectors(
     fun encodeOwn(items: Collection<ItemKey>) {
         val encoder = plugins.textEncoder() ?: return
         items.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            stores.source(source)?.let { encoded(it, encoder, ids) }
+            stores.source(source)?.let { s ->
+                encoded(s, Encoding(encoder, stores.type(s.type)?.let(projections::of)), ids)
+            }
         }
     }
 
@@ -276,15 +298,22 @@ class TextVectors(
     }
 }
 
+/** The encoder of the texts, and what the pieces of the type are made with — none of no projection of them. */
+private class Encoding(val encoder: TextEncoder, val pieces: FittedPieces?)
+
+/** What the vectors are made by: the encoder [encoder], and the projection of the pieces [fitted] when there is one. */
+private fun keyOf(encoder: TextEncoder, fitted: FittedPieces?) =
+    encoder.id + (fitted?.let { "|pieces:${it.projection.key}" } ?: "")
+
 /**
- * Whether the vectors of the [index] are made by the [encoder] since they were last told to be made anew: the encoder
- * was told then, not before another (the encoder of the tests changed and changed back).
+ * Whether the vectors of the [index] are made by the encoder and the projection of [key] since they were last told to
+ * be made anew: told then, not before another (the encoder of the tests changed and changed back).
  */
-private fun madeBy(index: ListIndex, encoder: TextEncoder): Boolean =
-    index.stages.since(vectorsBy(encoder.id)).let { it != null && it == index.stages.since(VECTORS_SINCE) }
+private fun madeBy(index: ListIndex, key: String): Boolean =
+    index.stages.since(vectorsBy(key)).let { it != null && it == index.stages.since(VECTORS_SINCE) }
 
 /** What the index of the list tells of since when the vectors are to be made by the encoder of now. */
 private const val VECTORS_SINCE = "vectors"
 
-/** What the index of the list tells of since when the vectors were made by the encoder [id], when it was last told. */
-private fun vectorsBy(id: String) = "vectorsBy:$id"
+/** What the index of the list tells of since when the vectors were made by [key] ([keyOf]), when it was last told. */
+private fun vectorsBy(key: String) = "vectorsBy:$key"

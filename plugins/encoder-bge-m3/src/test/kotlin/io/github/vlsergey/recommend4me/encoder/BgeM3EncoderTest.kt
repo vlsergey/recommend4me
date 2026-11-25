@@ -102,4 +102,77 @@ class BgeM3EncoderTest {
             assertTrue(cos(whole, windows[t]) > 0.9999, "${cos(whole, windows[t])}")
         }
     }
+
+    @Test
+    fun `the pieces are the ColBERT head of the model's every hidden state, projected as asked`() {
+        val pieces = encoder.pieces
+        assumeTrue(pieces.ready(), "the ColBERT head of bge-m3 is not in the models folder")
+        val text = "Шерлок Холмс расследует загадочное убийство в Лондоне."
+        val (got, blank) = pieces.encode(listOf(text, "  "), null)
+        assertTrue(blank.pieces.isEmpty() && blank.windows.isEmpty())
+        val windows = encoder.encodeWindows(listOf(text)).single()
+        assertEquals(windows.size, got.windows.size)
+        assertTrue(cos(windows.single(), got.windows.single()) > 0.9999, "the window's vector as before")
+
+        // The model's own hidden states, and the head of its file applied to them
+        val tokenizer =
+            HuggingFaceTokenizer.newInstance(
+                onnx.path(BgeM3Encoder.TOKENIZER),
+                mapOf("addSpecialTokens" to "true", "truncation" to "false", "padding" to "false"),
+            )
+        val ids = tokenizer.encode(text, true, false).ids
+        val shape = longArrayOf(1, ids.size.toLong())
+        val inputs =
+            mapOf(
+                "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
+                "attention_mask" to
+                    OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size) { 1 }), shape),
+            )
+        val hidden = onnx.runSequence(BgeM3Encoder.MODEL, inputs)[0]
+        val (weight, bias) = head()
+        fun headOf(h: FloatArray) =
+            unit(
+                FloatArray(DIM) { o ->
+                    bias[o] + (0 until DIM).sumOf { weight[o * DIM + it].toDouble() * h[it] }.toFloat()
+                }
+            )
+        assertEquals(ids.size - 2, got.pieces.size, "a vector of every piece, none of the special ones")
+        got.pieces.forEachIndexed { t, v -> assertTrue(cos(headOf(hidden[t + 1]), v) > 0.999, "piece $t") }
+
+        // A projection of two rows: the head's first two numbers, of unit length
+        val two =
+            PieceProjection(
+                "two",
+                listOf(FloatArray(DIM) { if (it == 0) 1f else 0f }, FloatArray(DIM) { if (it == 1) 1f else 0f }),
+            )
+        val projected = pieces.encode(listOf(text), two).single().pieces
+        val line = pieces.query(text, two)
+        projected.forEachIndexed { t, v ->
+            val whole = headOf(hidden[t + 1])
+            assertTrue(cos(unit(floatArrayOf(whole[0], whole[1])), v) > 0.999, "piece $t projected")
+            assertTrue(cos(v, line[t]) > 0.999, "a line read as a text")
+        }
+        assertEquals(text.length, pieces.pieceSpans(text).last()!!.last + 1)
+    }
+
+    private fun unit(v: FloatArray): FloatArray {
+        val n = sqrt(v.sumOf { (it * it).toDouble() }).toFloat()
+        return FloatArray(v.size) { v[it] / n }
+    }
+
+    /** The head of its file, half precision: the weight [out, in] and the bias. */
+    private fun head(): Pair<FloatArray, FloatArray> =
+        java.util.zip.ZipFile(onnx.path(BgeM3Pieces.HEAD).toFile()).use { zip ->
+            fun tensor(suffix: String): FloatArray {
+                val bytes =
+                    zip.getInputStream(zip.entries().asSequence().first { it.name.endsWith(suffix) }).readAllBytes()
+                val b = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                return FloatArray(bytes.size / 2) { java.lang.Float.float16ToFloat(b.getShort()) }
+            }
+            tensor("/data/0") to tensor("/data/1")
+        }
+
+    private companion object {
+        const val DIM = BgeM3Encoder.DIM
+    }
 }
