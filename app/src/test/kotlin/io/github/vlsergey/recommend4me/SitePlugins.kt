@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.ContentType
+import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.encoder.EncodedPieces
 import io.github.vlsergey.recommend4me.encoder.PieceEncoder
 import io.github.vlsergey.recommend4me.encoder.PieceProjection
@@ -14,6 +15,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
+import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.SeriesData
 import io.github.vlsergey.recommend4me.source.SeriesWork
@@ -73,6 +75,26 @@ class SitePlugins {
         )
 
     @Bean fun piecesSite(): Source = SiteSource(SearchPiecesTest.SITE, SearchPiecesTest.TYPE)
+
+    /**
+     * The content type of the scenario of the sizes of the works ([WorkSizesTest]) and its two sites: the words to a
+     * character its model learns are of their works alone, of no other class's chapters.
+     */
+    @Bean
+    fun sizesType(): ContentType =
+        ContentType(
+            WorkSizesTest.TYPE,
+            universes = true,
+            facets = Books.TYPE.facets,
+            layer = Books.TYPE.layer,
+            numbers = Books.TYPE.numbers,
+        )
+
+    @Bean
+    fun sizesSiteA(): Source = SiteSource(WorkSizesTest.A, WorkSizesTest.TYPE, listOf(StandardNumbers.WORDS.asNumber()))
+
+    @Bean
+    fun sizesSiteB(): Source = SiteSource(WorkSizesTest.B, WorkSizesTest.TYPE, listOf(StandardNumbers.CHARS.asNumber()))
 
     @Bean fun wordsEncoder(): TextEncoder = WordsEncoder()
 
@@ -190,7 +212,11 @@ class SitePlugins {
      * "<id>.example": the scenarios whose models are of their own works alone have a site of their own, the one
      * application of the tests ([BaseTest]) holding them all.
      */
-    class SiteSource(override val id: String = ID, override val contentType: String = Books.ID) : Source {
+    class SiteSource(
+        override val id: String = ID,
+        override val contentType: String = Books.ID,
+        private val numbers: List<NumberDef> = emptyList(),
+    ) : Source {
         companion object {
             /** The site of every class of the tests but those of a site of their own. */
             const val ID = "site"
@@ -240,6 +266,7 @@ class SitePlugins {
                         TextDef("annotation", block = "text:annotation"),
                         TextDef("pairings", searchByMeaning = true),
                     ),
+                numbers = numbers,
                 universeLine = "pairings",
             )
         override val modes = setOf(SourceMode.BROWSER)

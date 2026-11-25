@@ -16,7 +16,6 @@ import io.github.vlsergey.recommend4me.api.model.PairMeasure
 import io.github.vlsergey.recommend4me.api.model.PairRow
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
-import io.github.vlsergey.recommend4me.api.model.SizeNumber
 import io.github.vlsergey.recommend4me.api.model.TagRelation
 import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.author.AuthorRepository
@@ -27,11 +26,9 @@ import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
-import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndexing
-import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -61,58 +58,6 @@ class TwoSitesTest : TwoSitesTestBase() {
 
         /** A page of the pairs, as the screen of the duplicates reads them. */
         const val PAGE = 100
-    }
-
-    @Test
-    fun `a number the site states shown as it is, the other worked out by the words per character the texts teach`() {
-        alpha("z1|The Long Road|river|A road along a river||")
-        beta("z2|The Short Road|river|A road along a brook")
-        val type = stores.type("books")!!
-        val a = stores.source("alpha")!!
-        val b = stores.source("beta")!!
-        a.items.setNumbers("z1", mapOf("words" to 900.0))
-        b.items.setNumbers("z2", mapOf("chars" to 6000.0))
-        // Words of five letters and a space: one word to six characters
-        a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
-        // Written past the application's events: their documents of the index of the list, which the model reads, made
-        listIndexing.itemsChanged(a, listOf("z1"), WorkDatum.DATA, "items")
-        listIndexing.itemsChanged(b, listOf("z2"), WorkDatum.DATA, "items")
-        background.run()
-        sizeLearning.fit(type)
-        assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())
-        val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
-        assertEquals(SizeNumber(900.0, true), first.words)
-        assertEquals(false, first.chars!!.stated)
-        assertTrue(first.chars!!.value in 5300.0..5500.0, first.chars.toString())
-        val second =
-            workSizes.ofItems(type, b, listOf("z2"), b.items.numbersOf(listOf("z2")), emptyMap()).getValue("z2")
-        assertEquals(SizeNumber(6000.0, true), second.chars)
-        assertEquals(false, second.words!!.stated)
-        // Of the one example the model has, its ratio
-        assertTrue(second.words!!.value in 950.0..1050.0, second.words.toString())
-        // The search of duplicates writes the words it compared with the pair — an answered pair is kept by it —:
-        // what the pairs are sorted by their size by
-        val z1 = ItemKey("alpha", "z1")
-        val z2 = ItemKey("beta", "z2")
-        duplicates.answerDuplicate(
-            "books",
-            io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
-                ItemRef("alpha", "z1"),
-                ItemRef("beta", "z2"),
-                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT,
-            ),
-        )
-        background.run()
-        duplicates.searchDuplicates("books")
-        background.run()
-        val pair = type.links.ordered(z1, z2)
-        val kept = type.duplicates.reads.ofPairs(listOf(pair)).single()
-        val words = if (pair.first == z1) kept.words to kept.otherWords else kept.otherWords to kept.words
-        assertEquals(900f, words.first)
-        assertTrue(words.second!! in 950f..1050f, words.toString())
-        // A text changed is counted anew as it is written, the item's sum with it
-        a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
-        assertEquals(1.0 to 5.0, a.parts.counts.counted()["z1"])
     }
 
     @Test
@@ -715,19 +660,21 @@ class TwoSitesTest : TwoSitesTestBase() {
 
     @Test
     fun `a search finds the works by their words, the likest first`() {
-        alpha("q1|Night watch|watch|A lighthouse keeper watches the night sea||")
+        // Words no other scenario's works say: of the one application of the tests, a work of the other words of the
+        // line found by meaning as near would stand in their way
+        alpha("q1|Night watch|watch|An orchard keeper counts the cider barrels at night||")
         alpha("q2|Gardens|garden|Roses and tulips in a spring garden||")
         background.run()
         val found =
             items
-                .listItems("books", ItemQuery(search = "lighthouse keeper", sort = ItemSort.SCORE))
+                .listItems("books", ItemQuery(search = "cider barrels", sort = ItemSort.SCORE))
                 .body!!
                 .items
                 .firstOrNull()
                 ?.item == "q1"
         assertTrue(
             found,
-            "found ${items.listItems("books", ItemQuery(search = "lighthouse keeper")).body!!.items.map { it.item }}",
+            "found ${items.listItems("books", ItemQuery(search = "cider barrels")).body!!.items.map { it.item }}",
         )
     }
 }

@@ -109,9 +109,11 @@ class SiteTagsTest : SiteTestBase() {
     private fun merged(hulls: String, starhulls: String) {
         // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged.
         // Of the hulls: the other classes' tags are many, in the one application of the tests — their directions made
-        // by the background first: of none every tag as alike, the page of fifty the first keys
+        // by the background first; read whole, every tag of the application: of the encoder of the tests the names of
+        // most tags are alike to nothing, and a page of fifty in the order of the keys left out a tag made after fifty
+        // of the other classes'
         background.run()
-        val similar = tagsApi.listSimilarTags(hulls, "hull", 0, 50, null, null).body!!.tags
+        val similar = tagsApi.listSimilarTags(hulls, "hull", 0, EVERY, null, null).body!!.tags
         assertTrue(similar.any { it.tag.key == starhulls && it.site == null }, "similar ${similar.map { it.tag.key }}")
         assertEquals(listOf("hulls"), similar.filter { it.site != null }.map { it.site!!.tag })
         // Nothing is merged by itself
@@ -353,7 +355,7 @@ class SiteTagsTest : SiteTestBase() {
     }
 
     /** The rows of the tags alike [hulls]. */
-    private fun rows(hulls: String) = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!.tags
+    private fun rows(hulls: String) = tagsApi.listSimilarTags(hulls, null, 0, EVERY, null, null).body!!.tags
 
     /** What the tag [key] is to [hulls] among the tags alike it; none when it is not among them. */
     private fun relationOf(hulls: String, key: String) =
@@ -407,8 +409,8 @@ class SiteTagsTest : SiteTestBase() {
         tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.DIFFERENT))
         assertEquals(TagRelation.DIFFERENT, relationOf(hulls, other))
         // The rows of a relation hidden on the server, the total without them
-        val all = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!
-        val noDifferent = tagsApi.listSimilarTags(hulls, null, 0, 50, null, listOf(TagRelation.DIFFERENT)).body!!
+        val all = tagsApi.listSimilarTags(hulls, null, 0, EVERY, null, null).body!!
+        val noDifferent = tagsApi.listSimilarTags(hulls, null, 0, EVERY, null, listOf(TagRelation.DIFFERENT)).body!!
         assertTrue(
             noDifferent.tags.none { it.relation == TagRelation.DIFFERENT },
             "hidden ${noDifferent.tags.map { it.relation }}",
@@ -421,7 +423,7 @@ class SiteTagsTest : SiteTestBase() {
             }
         assertEquals(all.tags.map { it.tag.key to it.site?.tag }, paged.map { it.tag.key to it.site?.tag })
         // Searched for: alike the text, not the tag — all the rows, in another order
-        val searched = tagsApi.listSimilarTags(hulls, "freight cargo", 0, 50, null, null).body!!
+        val searched = tagsApi.listSimilarTags(hulls, "freight cargo", 0, EVERY, null, null).body!!
         assertEquals(all.total, searched.total)
         assertTrue(searched.tags.zipWithNext().all { (a, b) -> a.similarity >= b.similarity }, "the likest first")
         tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.NONE))
@@ -544,6 +546,7 @@ class SiteTagsTest : SiteTestBase() {
     }
 
     private companion object {
-        /** How long the removal in the background is waited for, and how often it is looked at. */
+        /** A page of every tag of the one application of the tests. */
+        const val EVERY = 1000
     }
 }
