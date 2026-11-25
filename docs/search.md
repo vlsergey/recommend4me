@@ -20,8 +20,9 @@ vectors: no passage and no vector is in it (its format 4).
 
 What a work is found by by meaning (`FullTextVectors`): of every window of every chapter and of every text searched by
 meaning (`TextDef.searchByMeaning`) — a window the encoder cut the text into (`TextEncoder.encodeWindows`,
-`windowSpans`), a short text one window, its vector the text's — its vector less the type's centre, made of the sign of
-every number: a bit a number, 128 bytes a window of bge-m3. Kept in the store of the parts of the source
+`windowSpans`), a short text one window, its vector the text's — made as RaBitQ makes its codes (Gao and Long, SIGMOD
+2024; Lucene's and Elasticsearch's BBQ): the vector less the type's centre, turned by the type's random rotation, of
+every number whether it is above nought — a bit a number, 128 bytes a window of bge-m3. Kept in the store of the parts of the source
 (`PartStore.fullText`, the column family `fullText`, RocksDB's own files of tens of megabytes, not apart from the keys),
 of every text one value: its windows' characters and full-text vectors (`FullTextVectorRepository`); the key of the
 centre they were made by kept with the part (`part.full_text`) and with the text's vector (`text_vector.full_text`).
@@ -29,8 +30,9 @@ centre they were made by kept with the part (`part.full_text`) and with the text
 - **Made by the stages that make the windows**, of the windows of the run: the chapters' by the stage of the chapters
   (`PartVectors`, `ChapterEncoding`), the texts' by the stage of the texts (`TextVectors`, `TextWindows`); of a text
   whose windows are made and whose full-text vectors are not, of the vectors kept, no model run.
-- **The centre** (`FullTextCentres`, the model database `full_text_centre`): the mean of the windows the encoder makes
-  of 300 chapters and 2 000 texts searched by meaning of every source drawn at random — learnt once of an encoder of
+- **The centre and the rotation** (`FullTextCentres`, the model database `full_text_centre`): the mean of the windows
+  the encoder makes of 300 chapters and 2 000 texts searched by meaning of every source drawn at random, and a random
+  orthogonal matrix (Gram-Schmidt of numbers of a normal law) — learnt once of an encoder of
   windows, at a start or as the texts of a type are written (`fitFullTextCentre`); learnt anew, every window's full-text
   vector is made anew.
 - **Why these vectors, and why out of Lucene** (owner, 2026-11-25): the windows' vectors in Lucene's graph (HNSW) were float
@@ -38,8 +40,10 @@ centre they were made by kept with the part (`part.full_text`) and with the text
   ficbook's 85 million windows 350 GB in the index beside the store's own copy. The full-text vectors are read whole, one file after
   another, what the disk reads well — 11 GB of the whole of ficbook, seconds when the system holds them. Measured on 85
   retellings among 129 250 windows: the window of the answer among the first 1 000 79 times, as by the vectors
-  themselves; its chapter among the first 300 78 times against 79. Of the signs of numbers not less the centre 71
-  times; of the signs of the 256 leading directions (32 bytes) 68; of a product quantization of 64 bytes 67.
+  themselves; its chapter among the first 100 70 times, among the first 300 81 — of the vectors themselves 67 and 79.
+  Not turned 66 and 78; turned by a Hadamard transform of random signs 67 and 80; not less the centre 63 and 77; of the
+  256 leading directions (32 bytes) 59 and 73; of a product quantization of 64 bytes 51 and 72. The line in 4 bits a
+  number loses nothing against its numbers whole.
 
 ## A search
 
@@ -47,8 +51,9 @@ centre they were made by kept with the part (`part.full_text`) and with the text
    stemmed so, without the function words (`Stemmers.stopWords`).
 2. **By meaning** (`FullTextNearest`, given the plugin by `SearchContext.nearest`): the line's vector (`TextVectors.query`,
    one short line on the thread of the request), moved by the correction the user's judgments of snippets taught
-   (`QueryShift`: q·p + (q·a)(b·p)), less the centre, against the full-text vector of every window of the type, read
-   whole — every number of the line with the sign of the window's —: the 8 000 windows of the best scores, an item counting with its
+   (`QueryShift`: q·p + (q·a)(b·p)), less the centre, turned, in 4 bits a number — 16 levels evenly from its least to
+   its most —, against the full-text vector of every window of the type, read whole: of every bit of the line's levels
+   the bits it shares with the window's, counted (`popcount`) — the 8 000 windows of the best scores, an item counting with its
    best; its closeness (`MeaningSearch.closeness`, the plugin's) the score on the scale of the line's own nearest.
 3. **By words** (`WordSearch`): the words in any of their forms or as beginnings of words, in every field, weighed by the
    field; the whole line in a naming field (title, author) a bonus.

@@ -112,8 +112,7 @@ class TextWindows(private val plugins: Plugins) {
             store.parts.pieces.saveText(t.itemId, t.key, fitted.projection.key, fitted.codebook.codes(pieces.pieces))
         val centre = with.centre
         if (centre != null && spans.size == windows.size) {
-            val packed =
-                FullTextVectors.pack(spans.zip(windows) { r, v -> TextWindow(r.first, r.last + 1, v) }, centre.centre)
+            val packed = FullTextVectors.pack(spans.zip(windows) { r, v -> TextWindow(r.first, r.last + 1, v) }, centre)
             store.parts.fullText.saveText(t.itemId, t.key, centre.key, packed)
         }
     }

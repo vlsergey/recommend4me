@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import java.time.Instant
+import java.util.Random
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -24,13 +25,13 @@ private val log = LoggerFactory.getLogger(FullTextCentres::class.java)
 data class FullTextCentreFitEvent(val type: String)
 
 /**
- * THE CENTRE OF THE WINDOWS' VECTORS OF A TYPE, what every window's full-text vector is taken less ([FullTextVectors]):
- * the mean of the windows of [CHAPTERS] chapters and [TEXTS] texts searched by meaning of every source drawn at random,
- * by the encoder — of the texts themselves, not of the vectors kept: a type is learnt of as its texts are written,
- * before any vector of them is made. Learnt once of an encoder of windows when none is kept ([fitFullTextCentre]), what
- * the data say at a start and as the texts or the chapters of a type are written; of fewer than [LEAST] vectors
- * nothing, and no window of the type is searched by meaning. Learnt anew, every window's full-text vector is made anew
- * ([FullTextCentreFitEvent]).
+ * THE CENTRE OF THE WINDOWS' VECTORS OF A TYPE AND ITS RANDOM ROTATION, what every window's full-text vector is made by
+ * ([FullTextVectors]): the mean of the windows of [CHAPTERS] chapters and [TEXTS] texts searched by meaning of every
+ * source drawn at random, by the encoder — of the texts themselves, not of the vectors kept: a type is learnt of as its
+ * texts are written, before any vector of them is made. Learnt once of an encoder of windows when none is kept
+ * ([fitFullTextCentre]), what the data say at a start and as the texts or the chapters of a type are written; of fewer
+ * than [LEAST] vectors nothing, and no window of the type is searched by meaning. Learnt anew, every window's full-text
+ * vector is made anew ([FullTextCentreFitEvent]).
  */
 @Service
 class FullTextCentres(
@@ -95,6 +96,7 @@ class FullTextCentres(
             FullTextCentre(
                 now.toEpochMilli().toString(Character.MAX_RADIX),
                 FloatArray(sum.size) { (sum[it] / vectors.size).toFloat() },
+                FullTextCentre.rotation(sum.size, Random(now.toEpochMilli())),
                 now,
                 vectors.size,
             )

@@ -120,8 +120,7 @@ internal class ChapterEncoding(private val with: Encoding, private val events: A
         val centre = with.centre ?: return
         val spans = encoder.windowSpans(part.content)
         if (spans.size != windows.size) return
-        val packed =
-            FullTextVectors.pack(spans.zip(windows) { r, v -> TextWindow(r.first, r.last + 1, v) }, centre.centre)
+        val packed = FullTextVectors.pack(spans.zip(windows) { r, v -> TextWindow(r.first, r.last + 1, v) }, centre)
         s.parts.fullText.save(part.itemId, part.partId, centre.key, packed)
     }
 

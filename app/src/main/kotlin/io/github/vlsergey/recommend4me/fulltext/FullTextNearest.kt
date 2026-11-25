@@ -24,7 +24,7 @@ class FullTextNearest(private val centres: FullTextCentres) {
 
     /** The items of the [type] nearest to the line's vector [q], their windows nearest; none of no centre learnt. */
     fun nearest(type: TypeStore, q: FloatArray): Map<ItemKey, SearchNearest> {
-        val centre = centres.of(type)?.centre?.takeIf { it.size == q.size } ?: return emptyMap()
+        val centre = centres.of(type)?.takeIf { it.centre.size == q.size } ?: return emptyMap()
         val started = System.currentTimeMillis()
         val query = FullTextVectors.query(q, centre)
         val best = PriorityQueue<Found>(compareBy { it.score })

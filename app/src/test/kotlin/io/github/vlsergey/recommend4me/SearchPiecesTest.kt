@@ -54,14 +54,20 @@ class SearchPiecesTest : SiteTestBase() {
     @Test
     fun `the pieces of the chapters made by the projection learnt, and the place of a line found by them`() {
         val store = stores.source(site)!!
-        ids.forEach { capture("$it|The voyage $it|space|A work of chapters||") }
+        // No annotation: the works found by meaning by their chapters alone
+        ids.forEach { capture("$it|The voyage $it|space|||") }
         ids.forEachIndexed { k, id ->
             store.parts.save(
                 id,
                 (1..12).map { n ->
                     val words =
                         when {
-                            id == "spc1" && n == 3 -> mapOf(100 to "маяки", 101 to "рифов", 102 to "бухта")
+                            // The line's words together, twice: a chapter near the line beyond what a toy encoder's
+                            // full-text vectors blur
+                            id == "spc1" && n == 3 ->
+                                listOf("маяки", "рифов", "бухта", "маяки", "рифов", "бухта")
+                                    .withIndex()
+                                    .associate { (k, w) -> 100 + k to w }
                             id == "spc2" && n == 3 -> mapOf(20 to "маяки", 120 to "рифов", 200 to "бухта")
                             else -> emptyMap()
                         }

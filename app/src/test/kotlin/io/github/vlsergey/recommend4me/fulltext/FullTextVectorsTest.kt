@@ -1,13 +1,15 @@
 package io.github.vlsergey.recommend4me.fulltext
 
+import java.time.Instant
 import java.util.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * The full-text vectors of the windows as they are kept and read: every window's characters read back, a bit a number;
- * the line's own window the first by its score, and the scores in the order of the cosines of windows near and far.
+ * The full-text vectors of the windows as they are kept and read: every window's characters read back, a bit a number
+ * after a random rotation; the line's own window the first by its score, and the scores in the order of the cosines of
+ * windows near and far.
  */
 class FullTextVectorsTest {
     private val draw = Random(5)
@@ -22,7 +24,14 @@ class FullTextVectorsTest {
     @Test
     fun `the windows read back, the nearer to the line the higher`() {
         val dim = 100
-        val centre = FloatArray(dim) { 0.05f * draw.nextGaussian().toFloat() }
+        val centre =
+            FullTextCentre(
+                "c",
+                FloatArray(dim) { 0.05f * draw.nextGaussian().toFloat() },
+                FullTextCentre.rotation(dim, draw),
+                Instant.now(),
+                0,
+            )
         val line = unit(gaussian(dim))
         // The line's own vector, one near it, one farther, one apart
         val near = unit(FloatArray(dim) { line[it] + 0.5f * draw.nextGaussian().toFloat() / 10 })
@@ -31,9 +40,9 @@ class FullTextVectorsTest {
         val windows = listOf(line, near, farther, apart).mapIndexed { k, v -> TextWindow(k * 10, k * 10 + 7, v) }
         val packed = FullTextVectors.pack(windows, centre)
         assertEquals(
-            FullTextVectors.HEAD + 4 * (FullTextVectors.WINDOW_HEAD + 13),
+            FullTextVectors.HEAD + 4 * (FullTextVectors.WINDOW_HEAD + 2 * Long.SIZE_BYTES),
             packed.size,
-            "13 bytes of 100 signs",
+            "two words of 100 bits",
         )
 
         val query = FullTextVectors.query(line, centre)
