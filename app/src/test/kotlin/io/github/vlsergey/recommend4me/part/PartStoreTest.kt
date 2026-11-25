@@ -46,4 +46,27 @@ class PartStoreTest {
         // Kept across a reopening
         PartStore(folder).use { assertEquals("Sed do eiusmod", it.text("w10", "p1")) }
     }
+
+    @Test
+    fun `the vectors of many parts kept apart from their keys in a few shared files, not a file a part`() {
+        val folder = Files.createTempDirectory("parts")
+        val parts = 300
+        val vector = FloatArray(VECTOR) { it / VECTOR.toFloat() }
+        PartStore(folder).use { store ->
+            repeat(parts) { store.putWindows("w$it", "p1", List(WINDOWS) { vector }) }
+        }
+        // Reopened: what the log held flushed, the large values into files of their own
+        PartStore(folder).use { store ->
+            repeat(parts) { assertEquals(WINDOWS, store.windows("w$it", listOf("p1")).getValue("p1").size) }
+            assertContentEquals(vector, store.windows("w7", listOf("p1")).getValue("p1")[3], "within half precision")
+        }
+        val blobs = Files.walk(folder).use { files -> files.filter { it.toString().endsWith(".blob") }.count() }
+        assertTrue(blobs in 1..2, "$blobs files of the vectors of $parts parts")
+    }
+
+    private companion object {
+        /** Numbers of a vector, and windows of a part: a part's vectors are tens of kilobytes. */
+        const val VECTOR = 1024
+        const val WINDOWS = 24
+    }
 }

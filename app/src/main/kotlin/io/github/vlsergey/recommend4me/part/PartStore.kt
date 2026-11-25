@@ -27,7 +27,8 @@ class KeptParagraph(val vector: FloatArray, val hash: String)
  * - its text in [TEXT], compressed by zstd with a dictionary trained on the texts themselves, the same words of every
  *   chapter compressed once;
  * - the vectors of its windows in [WINDOWS] and of its paragraphs with the hashes of their texts in [PARAGRAPHS], half
- *   precision, as they are: numbers do not compress.
+ *   precision, as they are: numbers do not compress. Kept apart from their keys, in files shared by thousands of
+ *   parts.
  *
  * What a part has — whether its text is kept, its windows encoded and by what — the database says ([PartRepository]);
  * this holds the bytes. A value written goes to the store's log first: a stop between keeps it, or loses it whole.
@@ -48,7 +49,18 @@ class PartStore(folder: Path) : AutoCloseable {
                     .setMaxDictBytes(DICTIONARY_BYTES)
                     .setZStdMaxTrainBytes(DICTIONARY_TRAINING_BYTES)
             )
-    private val vectorOptions = ColumnFamilyOptions().setCompressionType(CompressionType.NO_COMPRESSION)
+    // The vectors, written once and never changed, kept apart from their keys (RocksDB's integrated BlobDB): a part's
+    // tens of kilobytes written once into files shared by thousands of parts, and the compaction moving the keys and
+    // their references alone — not every part's vectors again at every level, 90-380 MB a compaction of ficbook's store
+    // on the disk of the data (owner, 2026-11-25: "but not a file a chapter")
+    private val vectorOptions =
+        ColumnFamilyOptions()
+            .setCompressionType(CompressionType.NO_COMPRESSION)
+            .setEnableBlobFiles(true)
+            .setMinBlobSize(BLOB_LEAST)
+            .setBlobFileSize(BLOB_FILE)
+            .setBlobCompressionType(CompressionType.NO_COMPRESSION)
+            .setEnableBlobGarbageCollection(true)
     private val db: RocksDB
 
     init {
@@ -167,6 +179,12 @@ class PartStore(folder: Path) : AutoCloseable {
 
         /** Past every key of an item: the separator's next. */
         const val AFTER_SEPARATOR = '\u0001'
+
+        /**
+         * The least value kept apart from its key — a part's vectors, not a gap's —, and the size of a file of them.
+         */
+        const val BLOB_LEAST = 4L * 1024
+        const val BLOB_FILE = 256L * 1024 * 1024
 
         /** The dictionary zstd compresses the texts of a file of the store with, trained on a hundred times as much. */
         const val DICTIONARY_BYTES = 64 * 1024

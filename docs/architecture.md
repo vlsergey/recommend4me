@@ -121,8 +121,9 @@ sources/<source>/source.mv.db      what the site says: works, facets, numbers, t
                                    compressed form of the same scrape
 sources/<source>/parts/            the texts of the parts and the vectors of their windows and
                                    paragraphs, outside the database (RocksDB, the texts compressed
-                                   by zstd with a dictionary of their own): tens of gigabytes of
-                                   chapters, which an H2 file holds badly
+                                   by zstd with a dictionary of their own, the vectors in blob
+                                   files shared by thousands of parts, apart from their keys):
+                                   tens of gigabytes of chapters, which an H2 file holds badly
 sources/<source>/corrections.mv.db the user's corrections: tags added and removed, fields
                                    overridden, duplicates merged within the source and with
                                    the other sources of its type (kept by the smaller key)
