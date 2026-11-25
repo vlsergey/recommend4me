@@ -3,13 +3,14 @@ package io.github.vlsergey.recommend4me.fulltext
 import java.time.Instant
 import java.util.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
  * The full-text vectors of the windows as they are kept and read: every window's characters read back, a bit a number
  * after a random rotation; the line's own window the first by its score, and the scores in the order of the cosines of
- * windows near and far.
+ * windows near and far; a value of another format, or cut short, not read.
  */
 class FullTextVectorsTest {
     private val draw = Random(5)
@@ -47,6 +48,12 @@ class FullTextVectorsTest {
         )
 
         val query = FullTextVectors.query(line, centre)
+        assertTrue(FullTextVectors.readable(packed, query), "of the query's format")
+        // Of the format before, a byte of signs a number: 13 bytes a window of 100 numbers, not words of 64 bits
+        val before = java.nio.ByteBuffer.allocate(FullTextVectors.HEAD + 4 * (FullTextVectors.WINDOW_HEAD + 13))
+        before.putInt(13).putInt(4)
+        assertFalse(FullTextVectors.readable(before.array(), query), "of the format before")
+        assertFalse(FullTextVectors.readable(packed.copyOf(packed.size - 1), query), "cut short")
         val read = ArrayList<Triple<Int, Int, Float>>()
         FullTextVectors.forEachWindow(packed) { from, to, at -> read += Triple(from, to, query.score(packed, at)) }
         assertEquals(listOf(0 to 7, 10 to 17, 20 to 27, 30 to 37), read.map { it.first to it.second })

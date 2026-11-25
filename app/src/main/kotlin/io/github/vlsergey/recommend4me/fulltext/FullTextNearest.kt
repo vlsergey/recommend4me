@@ -30,8 +30,13 @@ class FullTextNearest(private val centres: FullTextCentres) {
         val query = FullTextVectors.query(q, centre)
         val best = PriorityQueue<NearWindow>(compareBy { it.score })
         var windows = 0L
+        var unread = 0
         type.sources.forEach { s ->
             s.parts.fullText.forEach { item, text, packed ->
+                if (!FullTextVectors.readable(packed, query)) {
+                    unread++
+                    return@forEach
+                }
                 FullTextVectors.forEachWindow(packed) { from, to, at ->
                     windows++
                     val score = query.score(packed, at)
@@ -48,9 +53,11 @@ class FullTextNearest(private val centres: FullTextCentres) {
         val out = LinkedHashMap<ItemKey, SearchNearest>()
         nearest.forEach { w -> out.putIfAbsent(w.key, SearchNearest(w.score.toDouble(), w.passage)) }
         log.info(
-            "{}: {} windows read by their full-text vectors, {} items nearest, in {} ms",
+            "{}: {} windows read by their full-text vectors ({} texts of another format left till made anew), " +
+                "{} items nearest, in {} ms",
             type.id,
             windows,
+            unread,
             out.size,
             System.currentTimeMillis() - started,
         )

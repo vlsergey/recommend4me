@@ -37,6 +37,21 @@ object FullTextVectors {
         return out.array()
     }
 
+    /**
+     * Whether [packed] is of the format the [query] reads: of as many words of bits a window, as long as its windows
+     * take. A value of a format before, or of another encoder's centre, is not — its text waits for its stage to make
+     * it anew ([io.github.vlsergey.recommend4me.part.ChapterEncoding]); read as one, it reads beyond its end.
+     */
+    fun readable(packed: ByteArray, query: Query): Boolean {
+        if (packed.size < HEAD) return false
+        val buffer = ByteBuffer.wrap(packed)
+        val words = buffer.getInt(0)
+        val count = buffer.getInt(Int.SIZE_BYTES)
+        return words == query.words &&
+            count >= 0 &&
+            packed.size == HEAD + count * (WINDOW_HEAD + words * Long.SIZE_BYTES)
+    }
+
     /** Every window of the text kept as [packed]: its characters, and where its bits begin in [packed]. */
     inline fun forEachWindow(packed: ByteArray, action: (from: Int, to: Int, at: Int) -> Unit) {
         val buffer = ByteBuffer.wrap(packed)
@@ -73,6 +88,10 @@ object FullTextVectors {
      * the window's signs grows with.
      */
     class Query(private val planes: Array<LongArray>, private val least: Float, private val step: Float) {
+        /** The words of 64 bits of a window's bits it reads. */
+        val words
+            get() = planes[0].size
+
         /** The score of the window whose bits begin at [at] of [packed]: the higher, the nearer. */
         fun score(packed: ByteArray, at: Int): Float {
             val buffer = ByteBuffer.wrap(packed)
