@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.contenttype.Books
+import io.github.vlsergey.recommend4me.contenttype.ContentType
 import io.github.vlsergey.recommend4me.encoder.EncodedPieces
 import io.github.vlsergey.recommend4me.encoder.PieceEncoder
 import io.github.vlsergey.recommend4me.encoder.PieceProjection
@@ -46,13 +47,32 @@ class SitePlugins {
 
     /**
      * The sites of the scenarios whose models are of their own works alone: [SiteTest], [SiteUniversesTest],
-     * [SiteOriginalToUniverseTest].
+     * [SiteOriginalToUniverseTest]; and of [SiteTagDescriptionsTest], whose requests of the site are its own alone.
      */
     @Bean fun tagSite(): Source = SiteSource(SiteTest.SITE)
 
     @Bean fun universeSite(): Source = SiteSource(SiteUniversesTest.SITE)
 
     @Bean fun originalSite(): Source = SiteSource(SiteOriginalToUniverseTest.SITE)
+
+    @Bean fun descriptionSite(): Source = SiteSource(SiteTagDescriptionsTest.SITE)
+
+    /**
+     * The content type of the scenario whose computations are over every work of a type — the projection of the pieces
+     * learnt, every stage set at nought by it ([SearchPiecesTest]) —, a kind of books of its own, and its site: what it
+     * does to its type no other class's works see.
+     */
+    @Bean
+    fun piecesType(): ContentType =
+        ContentType(
+            SearchPiecesTest.TYPE,
+            universes = true,
+            facets = Books.TYPE.facets,
+            layer = Books.TYPE.layer,
+            numbers = Books.TYPE.numbers,
+        )
+
+    @Bean fun piecesSite(): Source = SiteSource(SearchPiecesTest.SITE, SearchPiecesTest.TYPE)
 
     @Bean fun wordsEncoder(): TextEncoder = WordsEncoder()
 
@@ -170,7 +190,7 @@ class SitePlugins {
      * "<id>.example": the scenarios whose models are of their own works alone have a site of their own, the one
      * application of the tests ([BaseTest]) holding them all.
      */
-    class SiteSource(override val id: String = ID) : Source {
+    class SiteSource(override val id: String = ID, override val contentType: String = Books.ID) : Source {
         companion object {
             /** The site of every class of the tests but those of a site of their own. */
             const val ID = "site"
@@ -195,7 +215,6 @@ class SitePlugins {
             const val WORDS = "https://site.example/words/"
         }
 
-        override val contentType = "books"
         override val homepage = "https://$id.example"
 
         /** The site's pages of what a tag means, of a tag's other names and of a series, by their address. */
