@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
+import kotlin.math.abs
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -27,11 +28,10 @@ data class WorkMannerChangeEvent(val type: String, val items: Int)
 /**
  * THE MANNER OF EVERY ITEM WITH A TEXT, AND OF EVERY NORMALIZED AUTHOR AND SERIES ([MannerGroups]), made in the queue
  * of the computations after the chapters read, the items written or the user's word on what is one work, series or
- * author go quiet, and on start: the words of the content type ([MannerWords]) fitted on every text of it — again
- * whenever the number of the items with a text changes, every manner then made again by them, as the directions of the
- * sets are ([SetDirections] [io.github.vlsergey.recommend4me.setvector.SetDirections]) —, else the manner of every item
- * whose texts changed made by the words kept. Two passes over every text to fit: the words chosen of the first, the
- * shares of the second.
+ * author go quiet, and on start: the words of the content type ([MannerWords]) fitted on every text of it — again when
+ * the number of the items with a text changed by a hundredth of the one they were fitted on ([REFIT]), every manner
+ * then made again by them —, else the manner of every item whose texts changed made by the words kept. Two passes over
+ * every text to fit: the words chosen of the first, the shares of the second.
  */
 @Service
 class Manners(
@@ -46,7 +46,7 @@ class Manners(
         val texts = type.sources.associateWith { s -> s.parts.marks.of(null).mapValues { (_, parts) -> hashOf(parts) } }
         val count = texts.values.sumOf { it.size }
         val kept = type.mannerWords.find()
-        val fitting = count > 0 && (kept == null || kept.texts != count)
+        val fitting = refits(kept?.texts, count)
         val made =
             when {
                 fitting -> fitted(type, texts, count)
@@ -149,6 +149,17 @@ class Manners(
 
         /** The quiet after the last chapters read before the manners are made: a reader reads on. */
         private const val QUIET_SECONDS = 60L
+
+        /** The words are fitted again as the items with a text change by a [REFIT]th of those they were fitted on. */
+        private const val REFIT = 100
+
+        /**
+         * Whether the words fitted on [kept] items with a text — none when there are none — are fitted again of the
+         * [count] there are now: as they change by a hundredth (owner, 2026-11-25, of the models: "accumulated --
+         * scheduled the update"), not of every new chapter — every text of the type read again, half an hour of
+         * ficbook's.
+         */
+        fun refits(kept: Int?, count: Int): Boolean = count > 0 && (kept == null || abs(count - kept) * REFIT >= kept)
 
         /** The items whose texts are read at once: memory, not meaning. */
         private const val CHUNK = 50

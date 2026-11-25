@@ -96,11 +96,13 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
         assertNotEquals(own.toList(), again.blocks(ItemKey("alpha", "mn1")).getValue(TypeManners.WORK).toList())
         assertEquals(m4, type.source("alpha")!!.manner.made().getValue("mn4"))
 
-        // A text more: the words fitted again, every manner made by them
-        work("m5", "mn-bob", "The night was long and the road was longer.")
+        // Texts more by a hundredth of those the words were fitted on — of the other classes' too, in the one
+        // application of the tests: the words fitted again, every manner made by them
+        val more = words.texts / 100 + 1
+        (1..more).forEach { work("m5-$it", "mn-bob", "The night was long and the road was longer, $it.") }
         manners.refresh(type)
         val refitted = assertNotNull(type.mannerWords.find())
-        assertEquals(words.texts + 1, refitted.texts)
+        assertEquals(words.texts + more, refitted.texts)
         assertNotEquals(words.id, refitted.id)
         assertEquals(setOf(refitted.id), type.source("alpha")!!.manner.made().values.map { it.wordsId }.toSet())
 
@@ -121,7 +123,9 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
         manners.refresh(type)
         val merged = read()
         val texts =
-            listOf("mn1", "mn2", "mn4", "m5").map { merged.blocks(ItemKey("alpha", it)).getValue(TypeManners.WORK) }
+            (listOf("mn1", "mn2", "mn4") + (1..more).map { "m5-$it" }).map {
+                merged.blocks(ItemKey("alpha", it)).getValue(TypeManners.WORK)
+            }
         assertNear(mean(*texts.toTypedArray()), merged.blocks(ItemKey("alpha", "mn3"))[TypeManners.AUTHOR])
         assertEquals(setOf("${minOf(annId, bobId)}"), type.groupManners.made(MannerGroup.AUTHOR).keys)
     }
