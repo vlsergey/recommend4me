@@ -112,11 +112,6 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
                 else -> site
             }
 
-        /**
-         * Every answer of the source: they are few. The names the user gave values are read of all of them — a value
-         * the user named on one work is named so on every work — whether every work is read or a few.
-         */
-        private val answers = s.corrections.allFacets()
         private val facetCorrections = s.corrections.facetsOf(ids)
         private val fields = s.corrections.fieldsOf(ids)
         private val texts = s.items.textsOf(ids)
@@ -130,16 +125,24 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
                 s.singleFacets,
             )
         }
-        private val names =
-            schema.facets.associate { def ->
-                def.key to
-                    s.names(
-                        def.key,
+        /**
+         * The names of the values of the items, the source's read in one pass over its dictionary; and the names the
+         * user gave them, read by the values — a value the user named on one work is named so on every work.
+         */
+        private val names: Map<String, Map<String, String>> = run {
+            val wanted =
+                schema.facets.associate { def ->
+                    def.key to
                         ids.flatMapTo(LinkedHashSet()) {
                             corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty()
-                        },
-                    ) + answers.filter { it.facet == def.key && it.name != null }.associate { it.key to it.name!! }
+                        }
+                }
+            s.names(wanted).mapValues { (facet, named) ->
+                val keys = wanted[facet].orEmpty()
+                if (keys.isEmpty()) named
+                else named + s.corrections.facetsWith(facet, keys, named = true).associate { it.key to it.name!! }
             }
+        }
         /** Every chapter of every item with its text: of a document of the index. */
         private val parts by lazy { s.parts.contentsOf(ids) }
 

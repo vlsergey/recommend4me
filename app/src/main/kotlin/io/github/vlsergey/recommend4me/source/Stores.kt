@@ -198,6 +198,17 @@ class SourceStore(
      * ([UniverseNames]); of any other facet, as the source does.
      */
     fun names(facet: String, keys: Collection<String>): Map<String, String> =
+        names(facet, keys) { items.facetNames(facet, it) }
+
+    /**
+     * What the values [keys] of a facet are shown by, as [names] tells, the source's own names of them given by [own]:
+     * of many facets, the source's names of them all read in one pass ([names] of many).
+     */
+    private fun names(
+        facet: String,
+        keys: Collection<String>,
+        own: (Collection<String>) -> Map<String, String>,
+    ): Map<String, String> =
         when {
             keys.isEmpty() -> emptyMap()
             // A language by its code, named as the model reads it ([StandardLanguages])
@@ -207,10 +218,22 @@ class SourceStore(
                 // The tags as the user and every site name them ([TagRepository]); one the user made up, by the source
                 val shown = tags.stats.shown(keys)
                 val rest = keys.filter { it !in shown }
-                (if (rest.isEmpty()) emptyMap() else items.facetNames(facet, rest)) + shown
+                (if (rest.isEmpty()) emptyMap() else own(rest)) + shown
             }
-            else -> dictionaryNames?.of(facet, keys) { items.facetNames(facet, it!!) } ?: items.facetNames(facet, keys)
+            else -> dictionaryNames?.of(facet, keys) { own(it!!) } ?: own(keys)
         }
+
+    /**
+     * What the values of every facet of [wanted] — facet to keys — are shown by, as [names] tells of one: the source's
+     * own names of them read in one pass over its dictionary ([FacetDictionary.facetNames] of many), not a pass a
+     * facet.
+     */
+    fun names(wanted: Map<String, Collection<String>>): Map<String, Map<String, String>> {
+        val own = items.facetNames(wanted.filterValues { it.isNotEmpty() })
+        return wanted.mapValues { (facet, keys) ->
+            names(facet, keys) { asked -> own[facet].orEmpty().filterKeys { it in asked } }
+        }
+    }
 
     /**
      * What the catalogue says of the values [keys] of a facet of universes or characters: key to description; none of

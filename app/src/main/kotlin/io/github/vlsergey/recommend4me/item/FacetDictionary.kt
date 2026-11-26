@@ -29,6 +29,12 @@ interface FacetDictionary {
     /** Every named value of one facet: key to name. */
     fun facetNames(facet: String): Map<String, String>
 
+    /**
+     * The names of the values [wanted] of every facet, facet to keys: of a few keys, each looked up; of more, one pass
+     * over the table for every facet together. Facet to key to name.
+     */
+    fun facetNames(wanted: Map<String, Collection<String>>): Map<String, Map<String, String>>
+
     /** The keys of the facet's values named each of the [names], by the index of the names: name to its keys. */
     fun keysNamed(facet: String, names: Collection<String>): Map<String, List<String>>
 
@@ -109,6 +115,18 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
     private fun scan(sql: String, row: (ResultSet) -> Unit) = db.scanned(sql, row)
 
     override fun facetNames(facet: String): Map<String, String> = namesInOnePass(facet, null)
+
+    override fun facetNames(wanted: Map<String, Collection<String>>): Map<String, Map<String, String>> {
+        if (wanted.values.sumOf { it.size } <= LOOKED_UP) return wanted.mapValues { (f, keys) -> facetNames(f, keys) }
+        val sets = wanted.mapValues { it.value.toHashSet() }
+        val out = HashMap<String, HashMap<String, String>>()
+        scan("SELECT facet, value_key, name FROM facet_value") { r ->
+            val facet = r.getString("facet")
+            val key = r.getString("value_key")
+            if (sets[facet]?.contains(key) == true) out.getOrPut(facet) { HashMap() }[key] = r.getString("name")
+        }
+        return out
+    }
 
     /** One lookup a name, by the index of the names: H2 matches a list bound to the query against every row. */
     override fun keysNamed(facet: String, names: Collection<String>): Map<String, List<String>> =
