@@ -42,6 +42,9 @@ class Molwe : Source {
     override val homepage = HOME
     override val modes = setOf(SourceMode.BROWSER, SourceMode.PAGE)
 
+    /** The columns of its texts in the item's row. */
+    override val migrations = listOf("classpath:db/molwe")
+
     override val schema =
         SourceSchema(
             facets =

@@ -242,6 +242,8 @@ class SitePlugins {
         }
 
         override val homepage = "https://$id.example"
+        /** The columns of its texts in the item's row. */
+        override val migrations = listOf("classpath:db/test-sites")
 
         /** The site's pages of what a tag means, of a tag's other names and of a series, by their address. */
         private val describes = "$homepage/tags/"

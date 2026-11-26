@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index; when every outer kind of its data last changed — what the site says of it (`data_at`), its chapters' texts (`chapters_at`), its reviews (`reviews_at`), its pictures analysed (`pictures_at`) —: what the stages of the tasks over the works take it by, each by the kinds it reads |
+| `item` | a work of the site, kept by a number of the application's own (`internal_id`: the key H2 keeps the rows by, a row read by it one tree of the file) beside the site's id (`site_id`, unique, what every other table binds a work by): its address, title, version and dates; the texts the site gives it, a column each the source's own migrations make (`site_text_<key>`, `SiteTexts.columnOf`: the description, the notes…), read with its row; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index; when every outer kind of its data last changed — what the site says of it (`data_at`), its chapters' texts (`chapters_at`), its reviews (`reviews_at`), its pictures analysed (`pictures_at`) —: what the stages of the tasks over the works take it by, each by the kinds it reads |
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
@@ -13,7 +13,6 @@
 | `facet_value_parent` | a value the site puts another under (AO3's metatags and subtags): the tag or the universe of the one put under that of the other |
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |
-| `item_text` | a work's text by role: the description, the notes… |
 | `text_vector` | the vector of a text, with the hash of the text and the encoder; how many windows it has, and what they were made by (`windows_by`: the encoder and its way of cutting a text); the key of the projection its pieces' codes were made by (`pieces`) and of the centre the full-text vectors of its windows were made by (`full_text`), the codes and the full-text vectors in the store of the parts under `text:<key>` |
 | `text_window` | the vector of every window of a text longer than one window of the encoder: a scene of it, overlapping the next by half — what the full-text vectors the search finds a piece of a long text by are made of |
 | `phrase_vector` | the vector of a short text — a review, a tag's name, a phrase of the search — by the key of the text |
@@ -67,7 +66,8 @@ erDiagram
         VARBINARY vec
     }
     item {
-        VARCHAR item_id PK
+        BIGINT internal_id PK
+        VARCHAR site_id
         VARCHAR url
         VARCHAR title
         VARCHAR version
@@ -112,11 +112,6 @@ erDiagram
         VARCHAR block PK
         VARCHAR encoder
         VARBINARY vec
-    }
-    item_text {
-        VARCHAR item_id PK, FK
-        VARCHAR text_key PK
-        CLOB content
     }
     item_version {
         VARCHAR item_id PK, FK
@@ -219,7 +214,6 @@ erDiagram
     item ||--o{ item_manner : "item_id"
     item ||--o{ item_number : "item_id"
     item ||--o{ item_picture_vector : "item_id"
-    item ||--o{ item_text : "item_id"
     item ||--o{ item_version : "item_id"
     item ||--o{ part : "item_id"
     item ||--o{ picture : "item_id"

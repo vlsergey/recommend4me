@@ -55,6 +55,8 @@ class ScenarioTest : BaseTest() {
         override val id = "test"
         override val contentType = "books"
         override val homepage = "https://test.example"
+        /** The columns of its texts in the item's row. */
+        override val migrations = listOf("classpath:db/test-sites")
         override val schema =
             SourceSchema(
                 facets = listOf(FacetDef("tag", filter = true, searchWeight = 0.9f, onCard = true)),

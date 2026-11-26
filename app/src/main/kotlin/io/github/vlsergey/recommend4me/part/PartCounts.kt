@@ -43,7 +43,7 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
         val kept =
             db.select(listOf(ITEM.TEXT_WORDS, ITEM.TEXT_CHARS) + COLUMNS)
                 .from(ITEM)
-                .where(ITEM.ITEM_ID.eq(itemId))
+                .where(ITEM.SITE_ID.eq(itemId))
                 .fetchOne()
                 ?.intoList()
         // Written, and the item's date with them, only as they change: what the index of the list holds of it
@@ -56,7 +56,7 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
                 .set(ITEM.CHANGED_AT, now)
                 .set(ITEM.CHAPTERS_AT, now)
         COLUMNS.forEachIndexed { k, column -> update = update.set(column, counts[k + 2]) }
-        update.where(ITEM.ITEM_ID.eq(itemId)).execute()
+        update.where(ITEM.SITE_ID.eq(itemId)).execute()
     }
 
     /**
@@ -66,25 +66,25 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
     fun classes(ids: Collection<String>?): Map<String, IntArray> {
         val out = HashMap<String, IntArray>()
         fun read(condition: org.jooq.Condition) =
-            db.select(ITEM.ITEM_ID, *COLUMNS.toTypedArray())
+            db.select(ITEM.SITE_ID, *COLUMNS.toTypedArray())
                 .from(ITEM)
                 .where(condition, ITEM.TEXT_LETTERS_1.isNotNull)
                 .fetchSize(STREAMED)
                 .fetchLazy()
                 .use { cursor ->
                     cursor.forEach { r ->
-                        out[r.get(ITEM.ITEM_ID)!!] = IntArray(COLUMNS.size) { k -> r.get(COLUMNS[k]) ?: 0 }
+                        out[r.get(ITEM.SITE_ID)!!] = IntArray(COLUMNS.size) { k -> r.get(COLUMNS[k]) ?: 0 }
                     }
                 }
         if (ids == null) read(DSL.noCondition())
-        else ids.distinct().chunked(BATCH).forEach { read(ITEM.ITEM_ID.`in`(it)) }
+        else ids.distinct().chunked(BATCH).forEach { read(ITEM.SITE_ID.`in`(it)) }
         return out
     }
 
     /** The words and the characters of the texts of every item that has any, as kept. */
     fun counted(): Map<String, Pair<Double, Double>> {
         val out = HashMap<String, Pair<Double, Double>>()
-        db.select(ITEM.ITEM_ID, ITEM.TEXT_WORDS, ITEM.TEXT_CHARS)
+        db.select(ITEM.SITE_ID, ITEM.TEXT_WORDS, ITEM.TEXT_CHARS)
             .from(ITEM)
             .where(ITEM.TEXT_CHARS.isNotNull)
             .fetchSize(STREAMED)
@@ -97,9 +97,9 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
     fun counted(ids: Collection<String>): Map<String, Pair<Double, Double>> {
         val out = HashMap<String, Pair<Double, Double>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(ITEM.ITEM_ID, ITEM.TEXT_WORDS, ITEM.TEXT_CHARS)
+            db.select(ITEM.SITE_ID, ITEM.TEXT_WORDS, ITEM.TEXT_CHARS)
                 .from(ITEM)
-                .where(ITEM.ITEM_ID.`in`(chunk), ITEM.TEXT_CHARS.isNotNull)
+                .where(ITEM.SITE_ID.`in`(chunk), ITEM.TEXT_CHARS.isNotNull)
                 .fetch { put(out, it.value1()!!, it.value2(), it.value3()!!) }
         }
         return out

@@ -39,6 +39,8 @@ class TwoSitesPlugins {
         override val id = "alpha"
         override val contentType = "books"
         override val homepage = "https://alpha.example"
+        /** The columns of its texts in the item's row. */
+        override val migrations = listOf("classpath:db/test-sites")
         override val schema =
             SourceSchema(
                 facets =
@@ -108,6 +110,8 @@ class TwoSitesPlugins {
         override val id = "beta"
         override val contentType = "books"
         override val homepage = "https://beta.example"
+        /** The columns of its texts in the item's row. */
+        override val migrations = listOf("classpath:db/test-sites")
         override val schema =
             SourceSchema(
                 facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet(byName = "name:")),

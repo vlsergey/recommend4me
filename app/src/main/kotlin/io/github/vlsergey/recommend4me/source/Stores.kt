@@ -22,6 +22,7 @@ import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemChanges
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.item.SiteTexts
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
@@ -129,7 +130,9 @@ class SourceStore(
     // What the site says written: told as such, the works of the items changed told by their binding after it
     // ([io.github.vlsergey.recommend4me.work.Works])
     val items =
-        ItemRepository(dbs.source.dsl) { ids -> events.publishEvent(SiteItemWriteEvent(source.id, ids.toList())) }
+        ItemRepository(dbs.source.dsl, SiteTexts.keysOf(source.schema)) { ids ->
+            events.publishEvent(SiteItemWriteEvent(source.id, ids.toList()))
+        }
 
     /** When what the index of the list holds of an item last changed. */
     val changes = ItemChanges(dbs.source.dsl)

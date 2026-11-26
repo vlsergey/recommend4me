@@ -23,7 +23,7 @@ class ItemChanges(private val db: DSLContext) {
     fun changed(ids: Collection<String>, datum: WorkDatum, at: Instant) {
         val column = columnOf(datum)
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.update(ITEM).set(ITEM.CHANGED_AT, at).set(column, at).where(ITEM.ITEM_ID.`in`(chunk)).execute()
+            db.update(ITEM).set(ITEM.CHANGED_AT, at).set(column, at).where(ITEM.SITE_ID.`in`(chunk)).execute()
         }
     }
 
@@ -34,17 +34,17 @@ class ItemChanges(private val db: DSLContext) {
     fun of(ids: Collection<String>?): Map<String, Map<WorkDatum, Long>> {
         val out = HashMap<String, Map<WorkDatum, Long>>()
         fun read(condition: Condition) =
-            db.select(listOf(ITEM.ITEM_ID) + COLUMNS.values)
+            db.select(listOf(ITEM.SITE_ID) + COLUMNS.values)
                 .from(ITEM)
                 .where(condition, ITEM.CHANGED_AT.isNotNull)
                 .fetch { r ->
-                    out[r.get(ITEM.ITEM_ID)!!] =
+                    out[r.get(ITEM.SITE_ID)!!] =
                         COLUMNS.entries
                             .mapNotNull { (datum, column) -> r.get(column)?.let { datum to it.toEpochMilli() } }
                             .toMap()
                 }
         if (ids == null) read(DSL.noCondition())
-        else ids.distinct().chunked(BATCH).forEach { read(ITEM.ITEM_ID.`in`(it)) }
+        else ids.distinct().chunked(BATCH).forEach { read(ITEM.SITE_ID.`in`(it)) }
         return out
     }
 
@@ -57,14 +57,14 @@ class ItemChanges(private val db: DSLContext) {
         val after =
             when {
                 cursor == null -> DSL.noCondition()
-                cursor.at == null -> at.isNull.and(ITEM.ITEM_ID.gt(cursor.id)).or(at.isNotNull)
+                cursor.at == null -> at.isNull.and(ITEM.SITE_ID.gt(cursor.id)).or(at.isNotNull)
                 // A range of the index of the dates the reading begins at, not a pass of every item before the cursor
-                else -> at.ge(cursor.at).and(at.gt(cursor.at).or(ITEM.ITEM_ID.gt(cursor.id)))
+                else -> at.ge(cursor.at).and(at.gt(cursor.at).or(ITEM.SITE_ID.gt(cursor.id)))
             }
-        return db.select(ITEM.ITEM_ID, at)
+        return db.select(ITEM.SITE_ID, at)
             .from(ITEM)
             .where(after)
-            .orderBy(at.asc().nullsFirst(), ITEM.ITEM_ID.asc())
+            .orderBy(at.asc().nullsFirst(), ITEM.SITE_ID.asc())
             .limit(limit)
             .fetch { ItemCursor(it.value2(), it.value1()!!) }
     }

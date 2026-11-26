@@ -40,6 +40,7 @@ private constructor(
     private val db: DSLContext,
     private val changed: (Collection<String>) -> Unit,
     dictionary: FacetDictionary,
+    texts: Collection<String>,
 ) :
     FacetDictionary by dictionary,
     FacetValueRelations by FacetValueRelationRepository(db, dictionary),
@@ -47,11 +48,13 @@ private constructor(
     ItemValueKeys by ItemValueKeyRepository(db, changed),
     ItemNumbers by ItemNumberRepository(db),
     ItemKeyList by ItemKeyRepository(db),
-    ItemTexts by ItemTextRepository(db, changed),
-    ItemMeasures by ItemMeasureRepository(db) {
+    ItemTexts by ItemTextRepository(db, changed, texts),
+    ItemMeasures by ItemMeasureRepository(db, texts) {
 
+    /** Of the source whose works have the texts of the keys [texts] ([SiteTexts.keysOf]). */
     constructor(
         db: DSLContext,
+        texts: Collection<String>,
         changed: (Collection<String>) -> Unit,
     ) : this(
         db,
@@ -60,6 +63,7 @@ private constructor(
             changed(ids)
         },
         FacetDictionaryRepository(db),
+        texts,
     )
 
     /**
@@ -73,12 +77,12 @@ private constructor(
                 val known =
                     tx.select(ITEM.VERSION, ITEM.TITLE, ITEM.URL, ITEM.UPDATED_AT)
                         .from(ITEM)
-                        .where(ITEM.ITEM_ID.eq(item.id))
+                        .where(ITEM.SITE_ID.eq(item.id))
                         .fetchOne()
                 val updatedAt = item.updatedAt ?: known?.value4() ?: now
                 if (known == null) {
                     tx.insertInto(ITEM)
-                        .set(ITEM.ITEM_ID, item.id)
+                        .set(ITEM.SITE_ID, item.id)
                         .set(ITEM.URL, item.url)
                         .set(ITEM.TITLE, item.title)
                         .set(ITEM.VERSION, item.version)
@@ -97,7 +101,7 @@ private constructor(
                         .set(ITEM.UPDATED_AT, updatedAt)
                         .set(ITEM.CHANGED_AT, now)
                         .set(ITEM.DATA_AT, now)
-                        .where(ITEM.ITEM_ID.eq(item.id))
+                        .where(ITEM.SITE_ID.eq(item.id))
                         .execute()
                 }
                 val newVersion = known?.value1() != item.version
@@ -117,13 +121,13 @@ private constructor(
         return changedVersion
     }
 
-    fun find(itemId: String): StoredItem? = db.select(HEAD).from(ITEM).where(ITEM.ITEM_ID.eq(itemId)).fetchOne(::head)
+    fun find(itemId: String): StoredItem? = db.select(HEAD).from(ITEM).where(ITEM.SITE_ID.eq(itemId)).fetchOne(::head)
 
     /** The items [ids], in one query per thousand. */
     fun heads(ids: Collection<String>): Map<String, StoredItem> {
         val out = HashMap<String, StoredItem>()
         ids.distinct().chunked(ITEM_BATCH).forEach { chunk ->
-            db.select(HEAD).from(ITEM).where(ITEM.ITEM_ID.`in`(chunk)).fetch { out[it.get(ITEM.ITEM_ID)!!] = head(it) }
+            db.select(HEAD).from(ITEM).where(ITEM.SITE_ID.`in`(chunk)).fetch { out[it.get(ITEM.SITE_ID)!!] = head(it) }
         }
         return out
     }
@@ -137,7 +141,7 @@ private constructor(
 
     fun count(): Int = db.fetchCount(ITEM)
 
-    fun exists(itemId: String): Boolean = db.fetchExists(ITEM, ITEM.ITEM_ID.eq(itemId))
+    fun exists(itemId: String): Boolean = db.fetchExists(ITEM, ITEM.SITE_ID.eq(itemId))
 
     /**
      * The item removed from the library: everything the source database holds of it — its versions, values, texts,
@@ -147,7 +151,7 @@ private constructor(
     fun remove(itemId: String) = db.transaction { c ->
         val tx = c.dsl()
         tx.deleteFrom(CAPTURED_PAGE).where(CAPTURED_PAGE.ITEM_ID.eq(itemId)).execute()
-        tx.deleteFrom(ITEM).where(ITEM.ITEM_ID.eq(itemId)).execute()
+        tx.deleteFrom(ITEM).where(ITEM.SITE_ID.eq(itemId)).execute()
     }
 
     fun latestUpdate(): Instant? = db.select(DSL.max(ITEM.UPDATED_AT)).from(ITEM).fetchOne()?.value1()
@@ -163,7 +167,7 @@ private constructor(
 
     /** The title of every item as the site gives it: item to title. */
     fun titles(): Map<String, String> =
-        db.select(ITEM.ITEM_ID, ITEM.TITLE)
+        db.select(ITEM.SITE_ID, ITEM.TITLE)
             .from(ITEM)
             .fetchSize(STREAMED_ROWS)
             .fetchMap({ it.value1()!! }, { it.value2()!! })
@@ -172,11 +176,11 @@ private constructor(
         /** The heads streamed from the database at a time: memory, not meaning. */
         private const val HEADS_STREAMED = 2000
 
-        private val HEAD = listOf(ITEM.ITEM_ID, ITEM.URL, ITEM.TITLE, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
+        private val HEAD = listOf(ITEM.SITE_ID, ITEM.URL, ITEM.TITLE, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
 
         private fun head(r: Record) =
             StoredItem(
-                id = r.get(ITEM.ITEM_ID)!!,
+                id = r.get(ITEM.SITE_ID)!!,
                 url = r.get(ITEM.URL)!!,
                 title = r.get(ITEM.TITLE)!!,
                 version = r.get(ITEM.VERSION)!!,

@@ -22,7 +22,7 @@ class TextVectorRepositoryTest {
             val now = Instant.now()
             db.dsl
                 .insertInto(ITEM)
-                .set(ITEM.ITEM_ID, "p1")
+                .set(ITEM.SITE_ID, "p1")
                 .set(ITEM.URL, "https://example.org/p1")
                 .set(ITEM.TITLE, "p1")
                 .set(ITEM.VERSION, "")

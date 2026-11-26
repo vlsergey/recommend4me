@@ -24,7 +24,7 @@ class PartTakenOffTest {
         PartStore(folder).use { store ->
             Database("test/source", folder.resolve("source"), "source").use { db ->
                 db.dsl.execute(
-                    "INSERT INTO item (item_id, url, title, version, updated_at, first_seen_at) " +
+                    "INSERT INTO item (site_id, url, title, version, updated_at, first_seen_at) " +
                         "VALUES ('w1', 'u', 't', '', NOW(), NOW())"
                 )
                 val parts = PartRepository(db.dsl, store)

@@ -1,9 +1,10 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_FACET
-import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_TEXT
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import org.jooq.impl.SQLDataType
 
 /**
  * WHAT THE SITE SAYS OF ITS ITEMS, MEASURED — the characters of their texts, the number of their values, whether they
@@ -21,20 +22,26 @@ interface ItemMeasures {
     fun withAnyOf(ids: Collection<String>, facet: String, keys: Collection<String>): Set<String>
 }
 
-/** The [ItemMeasures] of the source database [db]. */
-internal class ItemMeasureRepository(private val db: DSLContext) : ItemMeasures {
+/** The [ItemMeasures] of the source database [db], whose works have the texts of the keys [texts] ([SiteTexts]). */
+internal class ItemMeasureRepository(private val db: DSLContext, texts: Collection<String>) : ItemMeasures {
 
-    override fun lengthsOf(ids: Collection<String>): Map<String, Long> =
-        ids.distinct()
+    /** The length of all the texts of an item's row together. */
+    private val length =
+        texts
+            .map { DSL.coalesce(DSL.charLength(DSL.field(DSL.name(SiteTexts.columnOf(it)), SQLDataType.VARCHAR)), 0) }
+            .reduceOrNull { a, b -> a.plus(b) }
+
+    override fun lengthsOf(ids: Collection<String>): Map<String, Long> {
+        val sum = length ?: return emptyMap()
+        return ids.distinct()
             .chunked(ITEM_BATCH)
             .flatMap { chunk ->
-                db.select(ITEM_TEXT.ITEM_ID, DSL.sum(DSL.charLength(ITEM_TEXT.CONTENT)))
-                    .from(ITEM_TEXT)
-                    .where(ITEM_TEXT.ITEM_ID.`in`(chunk))
-                    .groupBy(ITEM_TEXT.ITEM_ID)
-                    .fetch { it.value1()!! to (it.value2()?.toLong() ?: 0L) }
+                db.select(ITEM.SITE_ID, sum).from(ITEM).where(ITEM.SITE_ID.`in`(chunk)).and(sum.gt(0)).fetch {
+                    it.value1()!! to (it.value2()?.toLong() ?: 0L)
+                }
             }
             .toMap()
+    }
 
     override fun valueCountsOf(ids: Collection<String>): Map<String, Int> =
         ids.distinct()

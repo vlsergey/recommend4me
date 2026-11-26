@@ -17,7 +17,7 @@ class PictureRepositoryTest {
     fun `a failed picture waits till it is due, a lasting failure for ever, a download clears it`() {
         Database("test/source", folder.resolve("source"), "source").use { db ->
             db.dsl.execute(
-                "INSERT INTO item (item_id, url, title, version, updated_at, first_seen_at) " +
+                "INSERT INTO item (site_id, url, title, version, updated_at, first_seen_at) " +
                     "VALUES ('i1', 'u', 't', '', ?, ?)",
                 Instant.now(),
                 Instant.now(),

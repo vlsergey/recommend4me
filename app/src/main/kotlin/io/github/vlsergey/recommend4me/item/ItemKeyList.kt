@@ -35,18 +35,18 @@ internal class ItemKeyRepository(private val db: DSLContext) : ItemKeyList {
 
     override fun keysAfter(after: String?, count: Int): List<ItemKeys> =
         select()
-            .where(after?.let { ITEM.ITEM_ID.gt(it) } ?: DSL.noCondition())
-            .orderBy(ITEM.ITEM_ID)
+            .where(after?.let { ITEM.SITE_ID.gt(it) } ?: DSL.noCondition())
+            .orderBy(ITEM.SITE_ID)
             .limit(count)
             .fetch(::keysOf)
 
     override fun keysOf(ids: Collection<String>): List<ItemKeys> =
         ids.distinct().chunked(ITEM_BATCH).flatMap { chunk ->
-            select().where(ITEM.ITEM_ID.`in`(chunk)).fetch(::keysOf)
+            select().where(ITEM.SITE_ID.`in`(chunk)).fetch(::keysOf)
         }
 
     private fun select(): SelectJoinStep<Record4<String?, String?, Instant?, Instant?>> =
-        db.select(ITEM.ITEM_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT).from(ITEM)
+        db.select(ITEM.SITE_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT).from(ITEM)
 
     private fun keysOf(r: Record4<String?, String?, Instant?, Instant?>) =
         ItemKeys(r.value1()!!, r.value2()!!, r.value3()!!, r.value4()!!)
