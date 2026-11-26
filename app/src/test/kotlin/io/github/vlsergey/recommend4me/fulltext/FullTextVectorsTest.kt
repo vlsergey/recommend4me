@@ -23,6 +23,19 @@ class FullTextVectorsTest {
     private fun gaussian(n: Int) = FloatArray(n) { draw.nextGaussian().toFloat() }
 
     @Test
+    fun `a vector is turned as the rotation's rows multiply it, within the last digits`() {
+        listOf(100, 1024).forEach { dim ->
+            val centre = FullTextCentre("c", gaussian(dim), FullTextCentre.rotation(dim, draw), Instant.now(), 0, 0)
+            val v = unit(gaussian(dim))
+            val got = centre.turned(v)
+            centre.rotation.forEachIndexed { k, row ->
+                val want = row.indices.sumOf { row[it].toDouble() * (v[it] - centre.centre[it]) }
+                assertEquals(want, got[k].toDouble(), 1e-4, "$dim numbers, row $k")
+            }
+        }
+    }
+
+    @Test
     fun `the windows read back, the nearer to the line the higher`() {
         val dim = 100
         val centre =

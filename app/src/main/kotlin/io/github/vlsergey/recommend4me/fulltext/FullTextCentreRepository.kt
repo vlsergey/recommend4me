@@ -5,6 +5,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
 import java.util.Random
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.VectorOperators
 import kotlin.math.sqrt
 import org.jooq.DSLContext
 
@@ -22,18 +24,35 @@ class FullTextCentre(
     /** How many windows the type had as it was learnt: learnt anew of twice as many ([FullTextCentres.read]). */
     val corpus: Long,
 ) {
-    /** The vector [v] less the centre, turned by the rotation. */
+    /**
+     * The vector [v] less the centre, turned by the rotation: every row's product by the lanes of the processor's
+     * vectors, summed in another order than one by one — the last digits alone moved (a tenth of the time a chapter
+     * took, done number after number, 2026-11-26).
+     */
     fun turned(v: FloatArray): FloatArray {
         val less = FloatArray(centre.size) { v[it] - centre[it] }
+        val bound = LANES.loopBound(less.size)
         return FloatArray(rotation.size) { k ->
             val row = rotation[k]
-            var s = 0f
-            for (i in less.indices) s += row[i] * less[i]
+            var sums = FloatVector.zero(LANES)
+            var i = 0
+            while (i < bound) {
+                sums = FloatVector.fromArray(LANES, row, i).fma(FloatVector.fromArray(LANES, less, i), sums)
+                i += LANES.length()
+            }
+            var s = sums.reduceLanes(VectorOperators.ADD)
+            while (i < less.size) {
+                s += row[i] * less[i]
+                i++
+            }
             s
         }
     }
 
     companion object {
+        /** The lanes of the processor's vectors of numbers. */
+        private val LANES = FloatVector.SPECIES_PREFERRED
+
         /**
          * A random rotation of [d] numbers: the rows of a matrix of numbers drawn of a normal law, made orthonormal one
          * after another (Gram-Schmidt) — what RaBitQ turns the vectors by before their bits are taken.
