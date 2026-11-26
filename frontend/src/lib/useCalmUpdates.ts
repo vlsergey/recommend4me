@@ -33,8 +33,11 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
   shownNow.current = shown;
   const lockedNow = useRef(false);
   const rows = useRef(new Map<string, HTMLElement>());
-  /** Where every row stood before the list changed, and how long it moves to its new place: read once the new list is drawn. */
-  const before = useRef<{ tops: Map<string, number>; ms: number } | null>(null);
+  /**
+   * Where every row stood before the list changed — across and down: the cards of a grid move both ways —
+   * and how long it moves to its new place: read once the new list is drawn.
+   */
+  const before = useRef<{ places: Map<string, DOMRect>; ms: number } | null>(null);
   /** A list read while the rows moved: shown once they stand. */
   const waiting = useRef<T[] | undefined>(undefined);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -45,7 +48,7 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
     lockedNow.current = on;
     setLocked(on);
   };
-  const tops = () => new Map([...rows.current].map(([k, e]) => [k, e.getBoundingClientRect().top]));
+  const places = () => new Map([...rows.current].map(([k, e]) => [k, e.getBoundingClientRect()]));
 
   /** The rows standing: a list read meanwhile shown now, else the list free. */
   const release = () => {
@@ -74,7 +77,7 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
       return;
     }
     lock(true);
-    before.current = { tops: tops(), ms: MOVE_MS };
+    before.current = { places: places(), ms: MOVE_MS };
     setShown(next);
     later(MOVE_MS + SETTLE_MS, release);
   };
@@ -96,7 +99,7 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
       }
     });
     later(LEAVE_MS, () => {
-      before.current = { tops: tops(), ms: CLOSE_MS };
+      before.current = { places: places(), ms: CLOSE_MS };
       setShown((list) => list?.filter((row) => !gone.has(keyOf(row))));
       later(CLOSE_MS, release);
     });
@@ -112,10 +115,13 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
     if (!was) return;
     before.current = null;
     rows.current.forEach((e, k) => {
-      const top = was.tops.get(k);
+      const place = was.places.get(k);
       e.style.transition = "none";
-      if (top === undefined) e.style.opacity = "0";
-      else e.style.transform = `translateY(${top - e.getBoundingClientRect().top}px)`;
+      if (place === undefined) e.style.opacity = "0";
+      else {
+        const now = e.getBoundingClientRect();
+        e.style.transform = `translate(${place.left - now.left}px, ${place.top - now.top}px)`;
+      }
     });
     requestAnimationFrame(() =>
       rows.current.forEach((e) => {

@@ -18,6 +18,10 @@ private val log = LoggerFactory.getLogger(SearchReranking::class.java)
  * meaning is read by those windows, each apart, and has the best of what is said of them: the windows read so put the
  * work a retelling of a scene of it was in among the first 10 works 38 times of 85 among 48 966 works, against 14 of
  * their order by meaning (2026-11-25, the windows' vectors themselves). Every other work is read by its document.
+ *
+ * The windows are read a portion at a time ([PORTIONS]), the nearest first, and every portion but the last gives the
+ * order so far to the one who waits ([reranked]): a work's chapters are read of the disk of the data, a seek each, and
+ * of a thousand windows the first hundred are a tenth of the wait.
  */
 @Component
 class SearchReranking(
@@ -28,102 +32,162 @@ class SearchReranking(
 
     /**
      * Every work found, and every work of the first [WINDOWS] of the [windows] nearest to the line, read against the
-     * line by the reranker, in the order of its score; as found without a reranker. A work read for the line before of
-     * the same texts — the same windows, or the same document and passage nearest to the line — is not read again
-     * ([SearchScoreRepository]), nor its document made: the next page of a search, the line searched again, make and
-     * read nothing but the windows' texts. A document is known the same by its fingerprint the index keeps
-     * ([SearchResult.prints]) and its passage; of a work the index has none of, by the text itself.
+     * line by the reranker, in the order of its score; as found without a reranker. The windows read a portion at a
+     * time ([PORTIONS]), the documents of the works found without windows with the first; after every portion but the
+     * last, the order so far given to [shown] — the works read in the order of their scores, then those not read yet in
+     * the order they were found.
+     *
+     * A work read for the line before of the same texts is not read again ([SearchScoreRepository]): of the same
+     * windows of the same document, or of the same document and passage nearest to the line. A document is known the
+     * same by its fingerprint the index keeps ([SearchResult.prints]), which holds the hashes of its chapters' texts;
+     * of a work the index keeps none of, read by its document, by the text itself, and read by its windows, not at all.
      */
-    fun reranked(type: TypeStore, found: SearchResult, windows: List<NearWindow>): SearchResult {
+    fun reranked(
+        type: TypeStore,
+        found: SearchResult,
+        windows: List<NearWindow>,
+        shown: (SearchResult) -> Unit = {},
+    ): SearchResult {
         val reranker = plugins.reranker()
         val first = windows.take(WINDOWS)
         if (reranker == null || found.keys.size + first.size < 2) return found
-        val started = System.currentTimeMillis()
-        val texts = windowTexts.of(first)
-        val ofWindows = first.filter { it in texts }.groupBy({ it.key }, { texts.getValue(it) })
-        val keys = (found.keys + ofWindows.keys).distinct()
-        val printed =
+        val reading = Reading(type, reranker, found, first)
+        var from = 0
+        for (end in PORTIONS) {
+            val last = end >= first.size || end == PORTIONS.last()
+            reading.read(first.subList(from, minOf(end, first.size)), from, withDocuments = from == 0)
+            from = end
+            if (last) break
+            shown(reading.result())
+        }
+        reading.logged()
+        return reading.result()
+    }
+
+    /** One reading of the works [found] and of the [windows] nearest to the line, a portion at a time. */
+    private inner class Reading(
+        private val type: TypeStore,
+        private val reranker: TextReranker,
+        private val found: SearchResult,
+        windows: List<NearWindow>,
+    ) {
+        private val started = System.currentTimeMillis()
+        private val ofWindows = windows.groupBy { it.key }
+        private val keys = (found.keys + ofWindows.keys).distinct()
+
+        /** The position of the last window of every work among those read: once it is read, the work is read whole. */
+        private val lastWindow = windows.withIndex().associate { (i, w) -> w.key to i }
+
+        /** What every work is read by: its windows and its document's fingerprint, else its document and passage. */
+        private val printed =
             keys
                 .mapNotNull { key ->
-                    (ofWindows[key]?.let { Vectors.keyOf(it.joinToString(WINDOW_SEPARATOR)) } ?: printOf(found, key))
-                        ?.let { key to it }
+                    (if (key in ofWindows) printOf(found, key, ofWindows.getValue(key)) else printOf(found, key))?.let {
+                        key to it
+                    }
                 }
                 .toMap()
-        val kept = type.searchScores.of(reranker.id, found.line).filter { (key, s) -> printed[key] == s.textsHash }
-        val todo = keys.filter { it !in kept }
-        val readings = readingsOf(type, todo, ofWindows, found)
-        val scored =
-            scoresOf(reranker, found.line, readings, printed).also {
-                type.searchScores.save(reranker.id, found.line, it)
-            }
-        val scores = kept + scored
-        // A work found whose document is gone since is the last
-        val order = keys.sortedByDescending { scores[it]?.score ?: Float.NEGATIVE_INFINITY }
-        val (byWindows, byDocuments) = readings.filterValues { it.isNotEmpty() }.keys.partition { it in ofWindows }
-        log.info(
-            "'{}' in {}: {} works, {} windows of {} and {} documents read by {} in {} ms",
-            found.line,
-            type.id,
-            keys.size,
-            byWindows.sumOf { readings.getValue(it).size },
-            byWindows.size,
-            byDocuments.size,
-            reranker.id,
-            System.currentTimeMillis() - started,
-        )
-        // What the reranker said of a work is a feature of it the order is learnt of ([SearchWeights])
-        val features = keys.associateWith { key ->
-            found.features[key].orEmpty() + scores[key]?.let { mapOf(RERANKER to it.score.toDouble()) }.orEmpty()
+        private val kept =
+            type.searchScores.of(reranker.id, found.line).filter { (key, s) -> printed[key] == s.textsHash }
+
+        /** The best score of every work read so far, of those kept too. */
+        private val best = HashMap<ItemKey, Float>(kept.mapValues { it.value.score })
+        private var windowsRead = 0
+        private var documentsRead = 0
+        private var readMs = 0L
+        private var rankMs = 0L
+
+        /**
+         * The [portion] of the windows read — from the window [from] on —, of the works not kept; with the documents of
+         * the works found without windows when [withDocuments]. The scores of the works read whole by now kept.
+         */
+        fun read(portion: List<NearWindow>, from: Int, withDocuments: Boolean) {
+            val readFrom = System.currentTimeMillis()
+            val todo = portion.filter { it.key !in kept }
+            val texts = windowTexts.of(todo)
+            val docs = if (withDocuments) documentsOf(keys.filter { it !in ofWindows && it !in kept }) else emptyMap()
+            val readings = todo.filter { it in texts }.map { it.key to texts.getValue(it) } + docs.toList()
+            val rankFrom = System.currentTimeMillis()
+            readMs += rankFrom - readFrom
+            val scores =
+                if (readings.isEmpty()) FloatArray(0) else reranker.rank(found.line, readings.map { it.second })
+            rankMs += System.currentTimeMillis() - rankFrom
+            readings.forEachIndexed { i, (key, _) -> best.merge(key, scores[i], ::maxOf) }
+            windowsRead += todo.size
+            documentsRead += docs.size
+            // The works whose last window is of this portion, and the documents: read whole, their scores kept
+            val upTo = from + portion.size
+            val whole = readings.map { it.first }.distinct().filter { key -> (lastWindow[key] ?: -1) < upTo }
+            type.searchScores.save(
+                reranker.id,
+                found.line,
+                whole
+                    .mapNotNull { key ->
+                        val score = best[key] ?: return@mapNotNull null
+                        val hash = printed[key] ?: docs[key]?.let { Vectors.keyOf(it) } ?: return@mapNotNull null
+                        key to StoredScore(hash, score)
+                    }
+                    .toMap(),
+            )
         }
-        return SearchResult(found.line, order, found.state, found.nearest, found.prints, features, found.places)
+
+        /**
+         * The text every work of [unread] is read by: its document as the reranker reads it ([readable]) — the values
+         * the list keeps the model gave it, of its chapters that of its passage nearest alone
+         * ([SearchDocuments.shown]); none of a work whose document is gone.
+         */
+        private fun documentsOf(unread: List<ItemKey>): Map<ItemKey, String> {
+            val chapters = unread.associateWith { key ->
+                listOfNotNull(found.nearest[key]?.field)
+                    .filter { it.startsWith(SearchDocuments.PART) }
+                    .mapTo(HashSet()) { it.removePrefix(SearchDocuments.PART) }
+            }
+            return documents.shown(type, unread, chapters).mapValues { (key, doc) -> readable(doc, found.nearest[key]) }
+        }
+
+        /**
+         * The works read so far in the order of their scores, then the rest in the order they were found — once every
+         * portion is read, a work whose document is gone. What the reranker said of a work is a feature of it the order
+         * is learnt of ([SearchWeights]).
+         */
+        fun result(): SearchResult {
+            val byScore = keys.filter { it in best }.sortedByDescending { best.getValue(it) }
+            val order = byScore + keys.filter { it !in best }
+            val features = keys.associateWith { key ->
+                found.features[key].orEmpty() + best[key]?.let { mapOf(RERANKER to it.toDouble()) }.orEmpty()
+            }
+            return SearchResult(found.line, order, found.state, found.nearest, found.prints, features, found.places)
+        }
+
+        fun logged() =
+            log.info(
+                "'{}' in {}: {} works, {} windows and {} documents read by {} in {} ms: {} ms the texts read, {} ms " +
+                    "the reranker",
+                found.line,
+                type.id,
+                keys.size,
+                windowsRead,
+                documentsRead,
+                reranker.id,
+                System.currentTimeMillis() - started,
+                readMs,
+                rankMs,
+            )
     }
 
     /**
-     * Every text each work of [todo] is read by: its windows of [ofWindows], else its document as the reranker reads it
-     * ([readable]) — the values the list keeps the model gave it, of its chapters that of its passage nearest alone
-     * ([SearchDocuments.shown]); none of a work whose document is gone.
+     * What the work [key] is read by of its [windows]: the fingerprint of its document the index keeps
+     * ([SearchResult.prints]: the hashes of its chapters' texts with it), and where every window is; null of a work the
+     * index named no fingerprint of — read again at every search, its windows' texts read a portion at a time.
      */
-    private fun readingsOf(
-        type: TypeStore,
-        todo: List<ItemKey>,
-        ofWindows: Map<ItemKey, List<String>>,
-        found: SearchResult,
-    ): Map<ItemKey, List<String>> {
-        // Of the chapters, that of the passage nearest alone: what is read of them
-        val unread = todo.filter { it !in ofWindows }
-        val chapters = unread.associateWith { key ->
-            listOfNotNull(found.nearest[key]?.field)
-                .filter { it.startsWith(SearchDocuments.PART) }
-                .mapTo(HashSet()) { it.removePrefix(SearchDocuments.PART) }
+    private fun printOf(found: SearchResult, key: ItemKey, windows: List<NearWindow>): Long? =
+        found.prints[key]?.let { print ->
+            Vectors.keyOf(
+                (listOf(WINDOWS_READ, "$print") + windows.map { "${it.text} ${it.from} ${it.to}" }).joinToString(
+                    WINDOW_SEPARATOR
+                )
+            )
         }
-        val read = documents.shown(type, unread, chapters)
-        return todo.associateWith { key ->
-            ofWindows[key] ?: read[key]?.let { listOf(readable(it, found.nearest[key])) }.orEmpty()
-        }
-    }
-
-    /**
-     * The score of every work of [readings] read against the [line] by the [reranker]: the best of its texts, kept with
-     * the hash of what it was read by ([printed], else its one text's).
-     */
-    private fun scoresOf(
-        reranker: TextReranker,
-        line: String,
-        readings: Map<ItemKey, List<String>>,
-        printed: Map<ItemKey, Long>,
-    ): Map<ItemKey, StoredScore> {
-        val all = readings.values.flatten()
-        if (all.isEmpty()) return emptyMap()
-        val scores = reranker.rank(line, all)
-        var at = 0
-        return readings
-            .mapNotNull { (key, list) ->
-                val best = list.indices.maxOfOrNull { scores[at + it] }
-                at += list.size
-                best?.let { key to StoredScore(printed[key] ?: Vectors.keyOf(list.single()), it) }
-            }
-            .toMap()
-    }
 
     /**
      * What the reranker reads of the work [key] known by what it is made of: the fingerprint of its document the index
@@ -165,7 +229,16 @@ class SearchReranking(
          */
         const val WINDOWS = 1_000
 
+        /**
+         * Where the portions of the windows read end, the nearest first: every one but the last a version of the order
+         * shown to the user as the rest is read.
+         */
+        val PORTIONS = listOf(100, 300, WINDOWS)
+
         /** What the texts of a work's windows are joined by as their hash is made. */
         private const val WINDOW_SEPARATOR = "\u0000"
+
+        /** The version of what a work read by its windows is known the same by, in its hash. */
+        private const val WINDOWS_READ = "windows 2"
     }
 }

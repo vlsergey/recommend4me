@@ -147,6 +147,9 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
     /** The texts of the parts [partIds] of the item, by part, read of the store alone; a part of none left out. */
     fun textsOf(itemId: String, partIds: Collection<String>): Map<String, String> = store.texts(itemId, partIds)
 
+    /** The texts of the [parts] of many items — item and part —, read of the store at once ([PartStore.texts]). */
+    fun textsOf(parts: Collection<Pair<String, String>>): Map<Pair<String, String>, String> = store.texts(parts)
+
     /**
      * The texts of every part of the item that has one, in their order, each with its title: one text read at a time.
      */

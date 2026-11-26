@@ -1,10 +1,15 @@
 package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.model.ItemPage
+import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.search.Search
+import io.github.vlsergey.recommend4me.search.SearchPlace
+import io.github.vlsergey.recommend4me.search.SearchProgress
+import io.github.vlsergey.recommend4me.search.SearchResult
 import io.github.vlsergey.recommend4me.search.SearchSnippet
+import io.github.vlsergey.recommend4me.search.SearchStep
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -112,26 +117,61 @@ class ItemList(
         limit: Int,
         /** The language the [line] is read as (ISO 639-1). */
         language: String,
+        /**
+         * Of a search, every version of the page before the last, told as the search makes it, with the step of the
+         * search that follows ([SearchProgress]).
+         */
+        versions: ((ItemPage, SearchStep) -> Unit)? = null,
     ): ItemPage {
         val type = stores.type(typeId) ?: return ItemPage(0, emptyList())
-        val found = line?.takeIf { it.isNotBlank() }?.let { search.search(typeId, it, language) }
-        val relevance = found?.keys?.withIndex()?.associate { (i, k) -> k to i }
         val surprise =
             if (order != ItemOrder.SURPRISE) emptyMap()
             else recommendations.gradePlaces(typeId)?.let { surprises(type, it) }.orEmpty()
-        val asked = ListAsked(view, order, sortNumber, relevance, facets, sources, ranges, surprise)
-        val page = ListQuery.page(indexes.of(typeId), type, asked, offset, limit.coerceIn(1, MAX_PAGE))
-        val matches = found?.let { search.matches(typeId, it, page.keys) }.orEmpty()
-        // The user's word on the snippet every work is shown with: of another snippet of it, none
-        val judged =
-            found
-                ?.let { type.searchJudgments.of(it.line) }
-                ?.let { SearchSnippet.judgedShown(it, matches.mapValues { (_, m) -> SearchSnippet.of(m) }) }
-                .orEmpty()
-        return ItemPage(
-            total = page.total,
-            items = cards.cards(type, page.keys, matches, search.places(matches), page.clusters, judged),
-        )
+        val paging =
+            Paging(type, offset, limit) { relevance ->
+                ListAsked(view, order, sortNumber, relevance, facets, sources, ranges, surprise)
+            }
+        val progress = versions?.let { told -> SearchProgress { found, next -> told(paging.of(found), next) } }
+        val found = line?.takeIf { it.isNotBlank() }?.let { search.search(typeId, it, language, progress = progress) }
+        return paging.of(found)
+    }
+
+    /**
+     * The page asked of the list of the [type] — [asked] of the order of what a search found, when searched — at every
+     * version of what the search found. The card of a work is made once for the request, at the first version that
+     * shows it: made again only when the place of the line in its text the search found changed
+     * ([SearchResult.places]), what it is shown with.
+     */
+    private inner class Paging(
+        private val type: TypeStore,
+        private val offset: Int,
+        private val limit: Int,
+        private val asked: (relevance: Map<ItemKey, Int>?) -> ListAsked,
+    ) {
+        private val made = HashMap<ItemKey, Pair<SearchPlace?, ItemSummary>>()
+
+        fun of(found: SearchResult?): ItemPage {
+            val relevance = found?.keys?.withIndex()?.associate { (i, k) -> k to i }
+            val page = ListQuery.page(indexes.of(type.id), type, asked(relevance), offset, limit.coerceIn(1, MAX_PAGE))
+            val todo =
+                page.keys.filter { key ->
+                    made[key]?.let { (place, _) -> place !== found?.places?.get(key) } ?: true
+                }
+            if (todo.isNotEmpty()) {
+                val matches = found?.let { search.matches(type.id, it, todo) }.orEmpty()
+                // The user's word on the snippet every work is shown with: of another snippet of it, none
+                val judged =
+                    found
+                        ?.let { type.searchJudgments.of(it.line) }
+                        ?.let { SearchSnippet.judgedShown(it, matches.mapValues { (_, m) -> SearchSnippet.of(m) }) }
+                        .orEmpty()
+                cards.cards(type, todo, matches, search.places(matches), page.clusters, judged).forEach { card ->
+                    val key = ItemKey(card.source, card.item)
+                    made[key] = found?.places?.get(key) to card
+                }
+            }
+            return ItemPage(total = page.total, items = page.keys.mapNotNull { made[it]?.second })
+        }
     }
 
     /**

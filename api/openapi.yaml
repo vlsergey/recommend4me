@@ -104,6 +104,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemPage'
 
+  /api/types/{type}/items/versions:
+    post:
+      tags: [items]
+      operationId: listItemVersions
+      x-internal: true
+      summary: A page of the works found by a line, a version of it as every step of the search ends
+      description: |
+        The page of listItems, answered as lines of JSON (NDJSON), one ItemPageVersion a line, each
+        written as the step of the search before it ends: the works found by words and by meaning, then
+        as the reranker reads them a portion at a time, then with their texts read by their pieces - the
+        last line, without refining. A search waits for no one: a client gone ends it at its next line.
+        Written by the server's own hand on the thread of the request (x-internal: no interface generated).
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemQuery'
+      responses:
+        '200':
+          description: The versions of the page, a line each, the last the page
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/ItemPageVersion'
+
   /api/types/{type}/search/judgments:
     put:
       tags: [search]
@@ -3898,6 +3926,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ItemSummary'
+
+    ItemPageVersion:
+      type: object
+      description: A version of a page of the works found by a line (listItemVersions)
+      required: [total, items]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemSummary'
+        refining:
+          $ref: '#/components/schemas/SearchRefinement'
+
+    SearchRefinement:
+      type: string
+      description: |
+        The step of the search at work after a version of its page, which may change the page: RERANKING -
+        the works read against the line by the reranker; PIECES - the texts of the first of them read by
+        their pieces, which tells where in a text the line is said. None on the last version.
+      enum: [RERANKING, PIECES]
 
     SearchJudgment:
       type: object

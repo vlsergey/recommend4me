@@ -112,7 +112,18 @@ class PartStore(folder: Path) : AutoCloseable {
 
     /** The texts of the parts [partIds] of the item, by part; a part of none left out. */
     fun texts(itemId: String, partIds: Collection<String>): Map<String, String> =
-        multi(texts, itemId, partIds) { it.toString(Charsets.UTF_8) }
+        multiGet(db, texts, itemId, partIds) { it.toString(Charsets.UTF_8) }
+
+    /**
+     * The texts of the [parts] of many items — item and part — read by one MultiGet in the order of their keys: the
+     * store's files read one way along the disk, not a seek back and forth an item. A part of none left out.
+     */
+    fun texts(parts: Collection<Pair<String, String>>): Map<Pair<String, String>, String> {
+        val asked = parts.distinct().sortedWith(compareBy({ it.first }, { it.second }))
+        if (asked.isEmpty()) return emptyMap()
+        val values = db.multiGetAsList(List(asked.size) { texts }, asked.map { (item, part) -> key(item, part) })
+        return asked.indices.mapNotNull { i -> values[i]?.let { asked[i] to it.toString(Charsets.UTF_8) } }.toMap()
+    }
 
     /**
      * Every text kept, in the order of the keys — the parts of an item one after another —, read as one pass of the
@@ -136,7 +147,7 @@ class PartStore(folder: Path) : AutoCloseable {
      * The vectors of the windows of the parts [partIds] of the item in their order, by part; a part of none left out.
      */
     fun windows(itemId: String, partIds: Collection<String>): Map<String, List<FloatArray>> =
-        multi(windows, itemId, partIds, ::vectorsOf)
+        multiGet(db, windows, itemId, partIds, ::vectorsOf)
 
     fun putWindows(itemId: String, partId: String, vectors: List<FloatArray>) =
         db.put(windows, key(itemId, partId), bytesOf(vectors))
@@ -146,7 +157,7 @@ class PartStore(folder: Path) : AutoCloseable {
      * hash, null one not encoded; a part of none left out.
      */
     fun paragraphs(itemId: String, partIds: Collection<String>): Map<String, List<KeptParagraph?>> =
-        multi(paragraphs, itemId, partIds, ::paragraphsOf)
+        multiGet(db, paragraphs, itemId, partIds, ::paragraphsOf)
 
     fun putParagraphs(itemId: String, partId: String, vectors: List<FloatArray?>, hashes: List<String>) {
         val out = ByteArrayOutputStream()
@@ -177,13 +188,6 @@ class PartStore(folder: Path) : AutoCloseable {
         db.close()
         listOf(options, textOptions, vectorOptions, fullTextOptions).forEach { it.close() }
     }
-
-    private fun <T> multi(
-        family: ColumnFamilyHandle,
-        itemId: String,
-        partIds: Collection<String>,
-        read: (ByteArray) -> T,
-    ): Map<String, T> = multiGet(db, family, itemId, partIds, read)
 
     internal companion object {
         /** The store's folder in the source's own. */

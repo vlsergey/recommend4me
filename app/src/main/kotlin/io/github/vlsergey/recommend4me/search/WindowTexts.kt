@@ -15,7 +15,10 @@ import org.springframework.stereotype.Component
 @Component
 class WindowTexts(private val stores: Stores) {
 
-    /** The text of every window of [windows]; a window whose text is gone or shorter since left out. */
+    /**
+     * The text of every window of [windows]; a window whose text is gone or shorter since left out. The chapters of
+     * every work of a source read by one MultiGet of the store of the parts, in the order of its keys.
+     */
     fun of(windows: List<NearWindow>): Map<NearWindow, String> {
         val out = HashMap<NearWindow, String>()
         windows
@@ -23,12 +26,9 @@ class WindowTexts(private val stores: Stores) {
             .forEach { (source, list) ->
                 val s = stores.source(source) ?: return@forEach
                 val (ofTexts, ofParts) = list.partition { it.text.startsWith(TEXT) }
-                ofParts
-                    .groupBy { it.key.id }
-                    .forEach { (item, ws) ->
-                        val texts = s.parts.textsOf(item, ws.map { it.text })
-                        ws.forEach { w -> cut(texts[w.text], w)?.let { out[w] = it } }
-                    }
+                // Every chapter of every work at once, one MultiGet in the order of the store's keys
+                val texts = s.parts.textsOf(ofParts.map { it.key.id to it.text })
+                ofParts.forEach { w -> cut(texts[w.key.id to w.text], w)?.let { out[w] = it } }
                 textsOf(s, ofTexts).forEach { (w, text) -> cut(text, w)?.let { out[w] = it } }
             }
         return out

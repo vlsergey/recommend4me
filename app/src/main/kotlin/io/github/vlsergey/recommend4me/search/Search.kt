@@ -18,6 +18,24 @@ import io.github.vlsergey.recommend4me.universe.Quotes
 import io.github.vlsergey.recommend4me.work.TextPlace
 import org.springframework.stereotype.Service
 
+/** The step of a search at work after a version of what it found was told ([SearchProgress]). */
+enum class SearchStep {
+    /** The works found read against the line by the reranker, a portion of their windows at a time. */
+    RERANKING,
+
+    /** The texts of the first of the works found read by their pieces ([SearchPieces]). */
+    PIECES,
+}
+
+/**
+ * What a search tells as it goes ([Search.search]): the works [found] so far, in their order so far, and the step at
+ * work after them ([next]). Told on the thread of the search: what it does is waited for, and what it throws ends the
+ * search — the one who asked gone.
+ */
+fun interface SearchProgress {
+    fun found(found: SearchResult, next: SearchStep)
+}
+
 /**
  * The search over the works of a content type, by the search plugin: the documents of the items made here
  * ([SearchDocuments]), the index the plugin's ([SearchIndex]); what was found read against the line by the reranker
@@ -71,11 +89,15 @@ class Search(
 
     /**
      * The works matching [line], read as the [language] (ISO 639-1), most relevant first; null without a search plugin.
-     * Found by the plugin — by meaning and by words —, the texts of the first of them read by their pieces
-     * ([SearchPieces]), and then, with a reranker ([rerank]), every one of them read together with the line
-     * ([SearchReranking]). With what was learnt of the user's judgments ([learnt]) — [with], else what is kept ([kept])
-     * — searched by meaning with the closeness corrected ([QueryShift]) and put in the order learnt ([SearchWeights]);
-     * of none learnt, in the order of what the reranker said.
+     * Found by the plugin — by meaning and by words —, then, with a reranker ([rerank]), every one of them read
+     * together with the line ([SearchReranking]), and last the texts of the first of them read by their pieces
+     * ([SearchPieces]): the reranker reorders the works, the pieces only tell where in a text the line is said, so the
+     * order the user waits for comes first. With what was learnt of the user's judgments ([learnt]) — [with], else what
+     * is kept ([kept]) — searched by meaning with the closeness corrected ([QueryShift]) and put in the order learnt
+     * ([SearchWeights]), of every feature, at the end; of none learnt, in the order of what the reranker said.
+     *
+     * Every version of the order before the last — of the plugin, of every portion of the reranker's, of the reranker's
+     * whole — is told to the [progress] as it is made, with the step that follows.
      */
     fun search(
         typeId: String,
@@ -84,6 +106,7 @@ class Search(
         rerank: Boolean = true,
         learnt: Boolean = rerank,
         with: SearchLearnt? = null,
+        progress: SearchProgress? = null,
     ): SearchResult? {
         val provider = plugins.search
         val type = stores.type(typeId)
@@ -91,9 +114,19 @@ class Search(
         val own = if (learnt) with ?: kept(type) else null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
         val context = Context(type, own?.shift)
-        val found = pieces.read(type, provider.search(typeId, line, language, context))
-        val read = if (rerank) reranking.reranked(type, found, context.windows) else found
-        return own?.weights?.ordered(read) ?: read
+        val found = provider.search(typeId, line, language, context)
+        val reranks = rerank && plugins.reranker() != null
+        progress?.found(found, if (reranks) SearchStep.RERANKING else SearchStep.PIECES)
+        val read =
+            if (!reranks) found
+            else
+                reranking
+                    .reranked(type, found, context.windows) { progress?.found(it, SearchStep.RERANKING) }
+                    .also {
+                        progress?.found(it, SearchStep.PIECES)
+                    }
+        val pieced = pieces.read(type, read)
+        return own?.weights?.ordered(pieced) ?: pieced
     }
 
     /** What is kept learnt of the user's judgments of the [type]: of the text encoder of now, its correction. */

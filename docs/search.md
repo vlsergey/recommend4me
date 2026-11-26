@@ -64,19 +64,26 @@ centre they were made by kept with the part (`part.full_text`) and with the text
    best; its closeness (`MeaningSearch.closeness`, the plugin's) the score on the scale of the line's own nearest.
 3. **By words** (`WordSearch`): the words in any of their forms or as beginnings of words, in every field, weighed by the
    field; the whole line in a naming field (title, author) a bonus.
-4. **The pieces** (below, `SearchPieces`): of the items found by meaning, the first `SearchPieces.READ` (300) by the
-   order so far, the line's pieces against the pieces of the text of the passage nearest — the best span of it, its
-   score the item's feature `pieces`, the span its place (`SearchResult.places`).
-5. **The reranker** (`SearchReranking`): bge-reranker-v2-m3 reads every work found together with the line — a work
+4. **The reranker** (`SearchReranking`): bge-reranker-v2-m3 reads every work found together with the line — a work
    with windows among the first `SearchReranking.WINDOWS` (1 000) of the 8 000 nearest by meaning by those windows,
    each apart, the work's score the best of them (their texts of the store of the parts and the corrected texts,
-   `WindowTexts`, no document made); any other work by its document, its title and passage nearest first. About
-   2.7 ms a window on the card; what was read for a line is kept by its texts' hash (`SearchScoreRepository`), the
-   line searched again reading nothing anew. Measured on 85 retellings among the 7.5 million windows of 48 966 works
-   (2026-11-25): the work of the scene first 4 times by the windows' vectors and 26 by the first 1 000 windows read so;
-   among the first ten 14 and 38 (300 windows: 33; 2 000: 40; 5 000: 43); a fusion of the two orders by their ranks
-   is worse than the reranker's alone. Qwen3-Embedding-0.6B in place of bge-m3, measured alike on 791 134 windows,
-   put the work among the first ten 28 times against bge-m3's 40.
+   `WindowTexts`, no document made, the chapters of every work of a source read by one MultiGet in the order of the
+   store's keys); any other work by its document, its title and passage nearest first. The windows are read a portion
+   at a time, the nearest first (`SearchReranking.PORTIONS`: the first 100, to 300, to 1 000), the documents with the
+   first: every portion but the last a version of the order — the works read by their scores, then the rest as found.
+   About 2.7 ms a window on the card; the chapters a window is cut of are read of the disk of the data, a seek a
+   chapter, and they are most of the wait (the log tells the two apart). What was read for a line is kept by what it
+   was read of (`SearchScoreRepository`): of a work read by its windows, the fingerprint of its document — the hashes
+   of its chapters' texts in it — and where every window is, the line searched again reading nothing anew. Measured on
+   85 retellings among the 7.5 million windows of 48 966 works (2026-11-25): the work of the scene first 4 times by the
+   windows' vectors and 26 by the first 1 000 windows read so; among the first ten 14 and 38 (300 windows: 33; 2 000:
+   40; 5 000: 43); a fusion of the two orders by their ranks is worse than the reranker's alone. Qwen3-Embedding-0.6B
+   in place of bge-m3, measured alike on 791 134 windows, put the work among the first ten 28 times against bge-m3's 40.
+5. **The pieces** (below, `SearchPieces`): of the items found by meaning, the first `SearchPieces.READ` (300) by the
+   order so far — the reranker's —, the line's pieces against the pieces of the text of the passage nearest — the best
+   span of it, its score the item's feature `pieces`, the span its place (`SearchResult.places`). After the reranker:
+   the pieces reorder nothing but by the weights learnt, they tell where in a text the line is said, and the order the
+   user waits for comes first.
 6. **The order** (`SearchWeights`): a weighed sum of the features — the meaning, the words, the line in the name, the
    pieces, the reranker's score — the weights learnt of the user's judgments, none below half its share; the first of
    every way of finding at the top; of none learnt, the reranker's order.
@@ -87,6 +94,13 @@ centre they were made by kept with the part (`part.full_text`) and with the text
    run —, of their chapters those of the passage nearest and of the place of the pieces alone, every other named; a
    chapter named is read only where the index holds the line's words of the work in its chapters, eight at a time till
    one has them (`WorkSnippet`, `SearchContext.texts`), and for words apart only of a work found by no passage.
+8. **In versions** (`SearchProgress`, `listItemVersions`): the first page of a search is answered as lines of JSON,
+   a version of the page each, written on the thread of the request as a step ends — the works found by words and by
+   meaning (2), every portion of the reranker's but the last, the reranker's whole (4), and last the page with the
+   pieces read and the order learnt —, each but the last with the step at work after it (`SearchRefinement`). The card
+   of a work is made once a request, at the first version that shows it, made again only when its place by the pieces
+   came (`ItemList.Paging`). The one who asked gone — another line typed —, the next line fails to be sent and the
+   search ends. The interface shows each as it comes (docs/ui.md 11).
 
 ## The pieces
 

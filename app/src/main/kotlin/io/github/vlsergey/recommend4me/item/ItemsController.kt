@@ -3,18 +3,23 @@ package io.github.vlsergey.recommend4me.item
 import io.github.vlsergey.recommend4me.api.ItemsApi
 import io.github.vlsergey.recommend4me.api.model.ItemDetails
 import io.github.vlsergey.recommend4me.api.model.ItemPage
+import io.github.vlsergey.recommend4me.api.model.ItemPageVersion
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.PartText
+import io.github.vlsergey.recommend4me.api.model.SearchRefinement
 import io.github.vlsergey.recommend4me.picture.PictureService
 import io.github.vlsergey.recommend4me.picture.Served
 import io.github.vlsergey.recommend4me.refusal.Refusal
+import io.github.vlsergey.recommend4me.search.SearchStep
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.StoredItem
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.downloadsPages
+import jakarta.servlet.http.HttpServletResponse
 import java.net.URI
 import java.time.Duration
+import org.apache.catalina.connector.ClientAbortException
 import org.slf4j.LoggerFactory
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.core.io.FileSystemResource
@@ -23,7 +28,11 @@ import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
+import tools.jackson.databind.json.JsonMapper
 
 private val log = LoggerFactory.getLogger(ItemsController::class.java)
 
@@ -51,14 +60,52 @@ class ItemsController(
     private val pictures: PictureService,
     private val contexts: SourceContexts,
     private val removal: ItemRemoval,
+    private val json: JsonMapper,
 ) : ItemsApi {
 
     override fun removeItem(source: String, item: String): ResponseEntity<Unit> =
         if (removal.remove(ItemKey(source, item))) ResponseEntity.noContent().build()
         else ResponseEntity.notFound().build()
 
-    override fun listItems(type: String, itemQuery: ItemQuery): ResponseEntity<ItemPage> {
-        val q = itemQuery
+    override fun listItems(type: String, itemQuery: ItemQuery): ResponseEntity<ItemPage> =
+        ResponseEntity.ok(pageOf(type, itemQuery))
+
+    /**
+     * The page of [listItems] of a search, a version of it as every step of the search ends: a line of JSON each,
+     * written and sent on the thread of the request as it is made (api: listItemVersions, written here by hand — the
+     * API's interface has no stream). The one who asked gone, the next line fails to be sent, and the search ends.
+     */
+    @PostMapping(
+        "/api/types/{type}/items/versions",
+        consumes = [MediaType.APPLICATION_JSON_VALUE],
+        produces = [MediaType.APPLICATION_NDJSON_VALUE],
+    )
+    fun listItemVersions(@PathVariable type: String, @RequestBody itemQuery: ItemQuery, response: HttpServletResponse) {
+        response.contentType = MediaType.APPLICATION_NDJSON_VALUE
+        response.characterEncoding = Charsets.UTF_8.name()
+        val out = response.outputStream
+        fun send(version: ItemPageVersion) {
+            out.write(json.writeValueAsBytes(version))
+            out.write('\n'.code)
+            out.flush()
+        }
+        try {
+            val last =
+                pageOf(type, itemQuery) { page, next ->
+                    send(ItemPageVersion(page.total, page.items, SearchRefinement.valueOf(next.name)))
+                }
+            send(ItemPageVersion(last.total, last.items))
+        } catch (e: ClientAbortException) {
+            log.info("{}: the search '{}' given up by the one who asked: {}", type, itemQuery.search, e.message)
+        }
+    }
+
+    /** The page of the list of the [type] the query [q] asks; of a search, its [versions] told as they are made. */
+    private fun pageOf(
+        type: String,
+        q: ItemQuery,
+        versions: ((ItemPage, SearchStep) -> Unit)? = null,
+    ): ItemPage {
         // A field sent as null is the field left out: the defaults of the API's own schema
         val d = ItemQuery()
         val ranges =
@@ -76,21 +123,20 @@ class ItemsController(
                 val range = if (c.from == null && c.to == null) null else filters.rangeOf(type, c.facet, c.from, c.to)
                 FacetChoice(c.facet, c.hidden.orEmpty().toSet(), c.shown?.toSet(), c.withoutHidden == true, range)
             }
-        return ResponseEntity.ok(
-            list.page(
-                type,
-                ItemView.valueOf((q.view ?: d.view!!).name),
-                ItemOrder.valueOf((q.sort ?: d.sort!!).name),
-                q.sortNumber,
-                q.search,
-                facets,
-                q.sources?.toSet()?.takeIf { it.isNotEmpty() },
-                ranges,
-                q.offset ?: d.offset!!,
-                q.limit ?: d.limit!!,
-                // The line searched read as the interface's language: the one it is typed in
-                language = LocaleContextHolder.getLocale().language,
-            )
+        return list.page(
+            type,
+            ItemView.valueOf((q.view ?: d.view!!).name),
+            ItemOrder.valueOf((q.sort ?: d.sort!!).name),
+            q.sortNumber,
+            q.search,
+            facets,
+            q.sources?.toSet()?.takeIf { it.isNotEmpty() },
+            ranges,
+            q.offset ?: d.offset!!,
+            q.limit ?: d.limit!!,
+            // The line searched read as the interface's language: the one it is typed in
+            language = LocaleContextHolder.getLocale().language,
+            versions = versions,
         )
     }
 

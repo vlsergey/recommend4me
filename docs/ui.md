@@ -26,7 +26,8 @@ search changed. The list just read is held against the one shown.
 Every row is given `rowRef` of its key. The extension's lists do the same (the window of tags by text:
 `byTextBlock`).
 
-Where: `marking/MarkingTable.tsx`, `duplicate/DuplicatesScreen.tsx`, `author/AuthorOffers.tsx`,
+Where: `item/ItemBoard.tsx` (the list of the works: a card of a grid moves across as well as down),
+`marking/MarkingTable.tsx`, `duplicate/DuplicatesScreen.tsx`, `author/AuthorOffers.tsx`,
 `tagtext/TagsByText.tsx`, `universe/SimilarUniverses.tsx`; `tag/SimilarTags.tsx` does the same by
 itself, made before the hook.
 
@@ -108,3 +109,13 @@ where the name is made, never covered in the interface:
 - a draft names an existing value: a universe merged into another takes its drafts with it (`FandomEditing.merged`).
 
 A fallback `?: key` in a place that names a value is a fault waiting to be shown: name it by what there is.
+
+## 11. A list that comes in versions says it is not done
+
+A list whose server makes it in steps — the first page of a search (`item/ItemBoard.tsx`,
+`item/pageVersions.ts`) — shows every version as it comes: an early, rougher one at once rather than
+the right one half a minute later (owner, 2026-11-26). While a later version is coming, a line over
+the list, taking no room, says what is still at work (`ItemBoard.refining.<step>`) and the search line
+shows it busy; each new version is shown by section 1, the cards moving to their new places. The last
+version has no step, and the line goes. Only a list asked for anew is shown so: a list read again keeps
+what it shows till its last version.
