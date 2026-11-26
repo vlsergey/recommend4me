@@ -98,7 +98,7 @@ internal class ChapterEncoding(private val with: Encoding, private val events: A
                     fitted.projection.key,
                     fitted.codebook.codes(pieces[i].pieces),
                 )
-            saveFullText(s, part, windows[i])
+            saveFullText(s, part, windows[i], pieces?.get(i)?.spans)
         }
         // What the models learnt of these works read: told, the models fitted of them fitted again
         if (changed.isNotEmpty())
@@ -114,11 +114,17 @@ internal class ChapterEncoding(private val with: Encoding, private val events: A
 
     /**
      * The full-text vectors of the [windows] of the [part], by the centre of the type, each window with its characters
-     * in the part's text; nothing of no centre, nor of windows of another text than the part's of now.
+     * in the part's text — the [cut] of the run that made them, else the text cut again —; nothing of no centre, nor of
+     * windows of another text than the part's of now.
      */
-    private fun saveFullText(s: SourceStore, part: PartToEncode, windows: List<FloatArray>) {
+    private fun saveFullText(
+        s: SourceStore,
+        part: PartToEncode,
+        windows: List<FloatArray>,
+        cut: List<IntRange>? = null,
+    ) {
         val centre = with.centre ?: return
-        val spans = encoder.windowSpans(part.content)
+        val spans = cut ?: encoder.windowSpans(part.content)
         if (spans.size != windows.size) return
         val packed = FullTextVectors.pack(spans.zip(windows) { r, v -> TextWindow(r.first, r.last + 1, v) }, centre)
         s.parts.fullText.save(part.itemId, part.partId, centre.key, packed)

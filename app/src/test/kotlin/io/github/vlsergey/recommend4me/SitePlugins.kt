@@ -478,6 +478,7 @@ class SitePlugins {
             EncodedPieces(
                 words.encodeWindows(listOf(t)).first(),
                 word.findAll(t).map { vectorOf(it.value, projection) }.toList(),
+                words.windowSpans(t),
             )
         }
 

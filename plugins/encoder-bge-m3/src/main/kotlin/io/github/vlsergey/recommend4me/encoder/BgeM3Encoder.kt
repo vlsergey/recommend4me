@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.encoder
 
+import ai.djl.huggingface.tokenizers.Encoding
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
+import ai.djl.huggingface.tokenizers.jni.CharSpan
 import ai.onnxruntime.OnnxTensor
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.OnnxSplice
@@ -52,8 +54,11 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     override val pieces: PieceEncoder = BgeM3Pieces(onnx, this)
 
     /** Token ids of every text of [texts], without special tokens: the texts handed to the tokenizer together. */
-    internal fun piecesOf(texts: List<String>): List<LongArray> =
-        if (texts.isEmpty()) emptyList() else tokenizer.batchEncode(texts, false, false).map { it.ids }
+    internal fun piecesOf(texts: List<String>): List<LongArray> = cutOf(texts).map { it.ids }
+
+    /** Every text of [texts] cut into its pieces, no special tokens: the texts handed to the tokenizer together. */
+    internal fun cutOf(texts: List<String>): List<Encoding> =
+        if (texts.isEmpty()) emptyList() else tokenizer.batchEncode(texts, false, false).toList()
 
     /** Vectors of texts of any length, unit length; an empty text gets null. A query and a passage are read alike. */
     override fun encode(texts: List<String>, kind: TextKind): List<FloatArray?> {
@@ -108,17 +113,18 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /** The windows of [encodeWindows] in the text, by the characters of their first and last pieces. */
-    override fun windowSpans(text: String): List<IntRange> {
-        if (text.isBlank()) return emptyList()
-        val spans = tokenizer.encode(text, false, false).charTokenSpans
-        return scenesOf(spans.size).mapNotNull { chunk ->
+    override fun windowSpans(text: String): List<IntRange> =
+        if (text.isBlank()) emptyList() else windowSpansOf(tokenizer.encode(text, false, false).charTokenSpans)
+
+    /** The windows of [encodeWindows] in a text, by the characters of its pieces' [spans]. */
+    internal fun windowSpansOf(spans: Array<CharSpan?>): List<IntRange> =
+        scenesOf(spans.size).mapNotNull { chunk ->
             // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
             // have
             val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
             val to = chunk.reversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
             from until to
         }
-    }
 
     /**
      * The pages a whole text's vector is the mean of ([encode]): of [WINDOW] pieces end to end, every one of every text

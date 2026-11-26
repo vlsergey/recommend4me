@@ -56,9 +56,10 @@ class PieceProjection(val key: String, val rows: List<FloatArray>)
 
 /**
  * A text encoded with its pieces: the vector of every window, as [TextEncoder.encodeWindows] gives them, and of every
- * piece.
+ * piece; and where every window lies in the text, as [TextEncoder.windowSpans] gives them — of the same cutting of the
+ * text into pieces, not cut again.
  */
-class EncodedPieces(val windows: List<FloatArray>, val pieces: List<FloatArray>)
+class EncodedPieces(val windows: List<FloatArray>, val pieces: List<FloatArray>, val spans: List<IntRange>)
 
 /**
  * THE VECTOR OF EVERY PIECE (TOKEN) OF A TEXT, of the context of the window it is read in — so a meaning is found where

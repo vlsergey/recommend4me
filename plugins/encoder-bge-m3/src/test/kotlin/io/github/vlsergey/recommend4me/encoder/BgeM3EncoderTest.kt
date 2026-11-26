@@ -113,6 +113,12 @@ class BgeM3EncoderTest {
         val windows = encoder.encodeWindows(listOf(text)).single()
         assertEquals(windows.size, got.windows.size)
         assertTrue(cos(windows.single(), got.windows.single()) > 0.9999, "the window's vector as before")
+        assertEquals(encoder.windowSpans(text), got.spans, "the windows where the text cut alone puts them")
+        assertTrue(blank.spans.isEmpty())
+        val long = List(60) { text }.joinToString(" ")
+        val spans = pieces.encode(listOf(long), null).single().spans
+        assertTrue(spans.size > 2)
+        assertEquals(encoder.windowSpans(long), spans, "the windows of a long text where the text cut alone puts them")
 
         // The model's own hidden states, and the head of its file applied to them
         val tokenizer =

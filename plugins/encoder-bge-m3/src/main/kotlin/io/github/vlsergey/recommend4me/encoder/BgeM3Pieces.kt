@@ -34,7 +34,8 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
 
     override fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> {
         val written = texts.indices.filter { texts[it].isNotBlank() }
-        val ids = encoder.piecesOf(written.map { texts[it] })
+        val cut = encoder.cutOf(written.map { texts[it] })
+        val ids = cut.map { it.ids }
         // Every window of every text, the text it is of and where in it it begins
         val windows = ArrayList<LongArray>()
         val owner = ArrayList<Int>()
@@ -55,7 +56,7 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
         texts.indices.forEach { t ->
             val k = byText[t]
             if (k == null) {
-                out += EncodedPieces(emptyList(), emptyList())
+                out += EncodedPieces(emptyList(), emptyList(), emptyList())
                 return@forEach
             }
             val n = ids[k].size
@@ -73,7 +74,12 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
                     }
                 }
             }
-            out += EncodedPieces(own.map { unit(firsts[it]) }, best.map { unit(it!!) })
+            out +=
+                EncodedPieces(
+                    own.map { unit(firsts[it]) },
+                    best.map { unit(it!!) },
+                    encoder.windowSpansOf(cut[k].charTokenSpans),
+                )
         }
         return out
     }
@@ -128,13 +134,28 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
 
     /**
      * The graph of the [projection] — of none, the head's vectors as they are —, made of the model when its session is
-     * first asked for.
+     * first asked for: the product of the projection and the head computed then, once, not at every run (a third of a
+     * million products of a thousand numbers each, a sixth of the time a chapter took, 2026-11-26).
      */
     private fun graphOf(projection: PieceProjection?): String {
         val name = "$GRAPH-${projection?.key ?: "head"}"
+        onnx.madeOf(name, BgeM3Encoder.MODEL) {
+            OnnxSplice.withOutputs(
+                it,
+                BgeM3Encoder.HIDDEN_STATE,
+                BgeM3Encoder.FIRST_PIECE_OUTPUT,
+                outputOf(projection?.rows),
+            )
+        }
+        return name
+    }
+
+    /**
+     * The output of the pieces of the graph: the product of the projection's [rows] and the head, as the graph
+     * multiplies a piece's row by it, [in, out], and its shift — of no rows, the head as it is.
+     */
+    private fun outputOf(rows: List<FloatArray>?): PiecesOutput {
         val (weight, bias) = head
-        val rows = projection?.rows
-        // The product of the projection and the head, as the graph multiplies a piece's row by it: [in, out]
         val out = rows?.size ?: width
         val matrix = FloatArray(width * out)
         val shift = FloatArray(out)
@@ -148,15 +169,7 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
             }
             shift[o] = if (p == null) bias[o] else (0 until width).sumOf { p[it].toDouble() * bias[it] }.toFloat()
         }
-        onnx.madeOf(name, BgeM3Encoder.MODEL) {
-            OnnxSplice.withOutputs(
-                it,
-                BgeM3Encoder.HIDDEN_STATE,
-                BgeM3Encoder.FIRST_PIECE_OUTPUT,
-                PiecesOutput(PIECES_OUTPUT, matrix, shift),
-            )
-        }
-        return name
+        return PiecesOutput(PIECES_OUTPUT, matrix, shift)
     }
 
     private fun unit(v: FloatArray): FloatArray {

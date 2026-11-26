@@ -73,7 +73,8 @@ class TextWindows(private val plugins: Plugins) {
         val windows =
             if (ids.isEmpty()) emptyMap() else store.textVectors.windows.windowsOf(ids, encoder.id, encoder.windowsId)
         texts.forEach { t ->
-            val spans = encoder.windowSpans(t.text)
+            // Where the windows lie: of the run that made the pieces, else the text cut again
+            val spans = pieces[t]?.spans ?: encoder.windowSpans(t.text)
             val own =
                 pieces[t]?.windows
                     ?: windows[t.itemId]?.get(t.key)?.takeIf { spans.size > 1 }
