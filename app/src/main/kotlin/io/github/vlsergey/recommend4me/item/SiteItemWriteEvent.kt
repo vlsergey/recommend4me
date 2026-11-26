@@ -8,4 +8,4 @@ package io.github.vlsergey.recommend4me.item
  * merge of tags or of universes, a draft of the model tells too, of every work of a tag of hundreds of thousands (user,
  * 2026-11-19: "both of those must listen to: the extension brought a new page").
  */
-data class SiteItemWriteEvent(val source: String, val ids: List<String>)
+data class SiteItemWriteEvent(val source: String, val ids: List<Long>)

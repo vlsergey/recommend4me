@@ -124,7 +124,8 @@ internal class WorksPrint(private val facet: String) {
             first = false
             works.update("${ids[i]}:${fingerprints[i]}".toByteArray())
             others.update(
-                (ids[i] + ":" + facets[i].filter { it.first != facet }.joinToString(";") { it.second }).toByteArray()
+                (ids[i].toString() + ":" + facets[i].filter { it.first != facet }.joinToString(";") { it.second })
+                    .toByteArray()
             )
         }
     }

@@ -442,7 +442,7 @@ export function SiteLinks({
   className,
   badgeClassName,
 }: {
-  sites: { source: string; item: string; title: string; url: string }[];
+  sites: { source: string; item: number; title: string; url: string }[];
   className?: string;
   badgeClassName?: string;
 }) {

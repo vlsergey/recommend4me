@@ -25,7 +25,7 @@ class MolwePagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, name: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, page(name), now), context)
+        return context.sitesOf(source.capture(CapturedPage(url, page(name), now), context))
     }
 
     @Test
@@ -169,14 +169,14 @@ class MolwePagesTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals("20627", source.itemIdOf("https://molwe.ru/fanfics/20627"))
-        assertEquals("20656", source.itemIdOf("https://molwe.ru/originals/20656"))
+        assertEquals("20627", source.siteIdOf("https://molwe.ru/fanfics/20627"))
+        assertEquals("20656", source.siteIdOf("https://molwe.ru/originals/20656"))
         assertEquals(
             "20627",
-            source.itemIdOf("https://molwe.ru/fanfics/20627/read/83fefa5f-4d3c-4e85-b8f5-77f04c306abe"),
+            source.siteIdOf("https://molwe.ru/fanfics/20627/read/83fefa5f-4d3c-4e85-b8f5-77f04c306abe"),
         )
-        assertNull(source.itemIdOf("https://molwe.ru/fanfics/tags/1683"))
-        assertNull(source.itemIdOf("https://molwe.ru/fanfics?page=2"))
+        assertNull(source.siteIdOf("https://molwe.ru/fanfics/tags/1683"))
+        assertNull(source.siteIdOf("https://molwe.ru/fanfics?page=2"))
         assertTrue(source.capturePatterns.any { it.matches("https://molwe.ru/") })
         assertTrue(source.capturePatterns.none { it.matches("https://molwe.ru/wiki") })
     }

@@ -66,7 +66,7 @@ export function Ratings({ type, details: d }: { type: ContentTypeInfo; details: 
 }
 
 /** Nothing of the work is here yet: its page has not come in — fetch it now. */
-export function NotFetched({ item }: { item: { source: string; item: string } }) {
+export function NotFetched({ item }: { item: { source: string; item: number } }) {
   const { t } = useTranslation("item");
   const refresh = useRefreshItem(item);
   return (
@@ -81,7 +81,7 @@ export function NotFetched({ item }: { item: { source: string; item: string } })
 }
 
 /** Downloads the page again: after a login was set, or to see a fresh update before the next job. */
-export function RefreshButton({ item }: { item: { source: string; item: string } }) {
+export function RefreshButton({ item }: { item: { source: string; item: number } }) {
   const { t } = useTranslation("item");
   const refresh = useRefreshItem(item);
   return (

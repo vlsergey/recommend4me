@@ -1,4 +1,4 @@
 package io.github.vlsergey.recommend4me.picture
 
 /** Pictures of the works [ids] of the [source] downloaded and kept on disk: to be analysed ([PictureVectors]). */
-data class SiteItemPictureDownloadEvent(val source: String, val ids: List<String>)
+data class SiteItemPictureDownloadEvent(val source: String, val ids: List<Long>)

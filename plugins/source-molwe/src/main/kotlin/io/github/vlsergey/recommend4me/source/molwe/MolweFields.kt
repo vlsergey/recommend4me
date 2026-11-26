@@ -23,7 +23,7 @@ internal class MolweFields(private val items: ItemStore) {
      * The badges over the work's cover, "16+", "Гет", "Завершено": its rating, the kind of its relationships, its
      * status, each told by its word; a word of none of them says nothing.
      */
-    fun badges(id: String, words: List<String>) {
+    fun badges(id: Long, words: List<String>) {
         val said = words.map { it.trim() }
         said.firstNotNullOfOrNull { RATINGS[it] }?.let { AgeRating.write(items, id, listOf(it)) }
         said
@@ -36,14 +36,14 @@ internal class MolweFields(private val items: ItemStore) {
      * The work's fandoms by their names — the site's own word for the original writing, "Ориджинал", one of them — and
      * whether the work is fan fiction or original writing, by the catalogue it is in.
      */
-    fun fandoms(id: String, names: List<String>, original: Boolean?) {
+    fun fandoms(id: Long, names: List<String>, original: Boolean?) {
         val fandoms = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (fandoms.isNotEmpty()) items.setFacet(id, FANDOM, fandoms.map { FacetValue(it.lowercase(), it) })
         original?.let { kind(id, it) }
     }
 
     /** Whether the work is fan fiction or original writing. */
-    fun kind(id: String, original: Boolean) {
+    fun kind(id: Long, original: Boolean) {
         val kind = if (original) UniverseFacets.ORIGINAL else UniverseFacets.FANFICTION
         items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(kind)))
     }
@@ -52,14 +52,14 @@ internal class MolweFields(private val items: ItemStore) {
      * The work's line of pairings and characters as the site shows it: every entry as written, a pairing "A / B" or a
      * character alone, one field; and the line whole, pairings first, what the application works the cast out of.
      */
-    fun cast(id: String, entries: List<String>) {
+    fun cast(id: Long, entries: List<String>) {
         val written = entries.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         items.setFacet(id, PAIRING, written.map(::entry).distinctBy { it.key })
         items.setTexts(id, mapOf(PAIRINGS_LINE to written.joinToString(", ").ifEmpty { null }))
     }
 
     /** The work's tags by their names: one name of the site's two catalogues one tag. */
-    fun tags(id: String, names: List<String>) =
+    fun tags(id: Long, names: List<String>) =
         items.setFacet(
             id,
             TAG,

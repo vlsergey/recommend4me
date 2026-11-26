@@ -28,12 +28,12 @@ internal class UniverseVocabularies(private val stores: Stores) {
     fun of(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
         light: Boolean = false,
-        site: Map<String, Map<String, List<String>>>? = null,
+        site: Map<Long, Map<String, List<String>>>? = null,
     ): Vocabulary? {
         val type = stores.typeOf(store.id)
         if (!type.type.universes) return null
@@ -107,15 +107,15 @@ internal class UniverseVocabularies(private val stores: Stores) {
     private fun universes(
         store: SourceStore,
         type: TypeStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         characters: CharactersRead,
         answers: Answers,
         light: Boolean,
-        site: Map<String, Map<String, List<String>>>?,
+        site: Map<Long, Map<String, List<String>>>?,
     ): Vocabulary {
         val kinds = kindsOf(store, ids, answers, site)
         // Realism, an alternative history and an original work: our world, ours changed, or a world of its own
-        fun original(id: String) =
+        fun original(id: Long) =
             kinds[id].orEmpty().let { it.isNotEmpty() && it.all { k -> k in UniverseFacets.UNIVERSELESS } }
         // NO NAME OF IT LOOKED FOR IN THE WORK'S WORDS (user, 2026-10-16): the universe is told by the
         // work's texts, its tags and its other values; the names below are what the fitting learns from.
@@ -139,11 +139,11 @@ internal class UniverseVocabularies(private val stores: Stores) {
      */
     private fun kindsOf(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         answers: Answers,
-        site: Map<String, Map<String, List<String>>>?,
-    ): Map<String, List<String>> {
-        val kinds = HashMap<String, List<String>>()
+        site: Map<Long, Map<String, List<String>>>?,
+    ): Map<Long, List<String>> {
+        val kinds = HashMap<Long, List<String>>()
         (site ?: store.items.facetsOf(ids)).forEach { (id, facets) ->
             facets[UniverseFacets.KIND]?.let { kinds[id] = it }
         }

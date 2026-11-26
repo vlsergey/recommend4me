@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 class TagsByTextController(private val stores: Stores, private val tags: TextTags) : TagsByTextApi {
 
-    override fun getTagsByText(source: String, item: String): ResponseEntity<TagsByText> {
+    override fun getTagsByText(source: String, item: Long): ResponseEntity<TagsByText> {
         val (store, list) =
             stores
                 .source(source)
@@ -47,7 +47,7 @@ class TagsByTextController(private val stores: Stores, private val tags: TextTag
     /** The user's word on a pair kept; of a yes, what the answer made of the facet of tags ([AnsweredFacets]). */
     override fun answerTagByText(
         source: String,
-        item: String,
+        item: Long,
         tagByTextAnswer: TagByTextAnswer,
     ): ResponseEntity<List<AnsweredFacet>> {
         val a = tagByTextAnswer

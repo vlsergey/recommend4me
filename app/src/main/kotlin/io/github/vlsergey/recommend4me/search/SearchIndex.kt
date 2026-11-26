@@ -57,7 +57,7 @@ class SearchIndex(
         val work = removing(type)
         val waiting = tasks.keys.wanted(work)
         if (waiting.isEmpty()) return
-        val keys = waiting.map { ItemKey(it.substringBefore(SEP), it.substringAfter(SEP)) }
+        val keys = waiting.map { ItemKey(it.substringBefore(SEP), it.substringAfter(SEP).toLong()) }
         provider.update(type, emptyMap(), { emptyList() }, keys)
         tasks.keys.done(work, waiting)
         log.info("{}: {} documents of items removed taken out of the search", type, keys.size)

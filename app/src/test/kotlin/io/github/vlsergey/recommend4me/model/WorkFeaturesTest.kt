@@ -9,8 +9,8 @@ import kotlin.test.assertEquals
 
 class WorkFeaturesTest {
 
-    private val a = ItemKey("alpha", "1")
-    private val b = ItemKey("beta", "2")
+    private val a = ItemKey("alpha", 1)
+    private val b = ItemKey("beta", 2)
 
     /** Of a number both items have, the mean; of the version, that of the item that names it. */
     @Test
@@ -42,7 +42,7 @@ class WorkFeaturesTest {
                     a,
                     values.mapIndexed { i, v ->
                         CatalogueItem(
-                            if (i == 0) a else ItemKey("s$i", "$i"),
+                            if (i == 0) a else ItemKey("s$i", i.toLong()),
                             "",
                             Instant.EPOCH,
                             emptySet(),
@@ -87,7 +87,7 @@ class WorkFeaturesTest {
                     a,
                     statuses.mapIndexed { i, status ->
                         CatalogueItem(
-                            if (i == 0) a else ItemKey("s$i", "$i"),
+                            if (i == 0) a else ItemKey("s$i", i.toLong()),
                             "",
                             Instant.EPOCH,
                             setOf(FeatureNames.facet("status", status), FeatureNames.facet("tag", "t$i")),

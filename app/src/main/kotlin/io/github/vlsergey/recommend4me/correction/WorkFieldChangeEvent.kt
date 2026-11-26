@@ -7,4 +7,4 @@ package io.github.vlsergey.recommend4me.correction
  * chances are made apart, at once
  * ([FacetRefitEvents.answered][io.github.vlsergey.recommend4me.suggestion.FacetRefitEvents.answered]).
  */
-data class WorkFieldChangeEvent(val type: String, val source: String, val itemId: String, val facet: String)
+data class WorkFieldChangeEvent(val type: String, val source: String, val itemId: Long, val facet: String)

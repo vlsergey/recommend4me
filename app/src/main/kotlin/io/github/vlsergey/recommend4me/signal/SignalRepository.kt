@@ -1,16 +1,15 @@
 package io.github.vlsergey.recommend4me.signal
 
 import io.github.vlsergey.recommend4me.database.ratings.tables.references.SITE_SIGNAL
-import io.github.vlsergey.recommend4me.source.SiteSignals
 import java.time.Instant
 import org.jooq.DSLContext
 
 /**
  * The user's own actions on a site as its pages show them, kept with the user's grades; shown, never read by the model.
  */
-class SignalRepository(private val db: DSLContext) : SiteSignals {
+class SignalRepository(private val db: DSLContext) {
 
-    override fun set(itemId: String, signal: String, value: String?) {
+    fun set(itemId: Long, signal: String, value: String?) {
         val known =
             db.select(SITE_SIGNAL.CONTENT)
                 .from(SITE_SIGNAL)
@@ -32,7 +31,7 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
         }
     }
 
-    override fun withSignal(signal: String): Map<String, String> =
+    fun withSignal(signal: String): Map<Long, String> =
         db.select(SITE_SIGNAL.ITEM_ID, SITE_SIGNAL.CONTENT)
             .from(SITE_SIGNAL)
             .where(SITE_SIGNAL.SIGNAL.eq(signal))
@@ -40,7 +39,7 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
             .associate { it.value1()!! to it.value2()!! }
 
     /** Every signal of every item: item to signal to value. */
-    fun all(): Map<String, Map<String, String>> =
+    fun all(): Map<Long, Map<String, String>> =
         db.select(SITE_SIGNAL.ITEM_ID, SITE_SIGNAL.SIGNAL, SITE_SIGNAL.CONTENT)
             .from(SITE_SIGNAL)
             .fetch()
@@ -60,7 +59,7 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
         return gone
     }
 
-    fun ofItem(itemId: String): Map<String, String> =
+    fun ofItem(itemId: Long): Map<String, String> =
         db.select(SITE_SIGNAL.SIGNAL, SITE_SIGNAL.CONTENT)
             .from(SITE_SIGNAL)
             .where(SITE_SIGNAL.ITEM_ID.eq(itemId))
@@ -68,7 +67,7 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
             .associate { it.value1()!! to it.value2()!! }
 
     /** Every signal of the item removed from the library. */
-    fun forget(itemId: String) {
+    fun forget(itemId: Long) {
         db.deleteFrom(SITE_SIGNAL).where(SITE_SIGNAL.ITEM_ID.eq(itemId)).execute()
     }
 }

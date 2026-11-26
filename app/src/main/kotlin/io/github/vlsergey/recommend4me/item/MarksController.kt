@@ -24,7 +24,7 @@ private fun badMark(mark: Int) = Refusal.BAD_MARK.refuse(HttpStatus.BAD_REQUEST,
 @RestController
 class MarksController(private val stores: Stores, private val events: ApplicationEventPublisher) : MarksApi {
 
-    override fun markPicture(source: String, item: String, position: Int, mark: Mark): ResponseEntity<Unit> {
+    override fun markPicture(source: String, item: Long, position: Int, mark: Mark): ResponseEntity<Unit> {
         if (mark.mark != 1 && mark.mark != -1) throw badMark(mark.mark)
         val store = stores.source(source)
         val picture = store?.pictures?.find(item, position, null)
@@ -35,13 +35,13 @@ class MarksController(private val stores: Stores, private val events: Applicatio
         }
     }
 
-    override fun unmarkPicture(source: String, item: String, position: Int): ResponseEntity<Unit> {
+    override fun unmarkPicture(source: String, item: Long, position: Int): ResponseEntity<Unit> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         store.marks.markPicture(item, position, "", null, Instant.now())
         return marked(store)
     }
 
-    override fun markReview(source: String, item: String, reviewId: String, mark: Mark): ResponseEntity<Unit> {
+    override fun markReview(source: String, item: Long, reviewId: String, mark: Mark): ResponseEntity<Unit> {
         if (mark.mark != 1 && mark.mark != -1) throw badMark(mark.mark)
         val store = stores.source(source)
         return if (store == null || reviewId !in store.reviews.ids(item)) ResponseEntity.notFound().build()
@@ -51,7 +51,7 @@ class MarksController(private val stores: Stores, private val events: Applicatio
         }
     }
 
-    override fun unmarkReview(source: String, item: String, reviewId: String): ResponseEntity<Unit> {
+    override fun unmarkReview(source: String, item: Long, reviewId: String): ResponseEntity<Unit> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         store.marks.markReview(item, reviewId, null, Instant.now())
         return marked(store)

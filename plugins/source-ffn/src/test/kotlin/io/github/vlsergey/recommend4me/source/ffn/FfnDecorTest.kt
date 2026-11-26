@@ -32,16 +32,17 @@ class FfnDecorTest {
                 "author.html" to "https://www.fanfiction.net/u/16441913/",
             )
             .forEach { (name, url) ->
+                val context = MemorySourceContext()
                 val captured =
                     FfnDatabase().use {
-                        source.capture(CapturedPage(url, page(name), Instant.now()), it.of(MemorySourceContext()))
+                        context.sitesOf(source.capture(CapturedPage(url, page(name), Instant.now()), it.of(context)))
                     }
                 val doc = Jsoup.parse(page(name), url)
                 val cards = decor.cards!!
                 val linked =
                     doc.select(cards.selector)
                         .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                        .mapNotNull(source::itemIdOf)
+                        .mapNotNull(source::siteIdOf)
                 assertEquals(captured, linked, name)
             }
         val list = Jsoup.parse(page("list.html"), "https://www.fanfiction.net/book/Harry-Potter/")

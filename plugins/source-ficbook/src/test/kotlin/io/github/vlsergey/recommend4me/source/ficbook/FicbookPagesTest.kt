@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.source.ficbook
 
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import java.time.Instant
 import kotlin.test.Test
@@ -21,7 +22,7 @@ class FicbookPagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, name: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, page(name), now), context)
+        return context.sitesOf(source.capture(CapturedPage(url, page(name), now), context))
     }
 
     @Test
@@ -172,9 +173,9 @@ class FicbookPagesTest {
             ),
             context,
         )
-        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("liked"))
-        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("read"))
-        assertEquals(emptyMap(), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("liked").mapKeys { context.siteOf(it.key) })
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("read").mapKeys { context.siteOf(it.key) })
+        assertEquals(emptyMap(), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED).mapKeys { context.siteOf(it.key) })
         // Unread and unliked again: the signals go
         source.capture(
             CapturedPage(
@@ -184,9 +185,12 @@ class FicbookPagesTest {
             ),
             context,
         )
-        assertEquals(emptyMap(), context.signals.withSignal("liked"))
-        assertEquals(emptyMap(), context.signals.withSignal("read"))
-        assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+        assertEquals(emptyMap(), context.signals.withSignal("liked").mapKeys { context.siteOf(it.key) })
+        assertEquals(emptyMap(), context.signals.withSignal("read").mapKeys { context.siteOf(it.key) })
+        assertEquals(
+            mapOf("123" to "yes"),
+            context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED).mapKeys { context.siteOf(it.key) },
+        )
         // A page of no user says nothing of the marks: they stay
         source.capture(
             CapturedPage(
@@ -196,7 +200,10 @@ class FicbookPagesTest {
             ),
             context,
         )
-        assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+        assertEquals(
+            mapOf("123" to "yes"),
+            context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED).mapKeys { context.siteOf(it.key) },
+        )
     }
 
     @Test
@@ -429,7 +436,7 @@ class FicbookPagesTest {
         assertEquals("https://ficbook.net/series/20989", series.url)
         assertTrue(series.description!!.startsWith("Настоящая сила Британии"), series.description)
         assertEquals(null, series.status)
-        assertEquals(works, series.works.map { it.itemId })
+        assertEquals(works, series.works.map { context.siteOf(it.itemId) })
         assertTrue(series.whole)
         assertEquals(listOf("20989"), context.facets.getValue("7412901")["series"])
         // A page listing fewer works than it counts is not every work of the series
@@ -441,12 +448,16 @@ class FicbookPagesTest {
     @Test
     fun `an author's list of series gives each with its description and every work of it`() {
         val context = MemorySourceContext()
+        // Of the works the list names, those written before: a work never seen is not of a series yet
+        listOf("9265345", "10161264").forEach {
+            context.items.upsert(ItemHead(it, "https://ficbook.net/readfic/$it", it), now)
+        }
         capture(context, "https://ficbook.net/authors/3093607/series", "author-series.html")
         assertEquals(listOf("21006", "20989"), context.series.keys.toList())
         val first = context.series.getValue("21006")
         assertEquals("Привет", first.title)
         assertEquals("Короткая повесть в одном письме и одной случайной встрече", first.description)
-        assertEquals(listOf("9265345", "10161264"), first.works.map { it.itemId })
-        assertEquals(9, context.series.getValue("20989").works.size)
+        assertEquals(listOf("9265345", "10161264"), first.works.map { context.siteOf(it.itemId) })
+        assertEquals(emptyList(), context.series.getValue("20989").works)
     }
 }

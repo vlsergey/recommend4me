@@ -238,7 +238,7 @@ class Search(
      * the index ([SearchProvider.mentions]): its own words read again as they were put in it — what is counted is what
      * is shown — each a paragraph, or the part of a long one around the names. None without a search plugin.
      */
-    fun quotes(s: SourceStore, itemId: String, names: Map<String, List<String>>, of: Collection<String>): List<Quote> =
+    fun quotes(s: SourceStore, itemId: Long, names: Map<String, List<String>>, of: Collection<String>): List<Quote> =
         quoted(s, itemId) { provider, doc -> provider.places(doc, names, of) }
 
     /**
@@ -247,7 +247,7 @@ class Search(
      */
     fun quotesTogether(
         s: SourceStore,
-        itemId: String,
+        itemId: Long,
         names: Map<String, List<String>>,
         a: String,
         b: String,
@@ -256,7 +256,7 @@ class Search(
     /** The [places] of the work's document as quotes: by where in the work each is, a paragraph each. */
     private fun quoted(
         s: SourceStore,
-        itemId: String,
+        itemId: Long,
         places: (SearchProvider, SearchDocument) -> List<NamePlace>,
     ): List<Quote> {
         val provider = plugins.search

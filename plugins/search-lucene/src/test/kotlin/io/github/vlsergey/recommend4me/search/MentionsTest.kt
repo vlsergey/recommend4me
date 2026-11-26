@@ -16,7 +16,7 @@ class MentionsTest {
         )
 
     private fun doc(
-        id: String,
+        id: Long,
         language: String,
         vararg texts: String,
         tags: List<String> = emptyList(),
@@ -43,7 +43,7 @@ class MentionsTest {
         listOf(
             // Every form of a name; a word of a family names nobody; a name of one word only with a capital
             doc(
-                "1",
+                1,
                 "ru",
                 "Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. " +
                     "Рон Уизли пришёл позже. Уизли шумели.",
@@ -51,13 +51,13 @@ class MentionsTest {
             ),
             // English stemmed as English, the capital told apart; the site's tags count, the values given do not
             doc(
-                "2",
+                2,
                 "en",
                 "The Captain waits. The captain of the guard does not.",
                 tags = listOf("Harry Potter"),
                 given = listOf("Ron Weasley", "Captain"),
             ),
-            doc("3", "en", "Nobody is named here at all."),
+            doc(3, "en", "Nobody is named here at all."),
         )
 
     @Test
@@ -67,14 +67,14 @@ class MentionsTest {
             val counted = search.mentions("books", null, names)
             assertEquals(
                 mapOf(
-                    ItemKey("test", "1") to mapOf("harry" to 3, "ron" to 1, "ginny" to 1),
-                    ItemKey("test", "2") to mapOf("captain" to 1, "harry" to 1),
+                    ItemKey("test", 1) to mapOf("harry" to 3, "ron" to 1, "ginny" to 1),
+                    ItemKey("test", 2) to mapOf("captain" to 1, "harry" to 1),
                 ),
                 counted,
             )
             assertEquals(
-                mapOf(ItemKey("test", "2") to mapOf("captain" to 1, "harry" to 1)),
-                search.mentions("books", listOf(ItemKey("test", "2"), ItemKey("test", "3")), names),
+                mapOf(ItemKey("test", 2) to mapOf("captain" to 1, "harry" to 1)),
+                search.mentions("books", listOf(ItemKey("test", 2), ItemKey("test", 3)), names),
             )
             // What is counted is what is shown: the places of a value of a work read of its texts again
             documents.forEach { doc ->
@@ -107,18 +107,18 @@ class MentionsTest {
     fun `the rules of the names, a family name and a function word naming nobody, a word alone only with a capital`() {
         val docs =
             listOf(
-                doc("d", "ru", "Гарри посмотрел на Гермиону. Гермионы не было. Гарри Поттер ушёл к Джинни."),
-                doc("f", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался."),
-                doc("w", "ru", "Пришёл со мной о чём-то. Со Геррера и Пи. пи равно трём."),
-                doc("n", "ru", "Однако новый мир — новые правила. Нова улетел."),
+                doc(14, "ru", "Гарри посмотрел на Гермиону. Гермионы не было. Гарри Поттер ушёл к Джинни."),
+                doc(15, "ru", "Поттер и Уизли вошли. Джеймс Поттер остался."),
+                doc(16, "ru", "Пришёл со мной о чём-то. Со Геррера и Пи. пи равно трём."),
+                doc(17, "ru", "Однако новый мир — новые правила. Нова улетел."),
             )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             val counted = search.mentions("books", null, potter)
-            assertEquals(mapOf("harry" to 2, "hermione" to 2, "ginny" to 1), counted[ItemKey("test", "d")])
-            assertEquals(mapOf("james" to 1), counted[ItemKey("test", "f")])
-            assertEquals(mapOf("saw" to 1, "c3po" to 1), counted[ItemKey("test", "w")])
-            assertEquals(mapOf("rick" to 1), counted[ItemKey("test", "n")])
+            assertEquals(mapOf("harry" to 2, "hermione" to 2, "ginny" to 1), counted[ItemKey("test", 14)])
+            assertEquals(mapOf("james" to 1), counted[ItemKey("test", 15)])
+            assertEquals(mapOf("saw" to 1, "c3po" to 1), counted[ItemKey("test", 16)])
+            assertEquals(mapOf("rick" to 1), counted[ItemKey("test", 17)])
         }
     }
 
@@ -126,24 +126,24 @@ class MentionsTest {
     fun `several askings at once count as each asked apart, every work by its own names`() {
         val docs =
             listOf(
-                doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
-                doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри."),
-                doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+                doc(11, "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+                doc(12, "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри."),
+                doc(13, "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
             ) + documents
         // Without Harry "Поттер" is James's alone: the names of an asking are its own, a word of them not shared with
         // another
         val asked =
             listOf(
-                NamesAsked(listOf(ItemKey("test", "a"), ItemKey("test", "c")), potter),
-                NamesAsked(listOf(ItemKey("test", "b"), ItemKey("test", "a")), potter - "harry"),
+                NamesAsked(listOf(ItemKey("test", 11), ItemKey("test", 13)), potter),
+                NamesAsked(listOf(ItemKey("test", 12), ItemKey("test", 11)), potter - "harry"),
                 NamesAsked(null, names),
-                NamesAsked(listOf(ItemKey("test", "b")), emptyMap()),
+                NamesAsked(listOf(ItemKey("test", 12)), emptyMap()),
             )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             assertEquals(asked.map { search.mentions("books", it.items, it.names) }, search.mentions("books", asked))
             assertEquals(asked.map { search.together("books", it.items, it.names) }, search.together("books", asked))
-            assertEquals(mapOf("james" to 2), search.mentions("books", asked)[1][ItemKey("test", "b")])
+            assertEquals(mapOf("james" to 2), search.mentions("books", asked)[1][ItemKey("test", 12)])
         }
     }
 
@@ -151,11 +151,11 @@ class MentionsTest {
     fun `an asking of names but some values counts as those names alone, the names read once for every asking`() {
         val docs =
             listOf(
-                doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
-                doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри. Джинни и Рон."),
-                doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+                doc(11, "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+                doc(12, "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри. Джинни и Рон."),
+                doc(13, "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
             ) + documents
-        val keys = listOf("a", "b", "c", "1", "2", "3").map { ItemKey("test", it) }
+        val keys = listOf(11L, 12L, 13L, 1L, 2L, 3L).map { ItemKey("test", it) }
         // One map of names, every asking leaving out its own: as many askings as works, each of its own few
         val withouts =
             listOf(
@@ -180,7 +180,7 @@ class MentionsTest {
             // Without Harry "Поттер" is James's alone
             assertEquals(
                 mapOf("james" to 2, "ron" to 1, "ginny" to 1),
-                search.mentions("books", asked)[1][ItemKey("test", "b")],
+                search.mentions("books", asked)[1][ItemKey("test", 12)],
             )
         }
     }
@@ -188,16 +188,16 @@ class MentionsTest {
     @Test
     fun `two named in one paragraph are together, counted of the index as quoted of the texts`() {
         val text = "Гарри поцеловал Гермиону.\n\nРон ел.\nГермиона и Рон спорили. И снова Гермиона и Рон."
-        val docs = listOf(doc("p", "ru", text), doc("q", "ru", "Гермиона.", "Рон."))
+        val docs = listOf(doc(21, "ru", text), doc(22, "ru", "Гермиона.", "Рон."))
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             val together = search.together("books", null, potter)
             assertEquals(
                 mapOf(("harry" to "hermione") to 1, ("hermione" to "ron") to 1),
-                together[ItemKey("test", "p")],
+                together[ItemKey("test", 21)],
             )
             // Two texts are never one paragraph
-            assertEquals(null, together[ItemKey("test", "q")])
+            assertEquals(null, together[ItemKey("test", 22)])
             val quoted = search.placesTogether(docs[0], potter, "hermione", "ron").single()
             assertEquals(listOf("Гермиона", "Рон", "Гермиона", "Рон"), quoted.ranges.map { quoted.text.substring(it) })
         }

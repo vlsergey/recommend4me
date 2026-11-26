@@ -87,7 +87,7 @@ class HeldOutModels(
     }
 
     /** A word on a graded work: what the model that had not seen it said is of the work as it was. */
-    fun forget(source: String, itemId: String) = stores.typeOf(source).heldOut.forgetExplained(ItemKey(source, itemId))
+    fun forget(source: String, itemId: Long) = stores.typeOf(source).heldOut.forgetExplained(ItemKey(source, itemId))
 
     /** Whether the user graded the item [key]. */
     private fun graded(type: TypeStore, key: ItemKey): Boolean =

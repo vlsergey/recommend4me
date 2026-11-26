@@ -20,13 +20,15 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
     ItemFacetStore {
     private fun <T> write(block: () -> T): T = store.writing.withLock(block)
 
-    override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) = write {
-        // A work met as a work of a series it was not of: the series' page, read before, did not list it
-        val newSeries =
-            if (facet != seriesFacet) emptyList()
-            else values.map { it.key } - store.items.facets(itemId)[facet].orEmpty().toSet()
-        store.items.setFacet(itemId, facet, standardised(itemId, facet, values))
-        store.series.worksSeen(newSeries, Instant.now())
+    override fun setFacet(itemId: Long, facet: String, values: List<FacetValue>) {
+        write {
+            // A work met as a work of a series it was not of: the series' page, read before, did not list it
+            val newSeries =
+                if (facet != seriesFacet) emptyList()
+                else values.map { it.key } - store.items.facets(itemId)[facet].orEmpty().toSet()
+            store.items.setFacet(itemId, facet, standardised(itemId, facet, values))
+            store.series.worksSeen(newSeries, Instant.now())
+        }
     }
 
     /** The source's facet of the series; none of a source without series. */
@@ -79,7 +81,7 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
      * value outside the list — one the source could not map — is left out and told of in the log. Of any other facet
      * the values as they are.
      */
-    private fun standardised(itemId: String, facet: String, values: List<FacetValue>): List<FacetValue> {
+    private fun standardised(itemId: Long, facet: String, values: List<FacetValue>): List<FacetValue> {
         val standard = store.schema.facet(facet)?.standard?.takeIf { it.values != null } ?: return values
         return values.mapNotNull { v ->
             val known = standard.value(v.key)
@@ -97,8 +99,8 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
         }
     }
 
-    override fun facets(itemId: String): Map<String, List<String>> = store.items.facets(itemId)
+    override fun facets(itemId: Long): Map<String, List<String>> = store.items.facets(itemId)
 
-    override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) =
+    override fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit) =
         store.items.forEachFacet(facet, action)
 }

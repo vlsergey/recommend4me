@@ -37,7 +37,7 @@ class FacetPortionsTest : SiteTestBase() {
     private data class Left(
         val bases: Map<String, Long?>,
         val models: Map<String, List<Byte>?>,
-        val values: Map<String, Map<String, Set<String>>>,
+        val values: Map<String, Map<Long, Set<String>>>,
     )
 
     /** Every facet of the site fitted anew and its chances kept, of the works read [most] at a time. */

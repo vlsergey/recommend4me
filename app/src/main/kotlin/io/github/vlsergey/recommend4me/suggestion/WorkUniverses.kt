@@ -13,7 +13,7 @@ internal object WorkUniverses {
      * characters — the user's answers, and the main ones the model gives it. The main characters are worked out before
      * the secondary ones in the chain: [made] has them.
      */
-    fun leftOut(answers: Answers, facet: String, made: WorkChances): (String) -> Set<String> {
+    fun leftOut(answers: Answers, facet: String, made: WorkChances): (Long) -> Set<String> {
         if (UniverseFacet.otherCharacters(facet) == null) return { emptySet() }
         val secondary = facet == UniverseFacets.SECONDARY_CHARACTERS
         return { id ->
@@ -34,7 +34,7 @@ internal object WorkUniverses {
      * — more likely than not — unless the user rejected them; none but the confirmed once the user said the work has no
      * other universes. The universes the model gives are [made] before the characters in the chain.
      */
-    fun universesOf(answered: Answers, made: WorkChances): Map<String, List<String>> {
+    fun universesOf(answered: Answers, made: WorkChances): Map<Long, List<String>> {
         val answers = answered.all.filter { it.facet == UniverseFacets.UNIVERSE }.groupBy { it.itemId }
         val complete = answered.complete
         val given = made
@@ -50,6 +50,6 @@ internal object WorkUniverses {
     }
 
     /** The values of a facet the user linked every item — the items [ids], when given — to: item to values. */
-    fun linked(answers: Answers, facet: String): Map<String, List<String>> =
+    fun linked(answers: Answers, facet: String): Map<Long, List<String>> =
         answers.all.filter { it.facet == facet && it.added }.groupBy({ it.itemId }, { it.key })
 }

@@ -23,8 +23,8 @@ internal object AgeRatingVocabulary {
     fun of(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>,
-        site: Map<String, Map<String, List<String>>>?,
+        ids: Collection<Long>,
+        site: Map<Long, Map<String, List<String>>>?,
     ): Vocabulary? {
         if (facet.key != AgeRating.KEY) return null
         val values = site ?: store.items.facetsOf(ids)

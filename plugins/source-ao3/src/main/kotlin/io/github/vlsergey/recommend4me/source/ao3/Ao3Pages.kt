@@ -38,52 +38,55 @@ class Ao3Pages(private val context: SourceContext) {
     private val fields = Ao3Fields(items)
     private val series = Ao3Series(items)
 
-    fun read(page: CapturedPage): List<String> {
+    /** The works the page wrote, by their numbers. */
+    fun read(page: CapturedPage): List<Long> {
         val doc = Jsoup.parse(page.html, page.url)
         val path = runCatching { URI(page.url).path }.getOrDefault("")
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += cards(doc, page.capturedAt)
         // A series' own page: after the cards, whose works it lists
         Ao3Series.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (TAG_PAGE.matches(path)) Ao3TagPage(items).read(doc)
         WORK.matchEntire(path)?.let { m ->
-            val id = m.groupValues[1]
+            val site = m.groupValues[1]
+            // The table of contents and the comments of a work known already
             when (m.groupValues[2]) {
-                "navigate" -> if (contents(doc, id)) touched += id
-                else -> work(doc, id, page.capturedAt)?.let { touched += it }
+                "navigate" -> items.idOf(site)?.let { id -> if (contents(doc, id)) touched += id }
+                else -> work(doc, site, page.capturedAt)?.let { touched += it }
             }
-            if (comments(doc, id)) touched += id
+            items.idOf(site)?.let { id -> if (comments(doc, id)) touched += id }
         }
         return touched.toList()
     }
 
     // --- Cards of a list ---
 
-    private fun cards(doc: Document, now: Instant): List<String> =
+    private fun cards(doc: Document, now: Instant): List<Long> =
         doc.select("li.blurb").mapNotNull { card -> cardHead(card, now)?.also { id -> cardFields(card, id) } }
 
-    /** The work a card is of, written with its title and day: its id; none of a card that names no work. */
-    private fun cardHead(card: Element, now: Instant): String? {
+    /** The work a card is of, written with its title and day: its number; none of a card that names no work. */
+    private fun cardHead(card: Element, now: Instant): Long? {
         val link = card.selectFirst("h4.heading a[href^=/works/]")
-        val id = link?.let {
+        val site = link?.let {
             WORK.matchEntire(it.attr("href").substringBefore('?').substringBefore('#'))?.groupValues?.get(1)
         }
         val title = link?.text()?.trim()?.ifEmpty { null }
-        if (id == null || title == null) return null
-        items.upsert(
-            ItemHead(
-                id,
-                "$BASE/works/$id",
-                title,
-                updatedAt = card.selectFirst("p.datetime")?.text()?.let(::cardDate),
-            ),
-            now,
-        )
-        return id
+        if (site == null || title == null) return null
+        return items
+            .upsert(
+                ItemHead(
+                    site,
+                    "$BASE/works/$site",
+                    title,
+                    updatedAt = card.selectFirst("p.datetime")?.text()?.let(::cardDate),
+                ),
+                now,
+            )
+            .id
     }
 
     /** What a card tells of its work [id] besides its head: the fields, the summary, the series, the statistics. */
-    private fun cardFields(card: Element, id: String) {
+    private fun cardFields(card: Element, id: Long) {
         fields.authors(id, card.select("h4.heading a[rel=author]"))
         fields.fandoms(id, card.select("h5.fandoms a.tag"))
         card.selectFirst("ul.required-tags span.rating")?.attr("title")?.let { fields.rating(id, it) }
@@ -116,9 +119,10 @@ class Ao3Pages(private val context: SourceContext) {
 
     /**
      * A work's page — its first chapter, another, or the whole work: the header and every chapter shown. None for a
-     * page without the header: the warning before an adult work, a work locked to the site's users.
+     * page without the header: the warning before an adult work, a work locked to the site's users. Of the work the
+     * site names [site]: its number.
      */
-    private fun work(doc: Document, id: String, now: Instant): String? {
+    private fun work(doc: Document, site: String, now: Instant): Long? {
         val meta = doc.selectFirst("dl.work.meta")
         val preface = doc.selectFirst("#workskin > div.preface.group")
         val title = preface?.selectFirst("h2.title")?.text()?.trim()?.ifEmpty { null }
@@ -127,7 +131,7 @@ class Ao3Pages(private val context: SourceContext) {
         val updated =
             stats?.selectFirst("dd.status")?.text()?.let(::isoDate)
                 ?: stats?.selectFirst("dd.published")?.text()?.let(::isoDate)
-        items.upsert(ItemHead(id, "$BASE/works/$id", title, updatedAt = updated), now)
+        val id = items.upsert(ItemHead(site, "$BASE/works/$site", title, updatedAt = updated), now).id
         fields.authors(id, preface.select("h3.byline a[rel=author]"))
         fields.fandoms(id, meta.select("dd.fandom a.tag"))
         meta.selectFirst("dd.rating a.tag")?.text()?.let { fields.rating(id, it.trim()) }
@@ -169,7 +173,7 @@ class Ao3Pages(private val context: SourceContext) {
      * shows. A work of one chapter names none: its text is its only part. The menu names every chapter the work has on
      * the site.
      */
-    private fun chapters(doc: Document, id: String, title: String) {
+    private fun chapters(doc: Document, id: Long, title: String) {
         val named =
             doc.select("#chapter_index option")
                 .mapIndexed { i, o ->
@@ -208,16 +212,14 @@ class Ao3Pages(private val context: SourceContext) {
      * The table of contents (/works/<id>/navigate): every chapter with the day it came out — of a work known already;
      * every chapter the work has on the site.
      */
-    private fun contents(doc: Document, id: String): Boolean {
+    private fun contents(doc: Document, id: Long): Boolean {
         val parts =
-            if (items.find(id) == null) emptyList()
-            else
-                doc.select("ol.chapter.index li").mapIndexedNotNull { i, li ->
-                    val a = li.selectFirst("a[href]") ?: return@mapIndexedNotNull null
-                    val chapterId = CHAPTER.find(a.attr("href"))?.groupValues?.get(1) ?: return@mapIndexedNotNull null
-                    val day = li.selectFirst("span.datetime")?.text()?.trim()?.removePrefix("(")?.removeSuffix(")")
-                    PartData(chapterId, i, NUMBERED.replace(a.text().trim(), ""), null, day?.let(::isoDate))
-                }
+            doc.select("ol.chapter.index li").mapIndexedNotNull { i, li ->
+                val a = li.selectFirst("a[href]") ?: return@mapIndexedNotNull null
+                val chapterId = CHAPTER.find(a.attr("href"))?.groupValues?.get(1) ?: return@mapIndexedNotNull null
+                val day = li.selectFirst("span.datetime")?.text()?.trim()?.removePrefix("(")?.removeSuffix(")")
+                PartData(chapterId, i, NUMBERED.replace(a.text().trim(), ""), null, day?.let(::isoDate))
+            }
         if (parts.isNotEmpty()) items.saveParts(id, parts, whole = true)
         return parts.isNotEmpty()
     }
@@ -226,7 +228,7 @@ class Ao3Pages(private val context: SourceContext) {
      * The user's own marks of the work — kudos left, a bookmark, a subscription, marked for later — read only of a page
      * shown to a user logged in: the greeting names them.
      */
-    private fun marks(doc: Document, id: String) {
+    private fun marks(doc: Document, id: Long) {
         val me =
             doc.selectFirst("#greeting a[href^=/users/]")?.attr("href")?.let {
                 Ao3Fields.USER.find(it)?.groupValues?.get(1)
@@ -236,25 +238,25 @@ class Ao3Pages(private val context: SourceContext) {
             val left = kudos.select("a[href]").any { it.attr("href") == "/users/$me" }
             // A long list is cut short: the user's name missing from it says nothing
             if (left || kudos.selectFirst("#kudos_more_link") == null)
-                context.signals.set(id, Books.LIKED.key, yes.takeIf { left })
+                context.signals.setSignal(id, Books.LIKED.key, yes.takeIf { left })
         }
         doc.selectFirst("ul.work.navigation li.bookmark a")?.text()?.let {
-            context.signals.set(id, SIGNAL_BOOKMARKED, yes.takeIf { _ -> it.startsWith("Edit") })
+            context.signals.setSignal(id, SIGNAL_BOOKMARKED, yes.takeIf { _ -> it.startsWith("Edit") })
         }
         doc.selectFirst("ul.work.navigation li.subscribe input[type=submit]")?.attr("value")?.let {
-            context.signals.set(id, SIGNAL_SUBSCRIBED, yes.takeIf { _ -> it.startsWith("Unsubscribe") })
+            context.signals.setSignal(id, SIGNAL_SUBSCRIBED, yes.takeIf { _ -> it.startsWith("Unsubscribe") })
         }
         doc.selectFirst("ul.work.navigation li.mark a")?.text()?.let {
-            context.signals.set(id, SIGNAL_LATER, yes.takeIf { _ -> it.startsWith("Mark as Read") })
+            context.signals.setSignal(id, SIGNAL_LATER, yes.takeIf { _ -> it.startsWith("Mark as Read") })
         }
     }
 
     // --- Comments ---
 
     /** The comments the page shows, of the work or of its chapter. */
-    private fun comments(doc: Document, id: String): Boolean {
+    private fun comments(doc: Document, id: Long): Boolean {
         val list = doc.select("li.comment[id^=comment_]")
-        if (list.isEmpty() || items.find(id) == null) return false
+        if (list.isEmpty()) return false
         items.saveReviews(
             id,
             list.mapNotNull { c ->

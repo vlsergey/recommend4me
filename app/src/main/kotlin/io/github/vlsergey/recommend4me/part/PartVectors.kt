@@ -25,7 +25,7 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
 /** The vectors of the windows of the chapters of these items of a source were written. */
-data class SiteItemChapterVectorChangeEvent(val source: String, val ids: List<String>)
+data class SiteItemChapterVectorChangeEvent(val source: String, val ids: List<Long>)
 
 /**
  * Every change of the chapters of the works of the [scope] of the [type] encoded ([WorkStage.WINDOWS]): the stages
@@ -167,7 +167,7 @@ class PartVectors(
      * application stops too.
      */
     private fun encodeAll(
-        works: Map<String, List<String>>,
+        works: Map<String, List<Long>>,
         encoder: Encoding,
         encoded: MutableSet<ItemKey>,
     ): Boolean {

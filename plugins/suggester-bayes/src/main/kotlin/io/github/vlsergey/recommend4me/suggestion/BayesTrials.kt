@@ -17,7 +17,7 @@ internal class BayesTrials(private val counted: BayesFolds, val settings: List<B
     /**
      * Of every work answered on, its id, the values answered, and their scores of every setting, setting after setting.
      */
-    private val answeredIds = ArrayList<String>()
+    private val answeredIds = ArrayList<Long>()
     private val answeredValues = ArrayList<IntArray>()
     private val answeredScores = ArrayList<FloatArray>()
 
@@ -50,7 +50,7 @@ internal class BayesTrials(private val counted: BayesFolds, val settings: List<B
      * LEAVE ONE OUT: of every value [asked] of the work [id], its chance by the counts of every work with the work's
      * own pairs taken out — as the model kept scores it — under every setting.
      */
-    private fun answered(id: String, asked: IntArray, work: BayesWork) {
+    private fun answered(id: Long, asked: IntArray, work: BayesWork) {
         val scores = FloatArray(settings.size * asked.size)
         settings.forEachIndexed { s, setting ->
             val chances = counted.total.chances(work.contexts, work, setting.alpha, setting.scale)
@@ -66,7 +66,7 @@ internal class BayesTrials(private val counted: BayesFolds, val settings: List<B
 
     /** Of every value the user answered on of every work — confirmed, then rejected — its score by the setting [s]. */
     fun heldOut(s: Int): HeldOutScores {
-        val items = ArrayList<String>()
+        val items = ArrayList<Long>()
         val values = ArrayList<Int>()
         val scores = ArrayList<Float>()
         answeredIds.forEachIndexed { a, id ->
@@ -77,7 +77,7 @@ internal class BayesTrials(private val counted: BayesFolds, val settings: List<B
                 scores += answeredScores[a][s * asked.size + k]
             }
         }
-        return HeldOutScores(items, values.toIntArray(), scores.toFloatArray())
+        return HeldOutScores(items.toLongArray(), values.toIntArray(), scores.toFloatArray())
     }
 
     private companion object {

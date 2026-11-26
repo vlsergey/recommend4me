@@ -61,7 +61,7 @@ private constructor(
             clusters: WorkClusters,
             keys: Collection<ItemKey>,
             /** The site's values of the items read already, by source: not read again. */
-            read: Map<String, Map<String, Map<String, List<String>>>> = emptyMap(),
+            read: Map<String, Map<Long, Map<String, List<String>>>> = emptyMap(),
         ): TypeManners {
             val words = type.mannerWords.id() ?: return none(clusters)
             val members = keys.flatMapTo(LinkedHashSet()) { clusters.members(it) }

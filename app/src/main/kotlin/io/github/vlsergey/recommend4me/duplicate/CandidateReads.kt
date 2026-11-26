@@ -100,7 +100,7 @@ class CandidateReads internal constructor(private val db: DSLContext) {
      * sites ORed, it compared every row with every id: 640 keys 1 s, 3000 keys 5-12 s, against 18 and 40 ms
      * (2026-11-24, 2.6 million rows).
      */
-    private fun keyIn(source: Field<String?>, id: Field<String?>, items: Collection<ItemKey>): Condition =
+    private fun keyIn(source: Field<String?>, id: Field<Long?>, items: Collection<ItemKey>): Condition =
         DSL.concat(source, DSL.inline(BAR), id).`in`(items.mapTo(HashSet()) { "${it.source}$BAR${it.id}" })
 
     /**

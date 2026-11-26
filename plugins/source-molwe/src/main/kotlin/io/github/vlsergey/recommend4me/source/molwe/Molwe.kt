@@ -103,7 +103,7 @@ class Molwe : Source {
     /** An author of the site by their own page, "https://molwe.ru/author/123". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
-    override fun itemIdOf(url: String): String? = workIdOf(url)
+    override fun siteIdOf(url: String): String? = workIdOf(url)
 
     override val pageDecor =
         PageDecor(
@@ -125,9 +125,9 @@ class Molwe : Source {
             nextPage = "nav[aria-label=\"Пагинация\"] > a:last-child",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> {
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> {
         val doc = Jsoup.parse(page.html, page.url)
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += MolweCards(context.items).read(doc, page.url, page.capturedAt)
         touched += MolweWork(context.items).read(doc, page.url, page.capturedAt)
         return touched.toList()
@@ -137,17 +137,18 @@ class Molwe : Source {
      * The work's page and every chapter it names, read as if the browser had asked for them. False of a work the site
      * has not.
      */
-    override fun refresh(itemId: String, context: SourceContext): Boolean {
-        val read = fetch(itemUrl(itemId)) ?: return false
+    override fun refresh(itemId: Long, context: SourceContext): Boolean {
+        val (site, read) =
+            context.items.find(itemId)?.siteId?.let { s -> fetch(itemUrl(s))?.let { s to it } } ?: return false
         val captured = itemId in capture(CapturedPage(read.first, read.second, Instant.now()), context)
-        if (captured) chapters(itemId, context)
+        if (captured) chapters(itemId, site, context)
         return captured
     }
 
-    /** The chapters of a work, each read as its own page. */
-    private fun chapters(itemId: String, context: SourceContext) {
+    /** The chapters of the work [itemId], the site naming it [site], each read as its own page. */
+    private fun chapters(itemId: Long, site: String, context: SourceContext) {
         context.items.parts(itemId).keys.forEach { part ->
-            fetch(partUrl(itemId, part))?.let { (url, html) ->
+            fetch(partUrl(site, part))?.let { (url, html) ->
                 capture(CapturedPage(url, html, Instant.now()), context)
             }
         }

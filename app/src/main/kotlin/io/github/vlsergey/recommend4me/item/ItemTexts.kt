@@ -11,16 +11,16 @@ import org.jooq.impl.SQLDataType
 /** THE TEXTS THE SITE GIVES ITS ITEMS — by their keys, as the source database holds them. */
 interface ItemTexts {
     /** The texts of the item written where changed, a blank one removed; the item told changed when any was. */
-    fun setTexts(itemId: String, texts: Map<String, String?>)
+    fun setTexts(itemId: Long, texts: Map<String, String?>)
 
     /** The texts of one item: key to text. */
-    fun texts(itemId: String): Map<String, String>
+    fun texts(itemId: Long): Map<String, String>
 
     /** The texts of the items [ids] — of the [keys] alone when given: item to key to text. */
-    fun textsOf(ids: Collection<String>, keys: Collection<String>? = null): Map<String, Map<String, String>>
+    fun textsOf(ids: Collection<Long>, keys: Collection<String>? = null): Map<Long, Map<String, String>>
 
     /** Every text of the [keys] of every item, streamed item by item. */
-    fun forEachTexts(keys: Collection<String>, action: (itemId: String, texts: Map<String, String>) -> Unit)
+    fun forEachTexts(keys: Collection<String>, action: (itemId: Long, texts: Map<String, String>) -> Unit)
 
     /** [n] texts of the [keys] of items drawn at random. */
     fun sampleTexts(n: Int, keys: Collection<String>): List<String>
@@ -50,7 +50,7 @@ object SiteTexts {
  */
 internal class ItemTextRepository(
     private val db: DSLContext,
-    private val changed: (Collection<String>) -> Unit,
+    private val changed: (Collection<Long>) -> Unit,
     keys: Collection<String>,
 ) : ItemTexts {
 
@@ -70,7 +70,7 @@ internal class ItemTextRepository(
             .take(n)
     }
 
-    override fun setTexts(itemId: String, texts: Map<String, String?>) {
+    override fun setTexts(itemId: Long, texts: Map<String, String?>) {
         if (texts.isEmpty()) return
         val unknown = texts.keys - columns.keys
         require(unknown.isEmpty()) {
@@ -80,38 +80,47 @@ internal class ItemTextRepository(
         val written =
             texts.mapValues { it.value?.trim()?.takeIf { t -> t.isNotEmpty() } }.filter { before[it.key] != it.value }
         if (written.isEmpty()) return
-        db.update(ITEM).set(written.mapKeys { columns.getValue(it.key) }).where(ITEM.SITE_ID.eq(itemId)).execute()
+        db.update(ITEM).set(written.mapKeys { columns.getValue(it.key) }).where(ITEM.INTERNAL_ID.eq(itemId)).execute()
         changed(listOf(itemId))
     }
 
-    override fun texts(itemId: String): Map<String, String> {
+    override fun texts(itemId: Long): Map<String, String> {
         if (columns.isEmpty()) return emptyMap()
-        return db.select(columns.values).from(ITEM).where(ITEM.SITE_ID.eq(itemId)).fetchOne()?.let(::textsOf).orEmpty()
+        return db.select(columns.values)
+            .from(ITEM)
+            .where(ITEM.INTERNAL_ID.eq(itemId))
+            .fetchOne()
+            ?.let(::textsOf)
+            .orEmpty()
     }
 
-    override fun textsOf(ids: Collection<String>, keys: Collection<String>?): Map<String, Map<String, String>> {
+    override fun textsOf(ids: Collection<Long>, keys: Collection<String>?): Map<Long, Map<String, String>> {
         val asked = keys?.let(::fieldsOf) ?: columns.values.toList()
         if (asked.isEmpty() || ids.isEmpty()) return emptyMap()
-        val out = HashMap<String, Map<String, String>>()
+        val out = HashMap<Long, Map<String, String>>()
         ids.distinct().chunked(ITEM_BATCH).forEach { chunk ->
-            db.select(listOf(ITEM.SITE_ID) + asked).from(ITEM).where(ITEM.SITE_ID.`in`(chunk)).and(anyOf(asked)).fetch {
-                out[it.get(ITEM.SITE_ID)!!] = textsOf(it)
-            }
+            db.select(listOf(ITEM.INTERNAL_ID) + asked)
+                .from(ITEM)
+                .where(ITEM.INTERNAL_ID.`in`(chunk))
+                .and(anyOf(asked))
+                .fetch {
+                    out[it.get(ITEM.INTERNAL_ID)!!] = textsOf(it)
+                }
         }
         return out
     }
 
     /** In the order the rows are kept: every row of the file read once, one way along it. */
-    override fun forEachTexts(keys: Collection<String>, action: (itemId: String, texts: Map<String, String>) -> Unit) {
+    override fun forEachTexts(keys: Collection<String>, action: (itemId: Long, texts: Map<String, String>) -> Unit) {
         val asked = fieldsOf(keys)
         if (asked.isEmpty()) return
-        db.select(listOf(ITEM.SITE_ID) + asked)
+        db.select(listOf(ITEM.INTERNAL_ID) + asked)
             .from(ITEM)
             .where(anyOf(asked))
             .orderBy(ITEM.INTERNAL_ID)
             .fetchSize(TEXTS_STREAMED)
             .fetchLazy()
-            .use { cursor -> cursor.forEach { action(it.get(ITEM.SITE_ID)!!, textsOf(it)) } }
+            .use { cursor -> cursor.forEach { action(it.get(ITEM.INTERNAL_ID)!!, textsOf(it)) } }
     }
 
     /** The columns of the [keys] the source's works have. */

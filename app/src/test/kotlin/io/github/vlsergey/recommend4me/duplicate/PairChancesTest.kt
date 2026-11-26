@@ -16,7 +16,7 @@ class PairChancesTest {
         }
 
     private fun pair(n: Int, title: Float) =
-        DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), title, null, null, emptyMap())
+        DuplicateCandidate(ItemKey("a", n.toLong()), ItemKey("b", n.toLong()), title, null, null, emptyMap())
 
     /**
      * The [pairs] as a search finds them, with the words [said] on them: of one work by the title, of one series by

@@ -8,7 +8,7 @@ package io.github.vlsergey.recommend4me.item
 data class SiteItemRemoveEvent(
     val type: String,
     val source: String,
-    val itemId: String,
+    val itemId: Long,
     val remaining: List<ItemKey>,
     val graded: Boolean,
 )

@@ -7,8 +7,7 @@ import kotlin.test.assertSame
 
 class CappedChancesTest {
 
-    private fun chance(key: String, p: Double, had: Boolean = false) =
-        Chance("w", "tags", key, had, p, likely = p >= 0.3)
+    private fun chance(key: String, p: Double, had: Boolean = false) = Chance(1, "tags", key, had, p, likely = p >= 0.3)
 
     /**
      * Of a facet of a hard limit the likeliest values the work has not stay likely, the others told not; the values it

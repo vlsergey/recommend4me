@@ -60,7 +60,7 @@ class PictureService(
         else downloads.begin()
     }
 
-    private fun keepsOriginals(store: SourceStore, itemId: String): Boolean =
+    private fun keepsOriginals(store: SourceStore, itemId: Long): Boolean =
         (store.ratings.ofItem(itemId).maxOfOrNull { it.grade } ?: 0) >= KEEP_FROM
 
     fun status(): PictureStatus {

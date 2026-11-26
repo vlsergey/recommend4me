@@ -36,8 +36,8 @@ internal object ShownChances {
         laps: Laps? = null,
         /** How the facet's chances are made true to the user's answers, and its cutoff; null: the suggester's own. */
         calibration: Calibration? = null,
-    ): Map<String, Set<String>> {
-        val given = HashMap<String, Set<String>>()
+    ): Map<Long, Set<String>> {
+        val given = HashMap<Long, Set<String>>()
         val task = data.task
         // The time of its parts: what each work is told of, what it is shown with besides — chosen by the
         // suggester of what it may have — the scores of what it is told of, the chances made, the putting.
@@ -93,7 +93,7 @@ internal object ShownChances {
      * The work's [chances] of the [facet] put among [made], over its drafts: a value drafted keeps where it was drafted
      * from beside the model's chance of it; a draft the model gives no chance of stays as it was.
      */
-    private fun put(made: MadeChances, id: String, facet: String, chances: FewChances) {
+    private fun put(made: MadeChances, id: Long, facet: String, chances: FewChances) {
         val byFacet = made.getOrPut(id) { HashMap() }
         val drafts = byFacet[facet]?.values?.filter { it.drafted }.orEmpty()
         byFacet[facet] =
@@ -130,7 +130,7 @@ internal object ShownChances {
      * them and their scores.
      */
     private fun chancesOf(
-        id: String,
+        id: Long,
         facet: String,
         made: Made,
         open: Shown,
@@ -168,7 +168,7 @@ internal object ShownChances {
      * than not.
      */
     class Made(private val scores: SuggestionScores, private val calibration: Calibration?) {
-        fun chance(id: String, facet: String, value: String, had: Boolean, score: Float): Chance =
+        fun chance(id: Long, facet: String, value: String, had: Boolean, score: Float): Chance =
             if (calibration == null) Chance(id, facet, value, had, scores.chance(score).toDouble())
             else
                 calibration.chance(value, score, scores.chance(score).toDouble()).let {

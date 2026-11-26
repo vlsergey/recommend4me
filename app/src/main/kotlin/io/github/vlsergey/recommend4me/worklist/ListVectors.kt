@@ -33,7 +33,7 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
 
     private fun bring(
         s: SourceStore,
-        ids: List<String>,
+        ids: List<Long>,
         encoder: String,
         index: ListIndex,
         clusters: Lazy<WorkClusters>,

@@ -63,8 +63,8 @@ class WorkChanges(private val db: DSLContext) {
      * Of the items [ids] of the [source] — of every item of it when null — the date every kind of the user's word on
      * its work last changed, milliseconds; a kind never dated left out.
      */
-    fun ofItems(source: String, ids: Collection<String>?): Map<String, Map<WorkDatum, Long>> {
-        val out = HashMap<String, Map<WorkDatum, Long>>()
+    fun ofItems(source: String, ids: Collection<Long>?): Map<Long, Map<WorkDatum, Long>> {
+        val out = HashMap<Long, Map<WorkDatum, Long>>()
         fun read(condition: Condition) =
             db.select(listOf(SITE_WORK.ITEM) + COLUMNS.values)
                 .from(SITE_WORK)

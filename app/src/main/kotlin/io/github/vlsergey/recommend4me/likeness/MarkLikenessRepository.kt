@@ -96,7 +96,7 @@ class MarkLikenessRepository(private val db: DSLContext) {
                                 MARK_LIKENESS_STRENGTH.ITEM_ID,
                                 MARK_LIKENESS_STRENGTH.STRENGTH,
                             )
-                            .values(null as String?, null as String?, null as String?, null as ByteArray?)
+                            .values(null as String?, null as String?, null as Long?, null as ByteArray?)
                     )
                 chunk.forEach { (key, s) -> batch.bind(kind.name, key.source, key.id, Vectors.pack(s)) }
                 batch.execute()
@@ -111,7 +111,7 @@ class MarkLikenessRepository(private val db: DSLContext) {
                                 MARK_LIKENESS_AXES.ITEM_ID,
                                 MARK_LIKENESS_AXES.AXES,
                             )
-                            .values(null as String?, null as String?, null as String?, null as ByteArray?)
+                            .values(null as String?, null as String?, null as Long?, null as ByteArray?)
                     )
                 chunk.forEach { (key, v) -> batch.bind(kind.name, key.source, key.id, Vectors.pack(v)) }
                 batch.execute()

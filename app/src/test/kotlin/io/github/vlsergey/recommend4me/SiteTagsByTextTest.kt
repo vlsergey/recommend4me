@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
+import io.github.vlsergey.recommend4me.api.model.TagByText
 import io.github.vlsergey.recommend4me.api.model.TagByTextAnswer
 import io.github.vlsergey.recommend4me.api.model.TagRelation
 import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
@@ -42,7 +43,7 @@ class SiteTagsByTextTest : SiteTestBase() {
                 "star to the next, and the galleons of the fleet kept watch at the edge of the system, " +
                 "waiting for the galleons of the enemy."
         store.parts.save(
-            "tt3",
+            idOf(site, "tt3"),
             listOf(PartData("c1", 0, "One", "$road\n***\n$dragonsText\n$shipsText\n— Galleons?\n— Galleons.", null)),
         )
         assertEquals(
@@ -59,7 +60,8 @@ class SiteTagsByTextTest : SiteTestBase() {
     /** The paragraphs of the work's parts encoded, as the background encodes them. */
     private fun encodeParagraphs(store: SourceStore) {
         val encoder = SitePlugins.WordsEncoder()
-        val waiting = store.parts.windows.waitingOf(listOf("tt3"), encoder.windowsId, Paragraphs.keyOf(encoder.id))
+        val waiting =
+            store.parts.windows.waitingOf(listOf(idOf(site, "tt3")), encoder.windowsId, Paragraphs.keyOf(encoder.id))
         store.parts.windows.texts(waiting.filter { it.paragraphs }).forEach { part ->
             val texts = Paragraphs.of(part.content)
             store.parts.paragraphs.saveParagraphVectors(
@@ -74,7 +76,7 @@ class SiteTagsByTextTest : SiteTestBase() {
     }
 
     /** The tags by the text of the work tt3. */
-    private fun list() = tagsByText.getTagsByText("site", "tt3").body!!
+    private fun list() = tagsByText.getTagsByText("site", idOf(site, "tt3")).body!!
 
     /**
      * The tags the text is closest to, each with its paragraph; "not enough" offers the paragraph for the tag no more.
@@ -91,7 +93,7 @@ class SiteTagsByTextTest : SiteTestBase() {
         val enough =
             tagsByText.answerTagByText(
                 "site",
-                "tt3",
+                idOf(site, "tt3"),
                 TagByTextAnswer(wyverns.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT),
             )
         // Of no yes, nothing made of the facet
@@ -114,7 +116,7 @@ class SiteTagsByTextTest : SiteTestBase() {
         // The answer is on the paragraph itself, by the hash of its text: a paragraph put before it, the same one stays
         // hidden at its new number
         store.parts.save(
-            "tt3",
+            idOf(site, "tt3"),
             listOf(
                 PartData(
                     "c1",
@@ -135,44 +137,32 @@ class SiteTagsByTextTest : SiteTestBase() {
      * wrong, the model fitted on both kinds of answers; a paragraph there is not, nothing kept.
      */
     private fun answeredOn(store: SourceStore, wyverns: String) {
+        val tt3 = idOf(site, "tt3")
         // Yes: the tag is the work's, answered on it, offered no more
         val galleons = list().tags.single { it.name == "Galleons" }
         val yes =
             tagsByText.answerTagByText(
                 "site",
-                "tt3",
+                tt3,
                 TagByTextAnswer(galleons.key, galleons.part, galleons.paragraph, TagByTextAnswer.Verdict.YES),
             )
         // What the yes made of the facet of tags, for the page to show it at once
         assertTrue(yes.body!!.single().answers.any { it.key == galleons.key && it.added }, "answered ${yes.body}")
-        assertTrue(store.corrections.facetsOf("tt3").any { it.facet == "tags" && it.key == galleons.key && it.added })
+        assertTrue(
+            store.corrections.facetsOf(tt3).any {
+                it.facet == "tags" && it.key == galleons.key && it.added
+            }
+        )
         assertTrue(list().tags.none { it.key == galleons.key })
-        // Of the tags' hierarchy: a tag above one the work has, it has — not asked
         val cosmos = list().tags.single { it.name == "Cosmos" }
-        tagsApi.relateTags(TagRelationRequest(galleons.key, cosmos.key, TagRelation.PARENT))
-        assertTrue(list().tags.none { it.key == cosmos.key }, "list ${list()}")
-        // The answer tells the page the tag above it is the work's by it
-        val above =
-            corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = true, key = galleons.key))
-        assertEquals(listOf(cosmos.key), above.body!!.facets.single().implied.map { it.key })
-        tagsApi.relateTags(TagRelationRequest(galleons.key, cosmos.key, TagRelation.NONE))
-        // And a tag under one the work has not, it has not either
-        assertTrue(list().tags.any { it.key == wyverns }, "list ${list()}")
-        tagsApi.relateTags(TagRelationRequest(wyverns, cosmos.key, TagRelation.PARENT))
-        val denied =
-            corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = false, key = cosmos.key))
-        assertTrue(list().tags.none { it.key == wyverns }, "list ${list()}")
-        // The answer tells the page the tag under it is shown no more
-        assertTrue(wyverns in denied.body!!.facets.single().hidden, "hidden ${denied.body}")
-        corrections.uncorrectFacet("site", "tt3", "tags", cosmos.key)
-        tagsApi.relateTags(TagRelationRequest(wyverns, cosmos.key, TagRelation.NONE))
+        hierarchyNotAsked(tt3, galleons, cosmos, wyverns)
         // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
         assertEquals(
             200,
             tagsByText
                 .answerTagByText(
                     "site",
-                    "tt3",
+                    tt3,
                     TagByTextAnswer(cosmos.key, cosmos.part, cosmos.paragraph, TagByTextAnswer.Verdict.WRONG),
                 )
                 .statusCode
@@ -185,9 +175,33 @@ class SiteTagsByTextTest : SiteTestBase() {
         assertEquals(
             404,
             tagsByText
-                .answerTagByText("site", "tt3", TagByTextAnswer(wyverns, "c1", 9, TagByTextAnswer.Verdict.YES))
+                .answerTagByText("site", tt3, TagByTextAnswer(wyverns, "c1", 9, TagByTextAnswer.Verdict.YES))
                 .statusCode
                 .value(),
         )
+    }
+
+    /**
+     * Of the tags' hierarchy: a tag above one the work [tt3] has, it has — not asked; and a tag under one it has not,
+     * it has not either; the answers telling the page so.
+     */
+    private fun hierarchyNotAsked(tt3: Long, galleons: TagByText, cosmos: TagByText, wyverns: String) {
+        tagsApi.relateTags(TagRelationRequest(galleons.key, cosmos.key, TagRelation.PARENT))
+        assertTrue(list().tags.none { it.key == cosmos.key }, "list ${list()}")
+        // The answer tells the page the tag above it is the work's by it
+        val above =
+            corrections.correctFacet("site", tt3, FacetCorrection(facet = "tags", added = true, key = galleons.key))
+        assertEquals(listOf(cosmos.key), above.body!!.facets.single().implied.map { it.key })
+        tagsApi.relateTags(TagRelationRequest(galleons.key, cosmos.key, TagRelation.NONE))
+        // And a tag under one the work has not, it has not either
+        assertTrue(list().tags.any { it.key == wyverns }, "list ${list()}")
+        tagsApi.relateTags(TagRelationRequest(wyverns, cosmos.key, TagRelation.PARENT))
+        val denied =
+            corrections.correctFacet("site", tt3, FacetCorrection(facet = "tags", added = false, key = cosmos.key))
+        assertTrue(list().tags.none { it.key == wyverns }, "list ${list()}")
+        // The answer tells the page the tag under it is shown no more
+        assertTrue(wyverns in denied.body!!.facets.single().hidden, "hidden ${denied.body}")
+        corrections.uncorrectFacet("site", tt3, "tags", cosmos.key)
+        tagsApi.relateTags(TagRelationRequest(wyverns, cosmos.key, TagRelation.NONE))
     }
 }

@@ -32,7 +32,7 @@ class FfnPagesTest {
     /** The page [html] at [url] read into the memory [context], the fandoms kept in the database of memory. */
     private fun read(context: MemorySourceContext, url: String, html: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, html, now), database.of(context))
+        return context.sitesOf(source.capture(CapturedPage(url, html, now), database.of(context)))
     }
 
     private fun capture(context: MemorySourceContext, url: String, name: String): List<String> =
@@ -194,7 +194,7 @@ class FfnPagesTest {
         assertEquals(listOf("Sit Amet"), context.facets.getValue("3")["fandom"])
         assertEquals(listOf("Consectetur"), context.facets.getValue("4")["fandom"])
         // A work its archive told of one section keeps it when a page names the fandom of two alone
-        context.items.setFacet("3", "fandom", listOf(FacetValue("game/Sit-Amet", "Sit Amet")))
+        context.items.setFacet(context.ids.getValue("3"), "fandom", listOf(FacetValue("game/Sit-Amet", "Sit Amet")))
         search(listOf("3" to "Sit Amet"))
         assertEquals(listOf("game/Sit-Amet"), context.facets.getValue("3")["fandom"])
         assertNull(source.valueUrl("fandom", "Consectetur", "Consectetur"))
@@ -260,9 +260,9 @@ class FfnPagesTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals("14597463", source.itemIdOf("https://www.fanfiction.net/s/14597463/2/Time-After-Time"))
-        assertEquals("14597463", source.itemIdOf("https://www.fanfiction.net/r/14597463/0/2/"))
-        assertNull(source.itemIdOf("https://www.fanfiction.net/book/Harry-Potter/"))
+        assertEquals("14597463", source.siteIdOf("https://www.fanfiction.net/s/14597463/2/Time-After-Time"))
+        assertEquals("14597463", source.siteIdOf("https://www.fanfiction.net/r/14597463/0/2/"))
+        assertNull(source.siteIdOf("https://www.fanfiction.net/book/Harry-Potter/"))
         assertTrue(
             source.capturePatterns.any { it.matches("https://www.fanfiction.net/Harry-Potter_and_X_Crossovers/1/2/") }
         )

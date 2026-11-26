@@ -48,22 +48,24 @@ class FanficsMePages(context: SourceContext) {
     private val series = FanficsMeSeries(items)
     private val fandoms = FanficsMeFandoms(items)
 
-    fun read(page: CapturedPage): List<String> {
+    /** The works the page wrote, by their numbers. */
+    fun read(page: CapturedPage): List<Long> {
         val uri = runCatching { URI(page.url) }.getOrNull()
         val path = uri?.path.orEmpty()
         val query = uri?.rawQuery.orEmpty()
         val doc = Jsoup.parse(page.html, page.url)
         meaningsOf(doc, path, query)
         profiles.read(doc, path)
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += cards(doc, page.capturedAt)
         // A series' own page, and a list of series: after the cards, whose works they list
         SERIE_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (SERIES_LIST.matches(path)) series.list(doc)
         // The header of a work: on its own page, and on the reader of a work the site shows a guest not
         head(doc, page.capturedAt)?.let { touched += it }
-        val work = WORK.matchEntire(path)?.groupValues?.get(1)
-        val read = if (path == READER) READER_ID.find(query)?.groupValues?.get(1) else null
+        // The reader and the comments of a work known
+        val work = WORK.matchEntire(path)?.groupValues?.get(1)?.let(items::idOf)
+        val read = if (path == READER) READER_ID.find(query)?.groupValues?.get(1)?.let(items::idOf) else null
         read?.let { id -> if (chapters(doc, id)) touched += id }
         work?.let { id -> if (comments.read(doc, id, page.capturedAt)) touched += id }
         return touched.toList()
@@ -84,9 +86,9 @@ class FanficsMePages(context: SourceContext) {
 
     // --- Cards of a list ---
 
-    private fun cards(doc: Document, now: Instant): List<String> =
+    private fun cards(doc: Document, now: Instant): List<Long> =
         doc.select("div.FicTable[id^=fic_]").mapNotNull { card ->
-            val id =
+            val site =
                 card.id().removePrefix("fic_").takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
                     ?: return@mapNotNull null
             val heading = card.selectFirst(".FicTable_Title h4") ?: return@mapNotNull null
@@ -94,7 +96,7 @@ class FanficsMePages(context: SourceContext) {
                 heading.selectFirst("a[href^=/fic]")?.let { clean(it.text()) }?.ifEmpty { null }
                     ?: return@mapNotNull null
             val stat = card.selectFirst(".FicTable_Stat")
-            items.upsert(ItemHead(id, "$BASE/fic$id", title, updatedAt = updated(stat)), now)
+            val id = items.upsert(ItemHead(site, "$BASE/fic$site", title, updatedAt = updated(stat)), now).id
             fields.direction(id, heading)
             stat?.let { s ->
                 items.setNumbers(
@@ -139,14 +141,14 @@ class FanficsMePages(context: SourceContext) {
      * the notes of its author, the table of contents. A page without the header — an error page, a changed markup —
      * says nothing of the work, and nothing is written.
      */
-    private fun head(doc: Document, now: Instant): String? {
+    private fun head(doc: Document, now: Instant): Long? {
         val hat = doc.selectFirst("div.FicHead:has(#fic_id)")
-        val id = hat?.selectFirst("#fic_id")?.text()?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+        val site = hat?.selectFirst("#fic_id")?.text()?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
         val headed = hat?.selectFirst("h1")?.let { h -> clean(h.ownText()).ifEmpty { null }?.let { h to it } }
-        if (hat == null || id == null || headed == null) return null
+        if (hat == null || site == null || headed == null) return null
         val (heading, title) = headed
         val rows = rows(doc)
-        items.upsert(ItemHead(id, "$BASE/fic$id", title, updatedAt = updated(hat)), now)
+        val id = items.upsert(ItemHead(site, "$BASE/fic$site", title, updatedAt = updated(hat)), now).id
         fields.direction(id, heading)
         hat.selectFirst("div.center.small")?.let { headNumbers(id, it) }
         hat.selectFirst(".FicHead_cover img[src]")
@@ -158,7 +160,7 @@ class FanficsMePages(context: SourceContext) {
         items.setTexts(
             id,
             mapOf(
-                ANNOTATION to doc.selectFirst("div[id=summary_$id]")?.let(PageText::of),
+                ANNOTATION to doc.selectFirst("div[id=summary_$site]")?.let(PageText::of),
                 NOTES to
                     rows["От автора"]
                         ?.let { it.selectFirst("div[id^=author_comment_]") ?: it }
@@ -170,7 +172,7 @@ class FanficsMePages(context: SourceContext) {
     }
 
     /** The numbers of the header's counters [s]: the views, the readers, the comments, the recommendations. */
-    private fun headNumbers(id: String, s: Element) {
+    private fun headNumbers(id: Long, s: Element) {
         items.setNumbers(
             id,
             listOfNotNull(
@@ -186,7 +188,7 @@ class FanficsMePages(context: SourceContext) {
     }
 
     /** What a translation's line "Оригинал" says of the original: its title, author, address and language. */
-    private fun original(id: String, block: Element?) {
+    private fun original(id: Long, block: Element?) {
         val info =
             block
                 ?.select("table.translation_info tr")
@@ -222,7 +224,7 @@ class FanficsMePages(context: SourceContext) {
      * the last chapters apart from the rest, some of them twice. A work without one is of one chapter, read whole by
      * the link "ЧИТАТЬ". The table names every chapter the work has on the site.
      */
-    private fun contents(doc: Document, id: String) {
+    private fun contents(doc: Document, id: Long) {
         val parts =
             doc.select("ul.FicContents li")
                 .mapNotNull { li ->
@@ -251,30 +253,25 @@ class FanficsMePages(context: SourceContext) {
 
     /**
      * The text in the reader: one chapter, or the whole of the work — each chapter (div "c<number>") after its title
-     * and before the date it was published. Of a work not known yet, nothing.
+     * and before the date it was published.
      */
-    private fun chapters(doc: Document, id: String): Boolean {
+    private fun chapters(doc: Document, id: Long): Boolean {
         val parts =
-            if (items.find(id) == null) emptyList()
-            else
-                doc.select("div.ReadContent div.chapter[id~=^c\\d+$]").mapNotNull { div ->
-                    val number = div.id().removePrefix("c").toIntOrNull() ?: return@mapNotNull null
-                    val text =
-                        PageText.of(div).ifBlank {
-                            return@mapNotNull null
-                        }
-                    val title =
-                        div.previousElementSibling()
-                            ?.takeIf { it.tagName() == "h2" }
-                            ?.let { clean(it.text()) }
-                            ?.ifEmpty { null }
-                    val date =
-                        div.nextElementSibling()
-                            ?.takeIf { it.hasClass("tright") }
-                            ?.text()
-                            ?.let { PageText.russianDate(it) }
-                    PartData(number.toString(), number, title, text, date)
-                }
+            doc.select("div.ReadContent div.chapter[id~=^c\\d+$]").mapNotNull { div ->
+                val number = div.id().removePrefix("c").toIntOrNull() ?: return@mapNotNull null
+                val text =
+                    PageText.of(div).ifBlank {
+                        return@mapNotNull null
+                    }
+                val title =
+                    div.previousElementSibling()
+                        ?.takeIf { it.tagName() == "h2" }
+                        ?.let { clean(it.text()) }
+                        ?.ifEmpty { null }
+                val date =
+                    div.nextElementSibling()?.takeIf { it.hasClass("tright") }?.text()?.let { PageText.russianDate(it) }
+                PartData(number.toString(), number, title, text, date)
+            }
         if (parts.isNotEmpty()) items.saveParts(id, parts)
         return parts.isNotEmpty()
     }

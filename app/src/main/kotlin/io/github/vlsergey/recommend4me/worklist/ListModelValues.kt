@@ -14,9 +14,9 @@ import org.jooq.DSLContext
  */
 object ListModelValues {
     /** Of the items [ids] of the [source]: item to facet to values; an item of none, or of no row, left out. */
-    fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, Map<String, List<String>>> {
+    fun of(db: DSLContext, source: String, ids: Collection<Long>): Map<Long, Map<String, List<String>>> {
         if (ids.isEmpty()) return emptyMap()
-        val out = HashMap<String, HashMap<String, MutableList<String>>>()
+        val out = HashMap<Long, HashMap<String, MutableList<String>>>()
         val m = ITEM_MODEL
         ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             db.select(m.ITEM_KEY, m.FACET, m.VALUE_KEY)

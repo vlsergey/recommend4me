@@ -76,7 +76,7 @@ class Works(private val stores: Stores, private val events: ApplicationEventPubl
      * then how many values its facets have, both counted by the database. The first of them is the one the work is
      * shown with ([WorkClusters.shown]).
      */
-    private fun measure(s: SourceStore, ids: Collection<String>) {
+    private fun measure(s: SourceStore, ids: Collection<Long>) {
         if (ids.isEmpty()) return
         val chars = s.items.lengthsOf(ids)
         val values = s.items.valueCountsOf(ids)
@@ -99,7 +99,7 @@ class Works(private val stores: Stores, private val events: ApplicationEventPubl
      * would bind one item twice.
      */
     @Synchronized
-    private fun bind(s: SourceStore, items: Map<String, String>) {
+    private fun bind(s: SourceStore, items: Map<Long, String>) {
         val bound = s.works.boundAmong(s.id, items.keys)
         items
             .filter { (id, version) -> bound[id].let { it != null && it != version } }

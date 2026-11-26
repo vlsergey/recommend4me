@@ -18,7 +18,7 @@ internal class AuthorTodayGenres(private val items: ItemStore) {
      * by their names (user, 2026-10-27): of a page, its [tags] and its genres the work's tags of the site; of a card —
      * no tags on it, [tags] null — its genres added to the tags known, none of them taken away.
      */
-    fun write(id: String, form: FacetValue?, genres: List<FacetValue>, tags: List<FacetValue>?) {
+    fun write(id: Long, form: FacetValue?, genres: List<FacetValue>, tags: List<FacetValue>?) {
         form?.let { items.setFacet(id, FORM, listOf(it)) }
         val genreTags = genres.mapNotNull { g -> g.name?.takeIf { it.isNotBlank() }?.let { siteTag(it) } }
         if (tags != null) items.setFacet(id, TAG, tags + genreTags)

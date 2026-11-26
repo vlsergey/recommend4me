@@ -53,7 +53,7 @@ internal class ChapterEncoding(private val with: Encoding, private val events: A
      * The batches of the parts of the items [ids] of the source [s] waiting to be encoded, [BATCH] parts each: their
      * windows, their full-text vectors alone, then their paragraphs — the parts read once, by their works.
      */
-    fun batchesOf(s: SourceStore, ids: List<String>): List<Batch> {
+    fun batchesOf(s: SourceStore, ids: List<Long>): List<Batch> {
         val waiting =
             s.parts.windows.waitingOf(
                 ids,

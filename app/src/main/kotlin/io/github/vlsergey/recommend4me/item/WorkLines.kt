@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component
 class WorkLines(private val cards: ItemCards) {
 
     /** The works [ids] of the [store] as lines: item to its line, of the items there are. */
-    fun of(type: TypeStore, store: SourceStore, ids: List<String>): Map<String, RelatedWork> {
+    fun of(type: TypeStore, store: SourceStore, ids: List<Long>): Map<Long, RelatedWork> {
         if (ids.isEmpty()) return emptyMap()
         val heads = store.items.heads(ids)
         val fields = store.corrections.fieldsOf(ids)

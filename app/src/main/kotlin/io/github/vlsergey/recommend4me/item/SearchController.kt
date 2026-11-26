@@ -129,7 +129,8 @@ class SearchController(
         // The address of a work's page first: what the user pastes from the site
         if (line.startsWith("http"))
             typeStore.sources.forEach { s ->
-                val id = runCatching { s.source.itemIdOf(line) }.getOrNull() ?: return@forEach
+                val site = runCatching { s.source.siteIdOf(line) }.getOrNull() ?: return@forEach
+                val id = s.items.idOf(site) ?: return@forEach
                 val head = s.items.find(id) ?: return@forEach
                 found[ItemKey(s.id, id)] =
                     LinkedItem(s.id, id, Corrected.title(head.title, s.corrections.fieldsOf(id)), head.url)
@@ -141,9 +142,10 @@ class SearchController(
                     .filter { (_, f) -> f[Corrected.TITLE]?.lowercase()?.contains(line.lowercase()) == true }
                     .keys
             (s.items.findByTitle(line, wanted) + s.items.heads(titled).values).forEach { head ->
+                val id = head.id
                 found.putIfAbsent(
-                    ItemKey(s.id, head.id),
-                    LinkedItem(s.id, head.id, Corrected.title(head.title, s.corrections.fieldsOf(head.id)), head.url),
+                    ItemKey(s.id, id),
+                    LinkedItem(s.id, id, Corrected.title(head.title, s.corrections.fieldsOf(id)), head.url),
                 )
             }
         }

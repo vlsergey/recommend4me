@@ -52,7 +52,7 @@ class SuggesterStatus(val facet: String, val suggester: String, val fittedAt: In
  * is read, never kept ([FacetSuggestions.chances]).
  */
 data class Chance(
-    val itemId: String,
+    val itemId: Long,
     val facet: String,
     val key: String,
     val had: Boolean,

@@ -68,7 +68,7 @@ class SiteSeriesRepository(private val db: DSLContext) {
     }
 
     /** The item's [position] in the series [key], in place of the one before. */
-    fun place(key: String, itemId: String, position: Int) {
+    fun place(key: String, itemId: Long, position: Int) {
         val p = SERIES_PLACE
         db.insertInto(p)
             .set(p.SERIES_KEY, key)
@@ -80,7 +80,7 @@ class SiteSeriesRepository(private val db: DSLContext) {
     }
 
     /** The item's place in the series [key] forgotten: it is of the series no more. */
-    fun unplace(key: String, itemId: String) {
+    fun unplace(key: String, itemId: Long) {
         db.deleteFrom(SERIES_PLACE).where(SERIES_PLACE.SERIES_KEY.eq(key), SERIES_PLACE.ITEM_ID.eq(itemId)).execute()
     }
 
@@ -106,8 +106,8 @@ class SiteSeriesRepository(private val db: DSLContext) {
             }
 
     /** The places of the works of the series [keys] the site told: series to item to its number. */
-    fun placesOf(keys: Collection<String>): Map<String, Map<String, Int>> {
-        val out = HashMap<String, HashMap<String, Int>>()
+    fun placesOf(keys: Collection<String>): Map<String, Map<Long, Int>> {
+        val out = HashMap<String, HashMap<Long, Int>>()
         keys.distinct().chunked(BATCH).forEach { chunk ->
             db.select(SERIES_PLACE.SERIES_KEY, SERIES_PLACE.ITEM_ID, SERIES_PLACE.POSITION)
                 .from(SERIES_PLACE)

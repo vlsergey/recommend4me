@@ -12,7 +12,7 @@ class TagHierarchyTest {
             mapOf("слоуберн" to setOf("романтика"), "романтика" to setOf("отношения"), "флафф" to setOf("романтика"))
         )
 
-    private fun answer(key: String, added: Boolean) = FacetCorrection("w", "tags", key, added, null)
+    private fun answer(key: String, added: Boolean) = FacetCorrection(1, "tags", key, added, null)
 
     @Test
     fun `a tag gives the work every tag above it`() {

@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 class FewChancesTest {
 
     private val chances =
-        listOf("a" to 0.9, "b" to 0.2, "c" to 0.6).map { (k, c) -> Chance("w", "tags", k, had = k == "a", chance = c) }
+        listOf("a" to 0.9, "b" to 0.2, "c" to 0.6).map { (k, c) -> Chance(1, "tags", k, had = k == "a", chance = c) }
 
     @Test
     fun `read by value as a table of the same chances`() {

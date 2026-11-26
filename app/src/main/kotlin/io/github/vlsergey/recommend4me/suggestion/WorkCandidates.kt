@@ -57,7 +57,7 @@ internal constructor(
      */
     fun ofItem(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         chances: Map<String, Map<String, Chance>>? = null,
     ): List<ItemFacetSuggestions> {
         val facets = chain.facetsOf(store)
@@ -93,7 +93,7 @@ internal constructor(
      * a pairing by its two named in one paragraph, of the index too ([Quoting.Together]). Null for a facet whose values
      * are not counted.
      */
-    fun quoting(store: SourceStore, itemId: String, facet: String, value: String): Quoting? {
+    fun quoting(store: SourceStore, itemId: Long, facet: String, value: String): Quoting? {
         val facets = chain.facetsOf(store)
         val k = facets.indexOfFirst { it.key == facet }
         val ids = listOf(itemId)
@@ -141,7 +141,7 @@ internal constructor(
      */
     fun candidates(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         facet: String,
         limit: Int? = null,
         named: Int? = null,
@@ -185,7 +185,7 @@ internal constructor(
      */
     private fun offered(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         def: FacetDef,
         made: MadeChances,
         answers: Answers,
@@ -223,7 +223,7 @@ internal constructor(
      */
     private fun shut(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         facet: String,
         made: MadeChances,
         answers: Answers,
@@ -268,7 +268,7 @@ internal constructor(
     private fun scoredOne(
         store: SourceStore,
         facet: FacetDef,
-        itemId: String,
+        itemId: Long,
         made: MadeChances,
         characters: CharactersRead,
     ): FacetChain.Scored? {
@@ -287,7 +287,7 @@ internal constructor(
      */
     private fun everyChance(
         facet: FacetDef,
-        itemId: String,
+        itemId: Long,
         scored: FacetChain.Scored,
         made: MadeChances,
     ): List<Chance>? {

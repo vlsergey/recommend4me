@@ -27,12 +27,12 @@ class WorkModelValues internal constructor(private val chain: FacetChain) {
      */
     fun of(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         known: EveryItemFacets? = null,
-    ): Map<String, Map<String, List<String>>> {
+    ): Map<Long, Map<String, List<String>>> {
         val facets = store.schema.facets.filter { it.infer }
         if (facets.isEmpty() || ids.isEmpty()) return emptyMap()
-        val out = HashMap<String, Map<String, List<String>>>()
+        val out = HashMap<Long, Map<String, List<String>>>()
         ids.distinct().chunked(TaskPortions.MOST).forEach { portion ->
             val read = known ?: EveryItemFacets(store.items.facetsOf(portion), store.corrections.facetsOf(portion))
             val made = chain.chances(store, portion, known = read)

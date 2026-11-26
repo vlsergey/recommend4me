@@ -102,9 +102,9 @@ fun ListRow.changedOf(kept: KeptRow?): Set<WorkDatum> =
 object ListKeptRows {
 
     /** Of the items [ids] of the [source], their rows as the [db] holds them; an item of none left out. */
-    fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, KeptRow> {
+    fun of(db: DSLContext, source: String, ids: Collection<Long>): Map<Long, KeptRow> {
         if (ids.isEmpty()) return emptyMap()
-        val out = HashMap<String, KeptRow>()
+        val out = HashMap<Long, KeptRow>()
         ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             val facets = facetsOf(db)
             val numbers = numbersOf(db)

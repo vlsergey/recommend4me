@@ -19,7 +19,7 @@ class TextWindowRepository(private val db: DSLContext, private val writing: Reen
      * ([io.github.vlsergey.recommend4me.encoder.TextEncoder.windowsId]), and the vectors of them in order when more
      * than one — a text of one window is its vector alone.
      */
-    fun saveWindows(itemId: String, textKey: String, count: Int, by: String, windows: List<FloatArray>) =
+    fun saveWindows(itemId: Long, textKey: String, count: Int, by: String, windows: List<FloatArray>) =
         writing.withLock {
             db.transaction { c ->
                 val tx = c.dsl()
@@ -37,7 +37,7 @@ class TextWindowRepository(private val db: DSLContext, private val writing: Reen
                                     TEXT_WINDOW.WINDOW_NO,
                                     TEXT_WINDOW.VEC,
                                 )
-                                .values(null as String?, null as String?, null as Int?, null as ByteArray?)
+                                .values(null as Long?, null as String?, null as Int?, null as ByteArray?)
                         )
                     windows.forEachIndexed { i, v -> batch.bind(itemId, textKey, i, Vectors.half(v)) }
                     batch.execute()
@@ -54,14 +54,18 @@ class TextWindowRepository(private val db: DSLContext, private val writing: Reen
      * The windows of the texts of the items [ids] that have more than one, of the texts' vectors by [encoder], made by
      * [by]: item to text key to windows in order.
      */
-    fun windowsOf(ids: Collection<String>, encoder: String, by: String): Map<String, Map<String, List<FloatArray>>> {
-        val out = HashMap<String, MutableMap<String, MutableList<FloatArray>>>()
+    fun windowsOf(ids: Collection<Long>, encoder: String, by: String): Map<Long, Map<String, List<FloatArray>>> {
+        val out = HashMap<Long, MutableMap<String, MutableList<FloatArray>>>()
         ids.distinct().chunked(TextVectorRepository.BATCH).forEach { chunk ->
             db.select(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.VEC)
                 .from(TEXT_WINDOW)
                 .join(TEXT_VECTOR)
                 .on(TEXT_VECTOR.ITEM_ID.eq(TEXT_WINDOW.ITEM_ID), TEXT_VECTOR.TEXT_KEY.eq(TEXT_WINDOW.TEXT_KEY))
-                .where(TEXT_WINDOW.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.WINDOWS_BY.eq(by))
+                .where(
+                    TEXT_WINDOW.ITEM_ID.`in`(chunk),
+                    TEXT_VECTOR.ENCODER.eq(encoder),
+                    TEXT_VECTOR.WINDOWS_BY.eq(by),
+                )
                 .orderBy(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.WINDOW_NO)
                 .fetch {
                     out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=

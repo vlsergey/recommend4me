@@ -31,7 +31,7 @@ class SetDirections(private val members: SetMembers, private val tasks: Tasks) {
         kind: SetKind,
         encoder: String,
         /** Of every source of the type, the size of every item's set ([SetMembers.sizes]), read by the caller. */
-        sizes: Map<SourceStore, Map<String, Int>> = type.sources.associateWith { members.sizes(it, kind, encoder) },
+        sizes: Map<SourceStore, Map<Long, Int>> = type.sources.associateWith { members.sizes(it, kind, encoder) },
     ): StoredEmbedding? {
         val have = type.sources.associateWith { s -> sizes[s].orEmpty().values.sum() }
         val total = have.values.sum()

@@ -46,7 +46,7 @@ class TagCounting(
         private val grades = s.ratings.all().groupBy { it.itemId }.mapValues { (_, r) -> r.maxBy { it.ratedAt }.grade }
 
         /** The tags every item has by a site's tag of it. */
-        private val fromSite = HashMap<String, MutableSet<String>>()
+        private val fromSite = HashMap<Long, MutableSet<String>>()
 
         fun count() {
             siteTags()
@@ -56,7 +56,7 @@ class TagCounting(
         }
 
         /** A work of [tag]; through the site's tag [site] when it is the site's, not the user's word alone. */
-        private fun count(id: String, tag: String, site: SiteTagRef?, written: String?) {
+        private fun count(id: Long, tag: String, site: SiteTagRef?, written: String?) {
             val stats = out.getOrPut(tag) { TagStats(tag) }
             val key = ItemKey(s.id, id)
             val work = works.representative(key)

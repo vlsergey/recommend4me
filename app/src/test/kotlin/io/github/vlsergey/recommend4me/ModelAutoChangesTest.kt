@@ -34,22 +34,22 @@ class ModelAutoChangesTest : SiteTestBase() {
 
     private fun grades() = Task(TaskKind.FIT_GRADE_MODELS, type = type.id)
 
-    private fun chapter(id: String) = events.publishEvent(SiteItemChapterChangeEvent(site, listOf(id)))
+    private fun chapter(id: Long) = events.publishEvent(SiteItemChapterChangeEvent(site, listOf(id)))
 
     @Test
     fun `a chapter of a rated work is counted, the models of the fields fitted at a hundredth of their works`() {
         capture("ac1|The lantern keeper|space|A lantern lit on a reef||")
         capture("ac2|The quiet harbour|space|A harbour no ship leaves||")
-        gradesController.rateItem(site, "ac1", RatingRequest(4))
+        gradesController.rateItem(site, idOf(site, "ac1"), RatingRequest(4))
         background.run()
         changes.learnt(ModelAutoChanges.fields(site), 1000)
 
-        repeat(9) { chapter("ac1") }
-        chapter("ac2")
+        repeat(9) { chapter(idOf(site, "ac1")) }
+        chapter(idOf(site, "ac2"))
         assertFalse(tasks.due(fields()), "9 chapters of a rated work, one of a work never rated")
         assertEquals(9, changes.of(ModelAutoChanges.fields(site))?.changes)
 
-        chapter("ac1")
+        chapter(idOf(site, "ac1"))
         assertTrue(tasks.due(fields()), "10 of 1000")
         background.run()
         assertEquals(0, changes.of(ModelAutoChanges.fields(site))?.changes, "the count let go once fitted")
@@ -58,7 +58,7 @@ class ModelAutoChangesTest : SiteTestBase() {
     @Test
     fun `the sets' vectors are counted beside the model of the grades, learnt at a hundredth of its grades`() {
         capture("ac3|The salt road|space|A road of salt to the sea||")
-        gradesController.rateItem(site, "ac3", RatingRequest(5))
+        gradesController.rateItem(site, idOf(site, "ac3"), RatingRequest(5))
         background.run()
         changes.learnt(ModelAutoChanges.GRADES, 1000)
 
@@ -76,7 +76,11 @@ class ModelAutoChangesTest : SiteTestBase() {
         background.run()
         changes.learnt(ModelAutoChanges.fields(site), 1000)
         changes.learnt(ModelAutoChanges.GRADES, 1000)
-        corrections.correctFacet(site, "ac4", FacetCorrection(facet = "tags", added = true, key = tag("space")))
+        corrections.correctFacet(
+            site,
+            idOf(site, "ac4"),
+            FacetCorrection(facet = "tags", added = true, key = tag("space")),
+        )
         assertTrue(tasks.due(fields()))
         assertTrue(tasks.due(grades()))
         background.run()

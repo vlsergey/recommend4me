@@ -11,13 +11,13 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /** A kept page: its address, the item it is of, when it came and which parser read it. */
-data class KeptPage(val url: String, val itemId: String?, val capturedAt: Instant, val parserVersion: Int)
+data class KeptPage(val url: String, val itemId: Long?, val capturedAt: Instant, val parserVersion: Int)
 
 /** The pages one source keeps to read again when its parser changes, gzipped. */
 class CapturedPageRepository(private val db: DSLContext) {
 
     /** The page [html] of [url], downloaded [now], kept with the version of the way it was read by. */
-    fun keep(url: String, html: String, itemId: String?, now: Instant, parserVersion: Int) {
+    fun keep(url: String, html: String, itemId: Long?, now: Instant, parserVersion: Int) {
         val packed = gzip(html)
         db.insertInto(CAPTURED_PAGE)
             .set(CAPTURED_PAGE.URL, url.take(URL_WIDTH))

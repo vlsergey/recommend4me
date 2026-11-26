@@ -37,7 +37,7 @@ class NaiveBayesSuggesterTest {
     private fun task(): SuggestionTask {
         val n = 60
         return SuggestionTask(
-            itemIds = List(n) { "w$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = emptyList(),
             values = Matrix(2, 4),
             valueKeys = listOf("v0", "v1"),
@@ -76,7 +76,7 @@ class NaiveBayesSuggesterTest {
         // their other values numbered their own way, one the model never saw among them
         val alone =
             SuggestionTask(
-                itemIds = listOf("new", "w0"),
+                itemIds = longArrayOf(NEW_WORK, 0),
                 inputs = emptyList(),
                 values = Matrix(2, 0),
                 valueKeys = listOf("v0", "v1"),
@@ -115,7 +115,7 @@ class NaiveBayesSuggesterTest {
     private fun answeredTask(): SuggestionTask {
         val n = 60
         return SuggestionTask(
-            itemIds = List(n) { "w$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = emptyList(),
             values = Matrix(3, 4),
             valueKeys = listOf("v0", "v1", "v2"),
@@ -143,11 +143,11 @@ class NaiveBayesSuggesterTest {
         val fitted = fit(task)
         val held = assertNotNull(fitted.heldOut)
         // The answers by the works' ids, confirmed then rejected of each work, and no other pair
-        assertEquals(listOf("w4", "w4", "w4", "w7", "w9"), held.items)
+        assertEquals(listOf(4L, 4L, 4L, 7L, 9L), held.items.toList())
         assertEquals(listOf(0, 2, 1, 0, 1), held.values.toList())
         val model = fitted.model(task.ofItems(IntArray(0)))
         held.items.indices.forEach { p ->
-            val i = held.items[p].removePrefix("w").toInt()
+            val i = held.items[p].toInt()
             // As the counts of every other work score it
             val expected = byOthers(fitted, task, (0 until task.itemCount).filter { it != i }, task.context[i])
             assertEquals(expected[held.values[p]], held.scores[p], 1e-5f, "work $i, value ${held.values[p]}")
@@ -179,7 +179,7 @@ class NaiveBayesSuggesterTest {
         a.tried.zip(b.tried).forEach { (x, y) -> assertEquals(x.loss, y.loss, 1e-12) }
         val heldA = assertNotNull(whole.heldOut)
         val heldB = assertNotNull(split.heldOut)
-        assertEquals(heldA.items, heldB.items)
+        assertEquals(heldA.items.toList(), heldB.items.toList())
         assertContentEquals(heldA.values, heldB.values)
         heldA.scores.indices.forEach { assertEquals(heldA.scores[it], heldB.scores[it], 1e-6f) }
         // The same counts kept: every work scored alike
@@ -208,3 +208,6 @@ class NaiveBayesSuggesterTest {
         assertNull(NaiveBayesSuggester().fit(portionsOf(bare, 7)))
     }
 }
+
+/** A work no fitting saw: a number beyond those of the works fitted on. */
+private const val NEW_WORK = 1_000_000L

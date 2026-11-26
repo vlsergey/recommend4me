@@ -25,22 +25,23 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
 
     private val fields = FfnFields(items, FfnFandoms(db))
 
-    fun read(page: CapturedPage): List<String> {
+    /** The works the page wrote, by their numbers. */
+    fun read(page: CapturedPage): List<Long> {
         val doc = Jsoup.parse(page.html, page.url)
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += cards(doc, page.url, page.capturedAt)
-        val id = Ffn.workIdOf(page.url)
+        val site = Ffn.workIdOf(page.url)
         when {
-            id == null -> Unit
-            STORY.containsMatchIn(page.url) && story(doc, id, page.url, page.capturedAt) -> touched += id
-            REVIEWS_PAGE.containsMatchIn(page.url) && reviews(doc, id) -> touched += id
+            site == null -> Unit
+            STORY.containsMatchIn(page.url) -> story(doc, site, page.url, page.capturedAt)?.let { touched += it }
+            REVIEWS_PAGE.containsMatchIn(page.url) -> reviews(doc, site)?.let { touched += it }
         }
         return touched.toList()
     }
 
     // --- Cards of a list ---
 
-    private fun cards(doc: Document, url: String, now: Instant): List<String> {
+    private fun cards(doc: Document, url: String, now: Instant): List<Long> {
         val context = ListContext.of(doc, url)
         // The path of the fandom whose archive the list is, and of every fandom a section's list names
         val archive = FfnFandoms.ofArchive(url, context.fandoms.singleOrNull())
@@ -48,14 +49,16 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
         return doc.select(CARD).mapNotNull { card(it, context, archive, now) }
     }
 
-    /** The work of a card, written; its id. None of a card that names no work. [archive]: the list's fandom's path. */
-    private fun card(card: Element, context: ListContext, archive: Map<String, String>, now: Instant): String? {
+    /**
+     * The work of a card, written; its number. None of a card that names no work. [archive]: the list's fandom's path.
+     */
+    private fun card(card: Element, context: ListContext, archive: Map<String, String>, now: Instant): Long? {
         val link = card.selectFirst(LINK)
-        val id = link?.let { Ffn.workIdOf(it.absUrl("href")) }
+        val site = link?.let { Ffn.workIdOf(it.absUrl("href")) }
         val title = link?.text()?.trim()?.ifEmpty { null }
-        if (id == null || title == null) return null
+        if (site == null || title == null) return null
         val meta = card.selectFirst("div.xgray")
-        items.upsert(ItemHead(id, Ffn.workUrl(id), title, updatedAt = meta?.let(::updated)), now)
+        val id = items.upsert(ItemHead(site, Ffn.workUrl(site), title, updatedAt = meta?.let(::updated)), now).id
         context.category?.let { fields.category(id, it) }
         if (context.fandoms.isNotEmpty()) fields.fandoms(id, context.fandoms, archive)
         meta?.let { fields.line(id, FfnLine.of(it.text())) }
@@ -72,13 +75,16 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
 
     // --- A work's page ---
 
-    /** A work's page: its header, every chapter named and the text of the one it shows. False of one without it. */
-    private fun story(doc: Document, id: String, url: String, now: Instant): Boolean {
+    /**
+     * A work's page, of the work the site names [site]: its header, every chapter named and the text of the one it
+     * shows; its number. None of a page without it.
+     */
+    private fun story(doc: Document, site: String, url: String, now: Instant): Long? {
         val top = doc.selectFirst("#profile_top")
         val title = top?.selectFirst("b.xcontrast_txt")?.text()?.trim()?.ifEmpty { null }
-        if (top == null || title == null) return false
+        if (top == null || title == null) return null
         val meta = top.selectFirst("span.xgray")
-        items.upsert(ItemHead(id, Ffn.workUrl(id), title, updatedAt = meta?.let(::updated)), now)
+        val id = items.upsert(ItemHead(site, Ffn.workUrl(site), title, updatedAt = meta?.let(::updated)), now).id
         top.selectFirst("a[href^=/u/]")?.let(::author)?.let { items.setFacet(id, AUTHOR, listOf(it)) }
         top.selectFirst("> div.xcontrast_txt")?.let { items.setTexts(id, mapOf(ANNOTATION to PageText.of(it))) }
         meta?.let { fields.line(id, FfnLine.of(it.text())) }
@@ -86,14 +92,14 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
         val cover = doc.selectFirst("#img_large img")?.let { it.attr("data-original").ifEmpty { it.attr("src") } }
         cover?.let { items.setPictures(id, cover(it)) }
         chapters(doc, id, STORY.find(url)?.groupValues?.get(2)?.ifEmpty { null } ?: FIRST_PART)
-        return true
+        return id
     }
 
     /**
      * Where the work is, by the links over its header: a section and its fandom ("Books", "Harry Potter"), or a
      * crossover's one link, "Harry Potter + Pirates of the Caribbean Crossover", its two fandoms.
      */
-    private fun located(doc: Document, id: String) {
+    private fun located(doc: Document, id: Long) {
         val links = doc.select("#pre_story_links a")
         val crossover = links.firstOrNull { "_Crossovers/" in it.attr("href") }
         if (crossover != null) {
@@ -110,7 +116,7 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
      * Every chapter the menu names, "2. A Different Life" — every one the work has on the site — and the text of the
      * one the page shows.
      */
-    private fun chapters(doc: Document, id: String, shown: String) {
+    private fun chapters(doc: Document, id: Long, shown: String) {
         val named =
             doc.select("#chap_select").firstOrNull()?.select("option[value]").orEmpty().map { o ->
                 val number = o.attr("value").trim()
@@ -126,10 +132,14 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
 
     // --- Reviews ---
 
-    /** The reviews the page shows, of a work known: each by the site's own id, its reviewer, its day. */
-    private fun reviews(doc: Document, id: String): Boolean {
+    /**
+     * The reviews the page shows, of a work known the site names [site]: each by the site's own id, its reviewer, its
+     * day; the work's number. None of a work not known, of a page of none.
+     */
+    private fun reviews(doc: Document, site: String): Long? {
         val rows = doc.select("#gui_table1 tbody td")
-        if (items.find(id) == null || rows.isEmpty()) return false
+        val id = items.idOf(site)
+        if (id == null || rows.isEmpty()) return null
         items.saveReviews(
             id,
             rows.mapNotNull { td ->
@@ -145,7 +155,7 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
                 ReviewData(reviewId, reviewer, null, text, td.selectFirst("span[data-xutime]")?.let(::moment))
             },
         )
-        return true
+        return id
     }
 
     /**

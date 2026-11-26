@@ -32,7 +32,7 @@ internal class WorksRead(
     encoder: TextEncoder,
     imageEncoder: String?,
     sets: Map<SetKind, Long>,
-    ids: Collection<String>,
+    ids: Collection<Long>,
     /** The characters of the dictionary's universes, every universe's read once for every facet of the operation. */
     val characters: CharactersRead,
     /**
@@ -44,17 +44,17 @@ internal class WorksRead(
     /** The site's values and the user's answers of the works, read already by the reading this serves; null: read. */
     known: EveryItemFacets? = null,
 ) : AutoCloseable {
-    val ids: List<String> = ids.distinct()
-    val site: Map<String, Map<String, List<String>>> = known?.site ?: store.items.facetsOf(this.ids)
-    val corrections: Map<String, List<FacetCorrection>> = known?.corrections ?: store.corrections.facetsOf(this.ids)
-    val complete: Map<String, Set<String>> = store.corrections.completeOf(this.ids)
+    val ids: List<Long> = ids.distinct()
+    val site: Map<Long, Map<String, List<String>>> = known?.site ?: store.items.facetsOf(this.ids)
+    val corrections: Map<Long, List<FacetCorrection>> = known?.corrections ?: store.corrections.facetsOf(this.ids)
+    val complete: Map<Long, Set<String>> = store.corrections.completeOf(this.ids)
 
     /**
      * The user's answers and the facets said whole, as the facets' dictionaries read them ([Answers]): of what the
      * reading read.
      */
     val answers: Answers by lazy { Answers(corrections, complete) }
-    val drafts: Map<String, List<LayerDraft>> = WorkDrafts.of(store, this.ids, site)
+    val drafts: Map<Long, List<LayerDraft>> = WorkDrafts.of(store, this.ids, site)
     val inputs: List<InputBlock> =
         if (withInputs) inputs(store, this.ids, encoder, imageEncoder, sets, card) else emptyList()
 
@@ -213,7 +213,7 @@ internal class WorksRead(
  */
 private fun inputs(
     store: SourceStore,
-    ids: List<String>,
+    ids: List<Long>,
     encoder: TextEncoder,
     imageEncoder: String?,
     sets: Map<SetKind, Long>,
@@ -236,7 +236,7 @@ private fun inputs(
  * The vectors of the works [ids] gathered into the rows of their blocks as they are read ([Gathered]), and where the
  * time goes: how many were read when each kind of them was done ([mark]).
  */
-private class InputsGathered(private val ids: List<String>) {
+private class InputsGathered(private val ids: List<Long>) {
     private val row = ids.withIndex().associate { (i, id) -> id to i }
     val blocks = LinkedHashMap<String, Gathered>()
     private var read = 0
@@ -245,7 +245,7 @@ private class InputsGathered(private val ids: List<String>) {
     val marks = arrayListOf(0 to System.nanoTime())
 
     /** A vector of the work [id] read, of the [block]. */
-    fun put(id: String, block: String, v: FloatArray) {
+    fun put(id: Long, block: String, v: FloatArray) {
         read++
         val i = row[id] ?: return
         blocks.getOrPut(block) { Gathered(ids.size, v.size) }.put(i, v)
@@ -255,7 +255,7 @@ private class InputsGathered(private val ids: List<String>) {
      * A vector of the texts or the pictures read as the database keeps it, half precision: its bytes copied as they
      * are.
      */
-    fun halves(id: String, block: String, bytes: ByteArray) {
+    fun halves(id: Long, block: String, bytes: ByteArray) {
         read++
         val i = row[id] ?: return
         blocks.getOrPut(block) { Gathered(ids.size, bytes.size / HALF_BYTES) }.putHalves(i, bytes)
@@ -273,7 +273,7 @@ private class InputsGathered(private val ids: List<String>) {
  */
 private fun readOf(
     store: SourceStore,
-    ids: List<String>,
+    ids: List<Long>,
     encoder: TextEncoder,
     texts: Map<String, String>,
     imageEncoder: String?,
@@ -300,7 +300,7 @@ private fun readOf(
  */
 private fun logInputs(
     store: SourceStore,
-    ids: List<String>,
+    ids: List<Long>,
     out: List<InputBlock>,
     gathered: InputsGathered,
     onCard: Boolean,

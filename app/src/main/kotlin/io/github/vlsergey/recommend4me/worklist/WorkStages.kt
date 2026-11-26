@@ -135,18 +135,17 @@ class WorkStages(private val at: Map<WorkStage, Long>) {
         val NONE = WorkStages(emptyMap())
 
         /** Of the items [ids] of the [source], the stages kept, as written so far; an item of no row left out. */
-        fun of(index: ListIndex, source: String, ids: Collection<String>): Map<String, WorkStages> =
-            index.written { db ->
-                val out = HashMap<String, WorkStages>()
-                val columns = WorkStage.entries.map { it.column }
-                ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
-                    db.select(listOf(ITEM.ITEM_KEY) + columns).from(ITEM).where(ListIndex.AMONG).fetch { r ->
-                        out[ItemKey.parse(r.get(ITEM.ITEM_KEY)!!).id] =
-                            WorkStages(WorkStage.entries.associateWith { r.get(it.column) ?: 0L })
-                    }
+        fun of(index: ListIndex, source: String, ids: Collection<Long>): Map<Long, WorkStages> = index.written { db ->
+            val out = HashMap<Long, WorkStages>()
+            val columns = WorkStage.entries.map { it.column }
+            ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
+                db.select(listOf(ITEM.ITEM_KEY) + columns).from(ITEM).where(ListIndex.AMONG).fetch { r ->
+                    out[ItemKey.parse(r.get(ITEM.ITEM_KEY)!!).id] =
+                        WorkStages(WorkStage.entries.associateWith { r.get(it.column) ?: 0L })
                 }
-                out
             }
+            out
+        }
     }
 }
 

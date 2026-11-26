@@ -21,7 +21,7 @@ class PictureFiles(sourceFolder: Path) {
     fun path(relative: String): Path = dir.resolve(relative)
 
     /** Writes the bytes as `<item>/<name>.<ext>`, atomically; returns the relative path. */
-    fun save(itemId: String, name: String, bytes: ByteArray, contentType: String): String {
+    fun save(itemId: Long, name: String, bytes: ByteArray, contentType: String): String {
         val relative = "${folderOf(itemId)}/$name.${extension(contentType)}"
         val target = dir.resolve(relative)
         Files.createDirectories(target.parent)
@@ -50,8 +50,8 @@ class PictureFiles(sourceFolder: Path) {
                 "image/avif" to "avif",
             )
 
-        /** An item's id as a folder name: what a file system would not take is replaced. */
-        fun folderOf(itemId: String): String = itemId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        /** The folder of the pictures of the item numbered [itemId]: its number. */
+        fun folderOf(itemId: Long): String = itemId.toString()
 
         fun extension(contentType: String) = EXTENSIONS[contentType] ?: "img"
 

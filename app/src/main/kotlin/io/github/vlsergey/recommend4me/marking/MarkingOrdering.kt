@@ -7,7 +7,7 @@ import kotlin.math.abs
 import kotlin.math.ln
 
 /** A work of the table of the marking: where it is, its chance, the user's word on it. */
-internal class MarkingRow(val store: SourceStore, val id: String, val chance: Double?, val answer: MarkVerdict?)
+internal class MarkingRow(val store: SourceStore, val id: Long, val chance: Double?, val answer: MarkVerdict?)
 
 /**
  * The order the works of the marking are asked in ([MarkingOrder]): the likeliest first; the disputed — those nearest

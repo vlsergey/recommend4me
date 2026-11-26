@@ -169,9 +169,9 @@ internal class FacetRead(
      * its values are all named ([allNamed]), and the facet's tags under others ([within]).
      */
     private class Owned(
-        val corrected: Map<String, Facets>,
-        val answers: Map<String, List<FacetCorrection>>,
-        val drafted: Map<String, List<String>>,
+        val corrected: Map<Long, Facets>,
+        val answers: Map<Long, List<FacetCorrection>>,
+        val drafted: Map<Long, List<String>>,
         val allNamed: BooleanArray,
         val within: Map<String, TagHierarchy>,
     )
@@ -230,7 +230,7 @@ internal class FacetRead(
             }
         laps.lap("task: examples")
         return SuggestionTask(
-            itemIds = ids,
+            itemIds = ids.toLongArray(),
             inputs = inputs,
             values = side?.names ?: asked.kept?.names ?: Matrix(values.size, 0),
             valueKeys = values,

@@ -24,28 +24,30 @@ import org.jsoup.nodes.Element
  */
 internal class AffProfiles(private val items: ItemStore, private val fields: AffFields) {
 
-    /** The works of the author's page [doc] at [url], written; their ids. None of another page. */
-    fun read(doc: Document, url: String, now: Instant): List<String> {
+    /** The works of the author's page [doc] at [url], written; their numbers. None of another page. */
+    fun read(doc: Document, url: String, now: Instant): List<Long> {
         val author = PROFILE.find(url)?.groupValues?.get(1)
         val name = doc.selectFirst("h1")?.text()?.trim()?.ifEmpty { null }
         return if (author == null) emptyList()
         else doc.select(CARD).mapNotNull { card -> card(card, FacetValue(author, name ?: author), now) }
     }
 
-    /** The work of a card, written; its id. None of a card that names no work. */
-    private fun card(card: Element, author: FacetValue, now: Instant): String? {
+    /** The work of a card, written; its number. None of a card that names no work. */
+    private fun card(card: Element, author: FacetValue, now: Instant): Long? {
         val link = card.selectFirst(LINK)
-        val id = link?.let { Aff().itemIdOf(it.absUrl("href")) }
+        val site = link?.let { Aff().siteIdOf(it.absUrl("href")) }
         val title = link?.text()?.trim()?.ifEmpty { null }
-        return if (id == null || title == null) null else id.also { write(card, it, title, author, now) }
+        return if (site == null || title == null) null else write(card, site, title, author, now)
     }
 
-    private fun write(card: Element, id: String, title: String, author: FacetValue, now: Instant) {
+    /** The work the site names [site] of the [card] written: its number. */
+    private fun write(card: Element, site: String, title: String, author: FacetValue, now: Instant): Long {
         val meta = card.select("div.story-card-meta-item").map { it.text().trim() }
         fun dated(label: String) =
             meta.firstNotNullOfOrNull { m -> m.substringAfter("$label:", "").trim().ifEmpty { null } }?.let(::date)
-        items.upsert(ItemHead(id, Aff().itemUrl(id), title, updatedAt = dated("Updated") ?: dated("Created")), now)
-        fields.archive(id, id.substringBeforeLast('-'))
+        val updated = dated("Updated") ?: dated("Created")
+        val id = items.upsert(ItemHead(site, Aff().itemUrl(site), title, updatedAt = updated), now).id
+        fields.archive(id, site.substringBeforeLast('-'))
         items.setFacet(id, AUTHOR, listOf(author))
         fun counted(word: String) =
             meta
@@ -61,6 +63,7 @@ internal class AffProfiles(private val items: ItemStore, private val fields: Aff
         )
         card.selectFirst("div.story-card-description")?.let { items.setTexts(id, mapOf(ANNOTATION to PageText.of(it))) }
         fields.codes(id, card.select("div.story-card-tags span.story-tag").map { it.text().trim() })
+        return id
     }
 
     companion object {

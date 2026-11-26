@@ -50,7 +50,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
      * search — the values the site and the user give them alone —, their chapters not read: the documents of those
      * whose fingerprint changed are made of the same ([documents] of no [models]).
      */
-    fun printsOf(s: SourceStore, ids: List<String>, hierarchies: Map<String, TagHierarchy>): Map<ItemKey, Long> {
+    fun printsOf(s: SourceStore, ids: List<Long>, hierarchies: Map<String, TagHierarchy>): Map<ItemKey, Long> {
         val read = Read(s, ids, null, hierarchies, null)
         return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.printOf(id, head) }.toMap()
     }
@@ -74,12 +74,12 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
      */
     fun documents(
         s: SourceStore,
-        ids: List<String>,
+        ids: List<Long>,
         chances: WorkChances? = null,
         hierarchies: Map<String, TagHierarchy> = s.hierarchies(),
         models: Boolean = true,
-        given: Map<String, Map<String, List<String>>>? = null,
-        chapters: Map<String, Set<String>>? = null,
+        given: Map<Long, Map<String, List<String>>>? = null,
+        chapters: Map<Long, Set<String>>? = null,
     ): Map<ItemKey, SearchDocument> {
         val made = if (models && given == null) chances ?: suggestions.chances(s, ids) else null
         val read = Read(s, ids, made, hierarchies, given)
@@ -97,13 +97,13 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
      */
     private inner class Read(
         private val s: SourceStore,
-        private val ids: List<String>,
+        private val ids: List<Long>,
         chances: WorkChances?,
         hierarchies: Map<String, TagHierarchy>,
-        given: Map<String, Map<String, List<String>>>?,
+        given: Map<Long, Map<String, List<String>>>?,
     ) {
         private val schema = s.schema
-        val heads: Map<String, StoredItem> = s.items.heads(ids)
+        val heads: Map<Long, StoredItem> = s.items.heads(ids)
         private val site = s.items.facetsOf(ids)
         private val facets =
             when {
@@ -159,7 +159,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
          * The fields of the item [id] of the [head] but its chapters — its title, its facets, its texts — and the
          * language its description is written in.
          */
-        private fun ownFields(id: String, head: StoredItem): Pair<List<SearchField>, String?> {
+        private fun ownFields(id: Long, head: StoredItem): Pair<List<SearchField>, String?> {
             val own = fields[id].orEmpty()
             val itemFacets = corrected[id].orEmpty()
             val itemTexts = Corrected.texts(texts[id].orEmpty(), own)
@@ -179,21 +179,21 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
         }
 
         /** The language the chapters of the item [id] are written in: the work's one, as its values say; else none. */
-        private fun textLanguage(id: String): String? =
+        private fun textLanguage(id: Long): String? =
             schema
                 .facet(StandardLanguages.KEY)
                 ?.takeIf { it.single }
                 ?.let { corrected[id]?.get(it.key)?.singleOrNull() }
 
         /** What the document of the item [id] of the [head] is made of ([SearchDocument.fingerprint]). */
-        fun printOf(id: String, head: StoredItem): Long =
+        fun printOf(id: Long, head: StoredItem): Long =
             ownFields(id, head).let { (own, language) -> printOf(id, own, language) }
 
         /**
          * What the document of the item [id] is made of: the fields but its chapters ([own]) whole, the [language]; of
          * its chapters, their titles and their texts' hashes; and the version of how documents are made ([DOCUMENTS]).
          */
-        private fun printOf(id: String, own: List<SearchField>, language: String?): Long {
+        private fun printOf(id: Long, own: List<SearchField>, language: String?): Long {
             val text = StringBuilder()
             fun put(value: Any?) {
                 text.append(value).append('\u0000')
@@ -221,7 +221,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
          * The document of the item [id] of the [head]: of its chapters the texts of [read] alone, the others named; of
          * null, every chapter's text.
          */
-        fun documentOf(id: String, head: StoredItem, read: Set<String>?): SearchDocument {
+        fun documentOf(id: Long, head: StoredItem, read: Set<String>?): SearchDocument {
             val (own, language) = ownFields(id, head)
             val docFields = ArrayList(own)
             if (read == null) chapters(id, docFields) else named(id, read, docFields)
@@ -232,7 +232,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
          * The fields of the facet [def] of the item [id] of the values [keys]: the site's own, as the user left them;
          * the rest the user's and the model's.
          */
-        private fun facetFields(id: String, def: FacetDef, keys: List<String>): List<SearchField> {
+        private fun facetFields(id: Long, def: FacetDef, keys: List<String>): List<SearchField> {
             val removed =
                 facetCorrections[id].orEmpty().filter { it.facet == def.key && !it.added }.map { it.key }.toSet()
             val own = site[id]?.get(def.key).orEmpty().filter { it !in removed }.distinct()
@@ -265,7 +265,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
         }
 
         /** The chapters read of the item [id]: searched by their words. */
-        private fun chapters(id: String, docFields: MutableList<SearchField>) {
+        private fun chapters(id: Long, docFields: MutableList<SearchField>) {
             val language = textLanguage(id)
             parts[id].orEmpty().forEachIndexed { n, (partId, title, content) ->
                 docFields += chapter(partId, title, n, listOf(content), language)
@@ -273,7 +273,7 @@ class SearchDocuments(private val suggestions: FacetSuggestions, private val lis
         }
 
         /** The chapters of the item [id], the texts of [read] alone read: of a card, one place of the work shown. */
-        private fun named(id: String, read: Set<String>, docFields: MutableList<SearchField>) {
+        private fun named(id: Long, read: Set<String>, docFields: MutableList<SearchField>) {
             val language = textLanguage(id)
             val listed = titles[id].orEmpty()
             val texts = s.parts.textsOf(id, listed.map { it.first }.filter { it in read })

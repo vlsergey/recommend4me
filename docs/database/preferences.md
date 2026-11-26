@@ -20,7 +20,7 @@ erDiagram
     search_judgment {
         VARCHAR query PK
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         VARCHAR field PK
         BIGINT snippet_hash PK
         VARCHAR snippet

@@ -56,7 +56,7 @@ class WorkFacets(private val facets: Array<String>, private val lists: Array<Lis
      */
     class Reading {
         private val strings = HashMap<String, String>()
-        private val works = HashMap<String, Building>()
+        private val works = HashMap<Long, Building>()
 
         private class Building {
             val facets = ArrayList<String>(4)
@@ -65,7 +65,7 @@ class WorkFacets(private val facets: Array<String>, private val lists: Array<Lis
 
         private fun one(s: String): String = strings.putIfAbsent(s, s) ?: s
 
-        fun add(itemId: String, facet: String, key: String) {
+        fun add(itemId: Long, facet: String, key: String) {
             val work = works.getOrPut(itemId) { Building() }
             val f = one(facet)
             var at = work.facets.indexOf(f)
@@ -78,8 +78,8 @@ class WorkFacets(private val facets: Array<String>, private val lists: Array<Lis
         }
 
         /** Every work read, by its id. */
-        fun done(): Map<String, WorkFacets> {
-            val out = HashMap<String, WorkFacets>(works.size * 4 / 3 + 1)
+        fun done(): Map<Long, WorkFacets> {
+            val out = HashMap<Long, WorkFacets>(works.size * 4 / 3 + 1)
             works.forEach { (id, w) ->
                 out[id] =
                     WorkFacets(w.facets.toTypedArray(), Array(w.lists.size) { w.lists[it].toTypedArray().asList() })

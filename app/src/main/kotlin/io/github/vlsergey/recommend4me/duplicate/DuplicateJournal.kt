@@ -37,7 +37,7 @@ class DuplicateJournal(
                 ?: DuplicateWork(
                     source = key.source,
                     item = key.id,
-                    title = key.id,
+                    title = key.id.toString(),
                     url = "",
                 )
         return WorkPairJournalPage(

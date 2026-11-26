@@ -60,7 +60,7 @@ class HeldOutRepository(private val db: DSLContext) {
                 val batch =
                     tx.batch(
                         tx.insertInto(HELD_OUT, HELD_OUT.SOURCE, HELD_OUT.ITEM_ID, HELD_OUT.SCORE)
-                            .values(null as String?, null as String?, null as Double?)
+                            .values(null as String?, null as Long?, null as Double?)
                     )
                 chunk.forEach { (key, score) -> batch.bind(key.source, key.id, score) }
                 batch.execute()
@@ -69,13 +69,13 @@ class HeldOutRepository(private val db: DSLContext) {
     }
 
     /** Every prediction of a source's graded items by the model that had not seen them: item to score. */
-    fun scores(source: String): Map<String, Double> =
+    fun scores(source: String): Map<Long, Double> =
         db.select(HELD_OUT.ITEM_ID, HELD_OUT.SCORE).from(HELD_OUT).where(HELD_OUT.SOURCE.eq(source)).fetch().associate {
             it.value1()!! to it.value2()!!
         }
 
     /** The predictions of the items [ids] of a source by the model that had not seen them: item to score. */
-    fun scores(source: String, ids: Collection<String>): Map<String, Double> {
+    fun scores(source: String, ids: Collection<Long>): Map<Long, Double> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) scores(source).filterKeys { it in asked }
         else

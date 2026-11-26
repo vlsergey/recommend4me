@@ -65,7 +65,7 @@ val Source.downloadsPages: Boolean
  *   of a work's universe (fan fiction or original) is `UniverseFacets.KIND`, told by the facet [SourceSchema.kindFrom]
  *   names; the site's line of characters and pairings a text [SourceSchema.universeLine] names, read by its
  *   [castHabit].
- * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [itemIdOf] and a [pageDecor], every selector
+ * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [siteIdOf] and a [pageDecor], every selector
  *   of it matching the pages; [SourceMode.PAGE] — [refresh], on the user's press alone: the site asked politely, one
  *   request at a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site
  *   asking to wait (429) an error; [SourceMode.SCRAPE_ALL] and [SourceMode.UPDATES] — [scrape].
@@ -112,14 +112,15 @@ interface Source : BrowserTracking, SitePictures {
     val settings: List<SettingDef>
         get() = emptyList()
 
-    /** The page of the item on the site. */
-    fun itemUrl(itemId: String): String
+    /** The page of the item the site names [siteId] on the site. */
+    fun itemUrl(siteId: String): String
 
     /**
-     * The page of a part of the item — a chapter — on the site, [partId] as the source keeps it ([PartData.id]): where
-     * a passage of its text is read in place. The item's own page of a source whose parts have none of their own.
+     * The page of a part of the item the site names [siteId] — a chapter — on the site, [partId] as the source keeps it
+     * ([PartData.id]): where a passage of its text is read in place. The item's own page of a source whose parts have
+     * none of their own.
      */
-    fun partUrl(itemId: String, partId: String): String = itemUrl(itemId)
+    fun partUrl(siteId: String, partId: String): String = itemUrl(siteId)
 
     /**
      * The page of a value of the source's [facet] on the site, [key] and [name] as the source wrote them
@@ -137,11 +138,11 @@ interface Source : BrowserTracking, SitePictures {
     fun authorOf(url: String): String? = null
 
     /**
-     * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null when the address is
-     * not one item's. The extension shows the item's panel on such a page, and a card linking to it gets the item's
-     * prediction.
+     * The site's id of the item a page of the site is about — a work's page, a chapter of it, its reviews — or null
+     * when the address is not one item's. The extension shows the item's panel on such a page, and a card linking to it
+     * gets the item's prediction.
      */
-    fun itemIdOf(url: String): String? = null
+    fun siteIdOf(url: String): String? = null
 
     /** The user's own actions on the site the source reads ([SiteSignals]). */
     val signals: List<SignalDef>
@@ -189,7 +190,7 @@ interface Source : BrowserTracking, SitePictures {
      * Downloads the item's page again now — on the user's press of the button of a single item alone: never on its own,
      * a grade given or a page seen asks the site for nothing (user, 2026-11-13). Returns false when the source cannot.
      */
-    fun refresh(itemId: String, context: SourceContext): Boolean = false
+    fun refresh(itemId: Long, context: SourceContext): Boolean = false
 
     /**
      * How far the whole catalogue is loaded ([SourceMode.SCRAPE_ALL]): what it is doing and how much of it is done,

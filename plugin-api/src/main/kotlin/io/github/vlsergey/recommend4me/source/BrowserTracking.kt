@@ -33,9 +33,9 @@ interface BrowserTracking {
 
     /**
      * Reads a page the browser sent — or one kept before, read again after the parser changed — and writes what it
-     * says. Returns the items it touched.
+     * says. Returns the items it touched, by their numbers ([ItemStore.upsert]).
      */
-    fun capture(page: CapturedPage, context: SourceContext): List<String> = emptyList()
+    fun capture(page: CapturedPage, context: SourceContext): List<Long> = emptyList()
 
     /**
      * The requests of the site that bring what it says [tags] — keys of its [facet] — mean, made for the application by

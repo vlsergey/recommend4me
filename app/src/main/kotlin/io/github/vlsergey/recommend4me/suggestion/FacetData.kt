@@ -12,7 +12,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * the item's other facets as its context.
  */
 internal class FacetData(
-    val ids: List<String>,
+    val ids: List<Long>,
     val values: List<String>,
     val task: SuggestionTask,
     /**
@@ -111,12 +111,12 @@ internal class FacetAsked(
     /** Whether the site gives values of the facet, told of every work, as the model was fitted. */
     val siteGives: Boolean,
 ) {
-    val allowed: ((String) -> Set<String>?)?
+    val allowed: ((Long) -> Set<String>?)?
         get() = vocabulary?.allowed
 
-    val barred: ((String) -> Set<String>)?
+    val barred: ((Long) -> Set<String>)?
         get() = vocabulary?.barred
 
-    val examples: ((String) -> List<String>)?
+    val examples: ((Long) -> List<String>)?
         get() = vocabulary?.examples
 }

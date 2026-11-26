@@ -23,7 +23,7 @@ internal object ListChanges {
      * ([works], [worksWritten]); whether anything is left after them ([more]).
      */
     class Portion(
-        val named: Map<String, Set<String>>,
+        val named: Map<String, Set<Long>>,
         val items: Map<String, ItemCursor?>,
         val written: Map<String, Long>,
         val works: WorkCursor?,

@@ -79,7 +79,7 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
     }
 
     /** The rows of the [source] whose items are not among [present] removed: how many. */
-    fun keepOnly(source: String, present: Set<String>): Int = lock.withLock {
+    fun keepOnly(source: String, present: Set<Long>): Int = lock.withLock {
         val gone =
             writing
                 .select(ITEM.ITEM_KEY)

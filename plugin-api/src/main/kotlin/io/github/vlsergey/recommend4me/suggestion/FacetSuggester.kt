@@ -154,10 +154,10 @@ class ValueGrouping(val name: String, val groups: List<String>, val of: List<Int
  */
 class SuggestionTask(
     /**
-     * The id of every item, in the order of the rows: an item is held out of what is learnt by it, the same way every
-     * time.
+     * The application's number of every item, in the order of the rows: an item is held out of what is learnt by it,
+     * the same way every time.
      */
-    val itemIds: List<String>,
+    val itemIds: LongArray,
     val inputs: List<InputBlock>,
     /** One row per value: the vector of its name as a query, of unit length; zeros when not encoded. */
     val values: Matrix,
@@ -241,7 +241,7 @@ class SuggestionTask(
     fun ofItems(rows: IntArray): SuggestionTask {
         fun <T> pick(list: List<T>) = rows.map { list[it] }
         return SuggestionTask(
-            itemIds = pick(itemIds),
+            itemIds = LongArray(rows.size) { itemIds[rows[it]] },
             inputs = inputs.map { it.ofItems(rows, itemCount) },
             values = values,
             valueKeys = valueKeys,
@@ -400,10 +400,10 @@ interface FittedSuggester {
 /**
  * OF EVERY VALUE THE USER ANSWERED ON OF AN ITEM — the [SuggestionTask.confirmed] and the [SuggestionTask.rejected] of
  * the portions fitted on — the score a model that had not seen the item's answers gave it: the scale the scoring of the
- * model kept gives ([SuggestionScores.scores]), not its chance. Three arrays of one length: the item by its id, the
+ * model kept gives ([SuggestionScores.scores]), not its chance. Three arrays of one length: the item by its number, the
  * value — in the order of the value side's values — and the score. A pair no model held out is not among them.
  */
-class HeldOutScores(val items: List<String>, val values: IntArray, val scores: FloatArray) {
+class HeldOutScores(val items: LongArray, val values: IntArray, val scores: FloatArray) {
     init {
         require(items.size == values.size && values.size == scores.size) {
             "${items.size} items, ${values.size} values, ${scores.size} scores"

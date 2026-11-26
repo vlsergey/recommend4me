@@ -134,7 +134,7 @@ class RowVectors(val encoder: String, private val made: () -> Map<String, ByteAr
          * The vectors of the texts of the items [ids] by the [encoder] as their documents hold them, read by their
          * keys.
          */
-        fun of(s: SourceStore, ids: Collection<String>, encoder: String): Map<String, RowVectors> =
+        fun of(s: SourceStore, ids: Collection<Long>, encoder: String): Map<Long, RowVectors> =
             s.textVectors.halvesOf(ids, encoder, ListTexts.vectorKeys(s.schema)).mapValues { (_, own) ->
                 val packed = own.mapValues { ListTexts.packedHalves(it.value) }
                 RowVectors(encoder) { packed }
@@ -156,14 +156,14 @@ internal object ListRows {
      */
     fun read(
         s: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         clusters: WorkClusters,
-        model: Map<String, Map<String, List<String>>>,
-        predicted: Map<String, Predicted>,
+        model: Map<Long, Map<String, List<String>>>,
+        predicted: Map<Long, Predicted>,
         encoder: String?,
-        stages: (String) -> WorkStages = { WorkStages.NONE },
+        stages: (Long) -> WorkStages = { WorkStages.NONE },
     ): List<ListRow> {
-        val heads = s.items.heads(ids).values
+        val heads = s.items.heads(ids)
         if (heads.isEmpty()) return emptyList()
         val ratings = s.ratings.ofItems(ids).groupBy { it.itemId }
         val marks = s.interest.ofItems(ids)
@@ -171,15 +171,15 @@ internal object ListRows {
         val facets = facetsOf(s, ids, model, corrections)
         val fields = s.corrections.fieldsOf(ids)
         val numbers = numbersOf(s, ids, fields)
-        val titles = heads.associate { it.id to Corrected.title(it.title, fields[it.id].orEmpty()) }
+        val titles = heads.mapValues { (id, h) -> Corrected.title(h.title, fields[id].orEmpty()) }
         val texts = textsOf(s, ids, fields)
         val vectors = if (encoder == null) emptyMap() else RowVectors.of(s, ids, encoder)
         val none = encoder?.let(RowVectors::none)
         // When every outer kind of data of each changed last: of its item, and of the user's word on its work
         val itemDates = s.changes.of(ids)
         val workDates = s.works.changes.ofItems(s.id, ids)
-        return heads.map { h ->
-            val key = ItemKey(s.id, h.id)
+        return heads.map { (id, h) ->
+            val key = ItemKey(s.id, id)
             val members = clusters.fullestFirst(key)
             ListRow(
                 key = key,
@@ -191,19 +191,19 @@ internal object ListRows {
                 values =
                     RowValues.of(
                         h.version,
-                        ratings[h.id],
-                        predicted[h.id],
-                        marks[h.id],
-                        !corrections[h.id].isNullOrEmpty(),
+                        ratings[id],
+                        predicted[id],
+                        marks[id],
+                        !corrections[id].isNullOrEmpty(),
                     ),
-                facets = facets.mapValues { (_, byItem) -> byItem[h.id].orEmpty() },
-                numbers = numbers[h.id].orEmpty(),
-                title = titles[h.id].orEmpty(),
-                model = model[h.id].orEmpty(),
-                stages = stages(h.id),
-                dates = itemDates[h.id].orEmpty() + workDates[h.id].orEmpty(),
-                texts = texts[h.id].orEmpty(),
-                vectors = vectors[h.id] ?: none,
+                facets = facets.mapValues { (_, byItem) -> byItem[id].orEmpty() },
+                numbers = numbers[id].orEmpty(),
+                title = titles[id].orEmpty(),
+                model = model[id].orEmpty(),
+                stages = stages(id),
+                dates = itemDates[id].orEmpty() + workDates[id].orEmpty(),
+                texts = texts[id].orEmpty(),
+                vectors = vectors[id] ?: none,
             )
         }
     }
@@ -211,14 +211,14 @@ internal object ListRows {
     /** The texts held whole ([ListTexts.textKeys]) of the items [ids] as the user corrected them ([fields]). */
     private fun textsOf(
         s: SourceStore,
-        ids: Collection<String>,
-        fields: Map<String, Map<String, String>>,
-    ): Map<String, Map<String, String>> {
+        ids: Collection<Long>,
+        fields: Map<Long, Map<String, String>>,
+    ): Map<Long, Map<String, String>> {
         val keys = ListTexts.textKeys(s.schema)
         if (keys.isEmpty()) return emptyMap()
         val site = s.items.textsOf(ids, keys)
         val wanted = keys.toSet()
-        val out = HashMap<String, Map<String, String>>()
+        val out = HashMap<Long, Map<String, String>>()
         (site.keys + fields.keys).forEach { id ->
             val own = fields[id].orEmpty()
             val corrected =
@@ -236,7 +236,7 @@ internal object ListRows {
      * The values of the items of the source that change without the item — the grade, prediction and interest —, of
      * each of them [predicted] so.
      */
-    fun valuesOf(s: SourceStore, predicted: Map<String, Predicted>): Map<String, RowValues> {
+    fun valuesOf(s: SourceStore, predicted: Map<Long, Predicted>): Map<Long, RowValues> {
         val ids = predicted.keys
         // Of many — the predictions of a training — every item's version read in one pass, not a thousand at a time
         val versions =
@@ -263,11 +263,11 @@ internal object ListRows {
      */
     fun facetsOf(
         s: SourceStore,
-        ids: Collection<String>,
-        model: Map<String, Map<String, List<String>>>,
+        ids: Collection<Long>,
+        model: Map<Long, Map<String, List<String>>>,
         /** The user's answers on the facets of the items, read by the caller already; read now when not. */
-        answers: Map<String, List<FacetCorrection>>? = null,
-    ): Map<String, Map<String, List<String>>> {
+        answers: Map<Long, List<FacetCorrection>>? = null,
+    ): Map<String, Map<Long, List<String>>> {
         val fandoms = UniverseFacet.fandomFacet(s.schema)
         // The site's own facets the tags are drafted of kept too: what a change of the dictionaries finds the works by
         val drafting = s.schema.facets.mapNotNullTo(HashSet()) { it.examplesFrom }
@@ -280,13 +280,13 @@ internal object ListRows {
         val corrections = answers ?: s.corrections.facetsOf(ids)
         // The drafts of the layer — the site's words bound to the layer's values, a site's tag to a tag — given as the
         // model's are, before any model is fitted
-        val drafts = HashMap<String, HashMap<String, MutableList<String>>>()
+        val drafts = HashMap<String, HashMap<Long, MutableList<String>>>()
         WorkDrafts.of(s, ids, site).forEach { (id, own) ->
             own.forEach { d -> drafts.getOrPut(d.facet) { HashMap() }.getOrPut(id) { ArrayList() } += d.key }
         }
         return defs.associate { def ->
             val drafted = drafts[def.key].orEmpty()
-            val byItem = HashMap<String, List<String>>()
+            val byItem = HashMap<Long, List<String>>()
             val modelled = if (def.infer) model.filterValues { def.key in it }.keys else emptySet()
             (site.keys + modelled + drafted.keys + corrections.keys).forEach { id ->
                 val given = site[id]?.get(def.key).orEmpty() + drafted[id].orEmpty() + model[id]?.get(def.key).orEmpty()
@@ -314,13 +314,13 @@ internal object ListRows {
      */
     private fun numbersOf(
         s: SourceStore,
-        ids: Collection<String>,
-        fields: Map<String, Map<String, String>>,
-    ): Map<String, Map<String, Double>> {
+        ids: Collection<Long>,
+        fields: Map<Long, Map<String, String>>,
+    ): Map<Long, Map<String, Double>> {
         val defs = s.schema.numbers.associateBy { it.key }
         val out = textSizesOf(s, ids)
         if (defs.isEmpty()) return out
-        fun put(id: String, key: String, value: Double) {
+        fun put(id: Long, key: String, value: Double) {
             val def = defs[key] ?: return
             out.getOrPut(id) { HashMap() }[FeatureNames.numberId(s.source, def)] = value
         }
@@ -332,8 +332,8 @@ internal object ListRows {
     }
 
     /** The words and the characters of the kept texts of the items [ids], as they lie. */
-    private fun textSizesOf(s: SourceStore, ids: Collection<String>): HashMap<String, HashMap<String, Double>> {
-        val out = HashMap<String, HashMap<String, Double>>()
+    private fun textSizesOf(s: SourceStore, ids: Collection<Long>): HashMap<Long, HashMap<String, Double>> {
+        val out = HashMap<Long, HashMap<String, Double>>()
         s.parts.counts.counted(ids).forEach { (id, size) ->
             out[id] = hashMapOf(PartCounts.WORDS_ID to size.first, PartCounts.CHARS_ID to size.second)
         }

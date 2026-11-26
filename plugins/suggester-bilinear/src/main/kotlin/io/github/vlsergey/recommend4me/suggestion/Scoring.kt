@@ -170,7 +170,9 @@ internal class Scoring(
         }
 
         /** Every item's fold, of its id. */
-        private val foldOf: IntArray by lazy { IntArray(task.itemCount) { Problem.foldOf(task.itemIds[it], folds) } }
+        private val foldOf: IntArray by lazy {
+            IntArray(task.itemCount) { SuggestionPairs.foldOf(task.itemIds[it], folds) }
+        }
 
         private val features: ItemFeatures by lazy { design.features(task) }
 

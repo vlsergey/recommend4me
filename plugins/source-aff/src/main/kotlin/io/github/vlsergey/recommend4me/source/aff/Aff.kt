@@ -129,7 +129,7 @@ class Aff : Source {
     /** An author of the site by their own page, "https://members.adult-fanfiction.org/profile.php?id=123". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
-    override fun itemIdOf(url: String): String? =
+    override fun siteIdOf(url: String): String? =
         ITEM_ADDRESS.find(url)?.groupValues?.let { (_, archive, number) -> idOf(archive, number) }
 
     override val pageDecor =
@@ -150,7 +150,7 @@ class Aff : Source {
             nextPage = "div.pagination > a.pagination-btn:last-child",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = AffPages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> = AffPages(context).read(page)
 
     /** The site's habit: a pairing "A/B" of names; a name alone a character. */
     override val castHabit = CastHabit { entries -> SaidCast.of(entries.map { it.name ?: it.key }, '/') }
@@ -159,23 +159,26 @@ class Aff : Source {
      * The work's chapters, every one, read as if the browser had asked for them: the first chapter's page names the
      * others. Of a work known by its card alone: one never known is not read — its card tells whether it is kept.
      */
-    override fun refresh(itemId: String, context: SourceContext): Boolean {
-        val first = itemUrl(itemId)
-        val read = if (context.items.find(itemId) == null) null else fetch(first)
+    override fun refresh(itemId: Long, context: SourceContext): Boolean {
+        val site = context.items.find(itemId)?.siteId
+        val first = site?.let(::itemUrl)
+        val read = first?.let(::fetch)
         val captured = read != null && itemId in capture(CapturedPage(first, read, Instant.now()), context)
-        if (captured) otherChapters(itemId, context)
+        if (captured) otherChapters(itemId, site!!, context)
         return captured
     }
 
-    /** The chapters of a work but its first, each read as its own page, in their order. */
-    private fun otherChapters(itemId: String, context: SourceContext) {
+    /**
+     * The chapters of the work [itemId], the site naming it [site], but its first, each read as its own page, in order.
+     */
+    private fun otherChapters(itemId: Long, site: String, context: SourceContext) {
         context.items
             .parts(itemId)
             .keys
             .filter { it != FIRST_PART }
             .sortedBy { it.toIntOrNull() }
             .forEach { part ->
-                val url = partUrl(itemId, part)
+                val url = partUrl(site, part)
                 fetch(url)?.let { capture(CapturedPage(url, it, Instant.now()), context) }
             }
     }

@@ -12,6 +12,17 @@ import io.github.vlsergey.recommend4me.source.TypeStore
  */
 internal class ShownWorks(private val type: TypeStore, library: AuthorLibrary, keys: Collection<ItemKey>) {
     private val titles = titles(type, keys)
+
+    /** The pages of the works on their sites, as the sites gave them: each source's read in one go. */
+    private val urls =
+        keys
+            .groupBy { it.source }
+            .flatMap { (source, list) ->
+                type.source(source)?.items?.heads(list.map { it.id }).orEmpty().map { (id, head) ->
+                    ItemKey(source, id) to head.url
+                }
+            }
+            .toMap()
     private val writers = HashMap<ItemKey, List<WorkAuthor>>()
 
     init {
@@ -38,8 +49,8 @@ internal class ShownWorks(private val type: TypeStore, library: AuthorLibrary, k
         AuthorWork(
             key.source,
             key.id,
-            titles[key] ?: key.id,
-            type.source(key.source)?.source?.itemUrl(key.id).orEmpty(),
+            titles[key] ?: key.id.toString(),
+            urls[key].orEmpty(),
             writers[key].orEmpty().filter { it.id != author },
         )
 

@@ -45,11 +45,11 @@ internal class TextsCompared(
         fun read(
             s: SourceStore,
             encoder: String,
-            ids: List<String>,
+            ids: List<Long>,
             index: ListIndex,
             fandomKeys: List<List<String>>? = null,
         ): TextsCompared {
-            val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
+            val at = HashMap<Long, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
             val description = ListTexts.descriptionOf(s.schema)
             val titles = UnitRows(ids.size)
             val descriptions = UnitRows(ids.size)
@@ -123,8 +123,8 @@ internal class TextsCompared(
          */
         private fun fandomsOf(
             s: SourceStore,
-            ids: List<String>,
-            at: Map<String, Int>,
+            ids: List<Long>,
+            at: Map<Long, Int>,
             index: ListIndex,
             read: List<List<String>>?,
         ): Array<String?>? {

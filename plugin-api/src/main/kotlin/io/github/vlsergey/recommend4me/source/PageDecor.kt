@@ -8,7 +8,7 @@ package io.github.vlsergey.recommend4me.source
  *
  * Everything is CSS selectors over the page as the user sees it. An element of the site is matched to what the
  * application knows by what both see: a facet value by its name (or key), a review by its id, a picture by its address,
- * a card by the link to its work ([Source.itemIdOf]).
+ * a card by the link to its work ([Source.siteIdOf]).
  */
 class PageDecor(
     /** On a work's page: the panel goes after the first element this selects; none — it floats in a corner. */

@@ -42,6 +42,9 @@ class SearchVersionsTest : TwoSitesTestBase() {
             items.listItems("books", query).body!!.items.map { it.item },
             versions.last().items.map { it.item },
         )
-        assertTrue(versions.first().items.any { it.item == "v1" }, "first ${versions.first().items.map { it.item }}")
+        assertTrue(
+            versions.first().items.any { it.item == idOf("alpha", "v1") },
+            "first ${versions.first().items.map { it.item }}",
+        )
     }
 }

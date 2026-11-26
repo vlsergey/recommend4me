@@ -96,12 +96,14 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         job.checkpoint()
     }
 
-    private class Listing(val ids: List<String>, val fresh: Int, val totalPages: Int?)
+    private class Listing(val ids: List<Long>, val fresh: Int, val totalPages: Int?)
 
     private fun readList(page: Int): Listing {
         val url = "$LIST&page=$page"
         val html = client.get(url) ?: return Listing(emptyList(), 0, null)
-        val fresh = CARD_ID.findAll(html).map { it.groupValues[1] }.distinct().count { context.items.find(it) == null }
+        val cards = CARD_ID.findAll(html).map { it.groupValues[1] }.distinct().toList()
+        val known = context.items.idsOf(cards)
+        val fresh = cards.count { it !in known }
         val ids = pages.read(CapturedPage(url, html, Instant.now()))
         val total = PAGE_LINK.findAll(html).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull()
         return Listing(ids, fresh, total?.coerceAtLeast(page))

@@ -34,13 +34,15 @@ class PartVectorsTest : SiteTestBase() {
 
     private val ids = (1..3).map { "pv$it" }
 
-    private fun text(id: String, n: Int) =
+    private fun text(id: Long, n: Int) =
         "The $n-th chapter of $id: a road walked for days.\nA harbour of ships, and of a lantern lit on a reef."
 
     @Test
     fun `every part of the works of the turns encoded, windows and paragraphs, a part once`() {
         val store = stores.source(site)!!
         ids.forEach { capture("$it|The work $it|space|A work of chapters||") }
+        // The works by the application's numbers of them
+        val ids = ids.map { idOf(site, it) }
         // Of a work more parts than a batch of the encoder takes
         ids.forEachIndexed { k, id ->
             store.parts.save(id, (1..(k * 5 + 2)).map { n -> PartData("c$n", n, "Chapter $n", text(id, n), null) })
@@ -64,23 +66,29 @@ class PartVectorsTest : SiteTestBase() {
     fun `chapters older than the stage's mark wait till it is at nought, a new encoder setting it so by itself`() {
         val store = stores.source(site)!!
         capture("pv4|The work pv4|space|A work of chapters||")
-        store.parts.save("pv4", listOf(PartData("c1", 1, "Chapter 1", text("pv4", 1), null)))
+        store.parts.save(idOf(site, "pv4"), listOf(PartData("c1", 1, "Chapter 1", text(idOf(site, "pv4"), 1), null)))
         refresh(store)
         val encoder = plugins.textEncoder()!!
         turns()
-        assertEquals(setOf("pv4"), store.parts.windows.windowCountsOf(listOf("pv4"), encoder.windowsId).keys)
+        assertEquals(
+            setOf(idOf(site, "pv4")),
+            store.parts.windows.windowCountsOf(listOf(idOf(site, "pv4")), encoder.windowsId).keys,
+        )
 
         // A chapter more, of a date the stage's mark is past: no work's chapters are read to find it
-        store.parts.save("pv4", (1..2).map { n -> PartData("c$n", n, "Chapter $n", text("pv4", n), null) })
+        store.parts.save(
+            idOf(site, "pv4"),
+            (1..2).map { n -> PartData("c$n", n, "Chapter $n", text(idOf(site, "pv4"), n), null) },
+        )
         refresh(store)
         markedPast(store.id)
         turns()
-        assertEquals(1, waiting("pv4"), "the chapter of a date the mark is past waits")
+        assertEquals(1, waiting(idOf(site, "pv4")), "the chapter of a date the mark is past waits")
 
         // The stage to be done of every work again: the chapter found
         sweeps.reset(WorkStage.WINDOWS, "books", stores.type("books")!!.sources.map { it.id })
         turns()
-        assertEquals(0, waiting("pv4"))
+        assertEquals(0, waiting(idOf(site, "pv4")))
     }
 
     /** Every turn of the works not marked or rated, a portion of two works each, till none is left. */
@@ -90,7 +98,7 @@ class PartVectorsTest : SiteTestBase() {
     }
 
     /** The parts of the work [id] whose windows or paragraphs wait to be encoded. */
-    private fun waiting(id: String): Int {
+    private fun waiting(id: Long): Int {
         val encoder = plugins.textEncoder()!!
         return stores
             .source(site)!!

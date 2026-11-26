@@ -12,7 +12,7 @@ import org.jooq.impl.DSL
 /** THE VALUES THE SITE GIVES ITS ITEMS of every facet, in their order, as the source database holds them. */
 interface ItemFacets {
     /** The values of the facet of the item written in place of those it had, each named in the dictionary. */
-    fun setFacet(itemId: String, facet: String, values: List<FacetValue>)
+    fun setFacet(itemId: Long, facet: String, values: List<FacetValue>)
 
     /**
      * Removes the values, the names and the descriptions of every facet not among [facets]; how many values were
@@ -33,7 +33,7 @@ interface ItemFacets {
     fun valueUsesOf(facet: String, keys: Collection<String>): Map<String, Int>
 
     /** The facets of one item: facet to keys in order ([facetsOf] of it alone). */
-    fun facets(itemId: String): Map<String, List<String>> = facetsOf(listOf(itemId))[itemId].orEmpty()
+    fun facets(itemId: Long): Map<String, List<String>> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
     /**
      * The facets of the items [ids]: item to facet to keys in order. By their ids, a batch of them ([ITEM_BATCH]) a
@@ -41,16 +41,16 @@ interface ItemFacets {
      * from, each list put in order after: by thousands of ids the values of 31 000 works of 75 000 took 5 s — but a
      * pass over the values of a million works for every portion of ten thousand is a hundred passes (2026-11-17).
      */
-    fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>>
+    fun facetsOf(ids: Collection<Long>): Map<Long, Map<String, List<String>>>
 
     /** The items the site gives each of the [keys] of the facet: key to items. */
-    fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>>
+    fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<Long>>
 
     /** Every item's keys of one facet, item by item, in no order of the site's. */
-    fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit)
+    fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit)
 
     /** Every facet of every item, streamed: (item, facet, key). */
-    fun forEachFacetValue(action: (itemId: String, facet: String, key: String) -> Unit)
+    fun forEachFacetValue(action: (itemId: Long, facet: String, key: String) -> Unit)
 }
 
 /**
@@ -59,11 +59,11 @@ interface ItemFacets {
  */
 internal class ItemFacetRepository(
     private val db: DSLContext,
-    private val changed: (Collection<String>) -> Unit,
+    private val changed: (Collection<Long>) -> Unit,
     private val dictionary: FacetDictionary,
 ) : ItemFacets {
 
-    override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) {
+    override fun setFacet(itemId: Long, facet: String, values: List<FacetValue>) {
         val distinct = values.distinctBy { it.key }
         // The names first: whoever hears of the change reads the values by them (a site's fandom bound by its name)
         val named = distinct.filter { it.name != null }.associate { it.key to it.name!! }
@@ -134,18 +134,18 @@ internal class ItemFacetRepository(
             }
             .toMap()
 
-    override fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>> {
+    override fun facetsOf(ids: Collection<Long>): Map<Long, Map<String, List<String>>> {
         val asked = ids.toHashSet()
         return if (asked.size > BY_IDS_UP_TO) facetsStreamed(asked)
         else
-            HashMap<String, Map<String, List<String>>>().apply {
+            HashMap<Long, Map<String, List<String>>>().apply {
                 asked.chunked(ITEM_BATCH).forEach { putAll(facetsByIds(it.toSet())) }
             }
     }
 
     /** The facets of the items [asked], by their ids in one query: item to facet to keys in order. */
-    private fun facetsByIds(asked: Set<String>): Map<String, Map<String, List<String>>> {
-        val out = HashMap<String, MutableMap<String, MutableList<String>>>()
+    private fun facetsByIds(asked: Set<Long>): Map<Long, Map<String, List<String>>> {
+        val out = HashMap<Long, MutableMap<String, MutableList<String>>>()
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
             .from(ITEM_FACET)
             .where(ITEM_FACET.ITEM_ID.`in`(asked))
@@ -160,8 +160,8 @@ internal class ItemFacetRepository(
      * The facets of the items [asked], every value of every item streamed once and picked from, each list put in order
      * after: item to facet to keys in order.
      */
-    private fun facetsStreamed(asked: Set<String>): Map<String, Map<String, List<String>>> {
-        val placed = HashMap<String, MutableMap<String, MutableList<Pair<Int, String>>>>()
+    private fun facetsStreamed(asked: Set<Long>): Map<Long, Map<String, List<String>>> {
+        val placed = HashMap<Long, MutableMap<String, MutableList<Pair<Int, String>>>>()
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY, ITEM_FACET.POSITION)
             .from(ITEM_FACET)
             .fetchSize(STREAMED_ROWS)
@@ -174,7 +174,7 @@ internal class ItemFacetRepository(
                             it.value4()!! to it.value3()!!
                 }
             }
-        val out = HashMap<String, MutableMap<String, MutableList<String>>>()
+        val out = HashMap<Long, MutableMap<String, MutableList<String>>>()
         placed.forEach { (id, facets) ->
             out[id] =
                 facets.mapValuesTo(HashMap()) { (_, keys) ->
@@ -184,7 +184,7 @@ internal class ItemFacetRepository(
         return out
     }
 
-    override fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>> {
+    override fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<Long>> {
         if (keys.isEmpty()) return emptyMap()
         return keys
             .distinct()
@@ -198,19 +198,21 @@ internal class ItemFacetRepository(
             .groupBy({ it.first }, { it.second })
     }
 
-    override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) {
+    override fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit) {
         // One pass of the facet's index, no order asked of the database: grouped by item here (user, 2026-11-18)
-        val keys = HashMap<String, MutableList<String>>()
+        val keys = HashMap<Long, MutableList<String>>()
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.VALUE_KEY)
             .from(ITEM_FACET)
             .where(ITEM_FACET.FACET.eq(facet))
             .fetchSize(STREAMED_ROWS)
             .fetchLazy()
-            .use { cursor -> cursor.forEach { keys.getOrPut(it.value1()!!) { ArrayList(1) } += it.value2()!! } }
+            .use { cursor ->
+                cursor.forEach { keys.getOrPut(it.value1()!!) { ArrayList(1) } += it.value2()!! }
+            }
         keys.forEach { (id, own) -> action(id, own) }
     }
 
-    override fun forEachFacetValue(action: (itemId: String, facet: String, key: String) -> Unit) {
+    override fun forEachFacetValue(action: (itemId: Long, facet: String, key: String) -> Unit) {
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
             .from(ITEM_FACET)
             .fetchSize(STREAMED_ROWS)

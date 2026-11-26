@@ -26,7 +26,7 @@ interface SourceContext {
      * Keeps a page — a captured one, or one the source downloaded — so it can be read again when the parser changes
      * ([Source.parserVersion]); a page kept again under the same address replaces it.
      */
-    fun keepPage(url: String, html: String, itemId: String?)
+    fun keepPage(url: String, html: String, itemId: Long?)
 
     /**
      * The places on the web an author's own page on the site lists as theirs — "Места в сети" of fanfics.me: the
@@ -36,11 +36,14 @@ interface SourceContext {
      */
     fun authorPlaces(author: String, urls: List<String>)
 
-    /** The items the user has graded, any version: a scrape reads their pages first. */
-    fun gradedItems(): Set<String>
+    /** The items the user has graded, any version, by their numbers: a scrape reads their pages first. */
+    fun gradedItems(): Set<Long>
 
-    /** The items in the order the user wants them worked on: the graded, then by prediction, then the newest. */
-    fun itemsInOrder(): List<String>
+    /**
+     * The items by their numbers in the order the user wants them worked on: the graded, then by prediction, then the
+     * newest.
+     */
+    fun itemsInOrder(): LongArray
 
     /** A value the source's jobs keep across restarts ([Job.state]), read outside of a job. */
     fun jobState(key: String): String?
@@ -59,11 +62,11 @@ interface SourceSettings {
  * user's verdict on the work ([SignalDef]).
  */
 interface SiteSignals {
-    /** Sets the [signal] of the item to [value]; null takes it away. */
-    fun set(itemId: String, signal: String, value: String?)
+    /** Sets the [signal] of the item [itemId] to [value]; null takes it away. */
+    fun setSignal(itemId: Long, signal: String, value: String?)
 
-    /** The items whose [signal] is set now. */
-    fun withSignal(signal: String): Map<String, String>
+    /** The items whose [signal] is set now, by their numbers. */
+    fun withSignal(signal: String): Map<Long, String>
 }
 
 /**
@@ -74,21 +77,26 @@ interface SiteSignals {
  * (an error page answered with 200, a changed markup), says nothing: nothing of it is written, as nothing is known to
  * be gone.
  *
+ * AN ITEM IS NAMED BY ITS NUMBER — the primary key of the table `item` of the source's database, `internal_id`, given
+ * by [upsert] —, never by the site's id ([ItemHead.siteId], [StoredItem.siteId], the column `site_id`): a site may
+ * change its ids, the number stays. The site's id is what the source reads of a page and makes addresses of
+ * ([Source.itemUrl]); [idOf] and [idsOf] tell the number of it, [siteIdsOf] the other way.
+ *
  * Its items' facets are its [ItemFacetStore], their reviews its [ItemReviewStore], the parts of their text its
  * [ItemPartStore], the series they are parts of its [ItemSeriesStore].
  */
-interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeriesStore {
-    /** Creates or updates an item; true when it is new or its version changed. */
-    fun upsert(item: ItemHead, now: Instant): Boolean
+interface ItemStore : ItemNumbers, ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeriesStore {
+    /** Creates or updates an item: its number, and whether it is new or its version changed. */
+    fun upsert(item: ItemHead, now: Instant): Upserted
 
-    fun find(itemId: String): StoredItem?
+    fun find(itemId: Long): StoredItem?
 
     /**
      * The item kept no more, with everything of it — its texts, parts and reviews, the user's grades and answers, what
      * the models made of it — as when the user removes a work: what the source will not keep. Seen again, it is a work
      * never seen. Nothing of an item not kept.
      */
-    fun remove(itemId: String)
+    fun remove(itemId: Long)
 
     fun count(): Int
 
@@ -96,18 +104,33 @@ interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeries
     fun latestUpdate(): Instant?
 
     /** Sets numbers of the item; a null takes one away. Numbers not named stay. */
-    fun setNumbers(itemId: String, numbers: Map<String, Double?>)
+    fun setNumbers(itemId: Long, numbers: Map<String, Double?>)
 
     /** Sets texts of the item; a null or blank takes one away. Texts not named stay. */
-    fun setTexts(itemId: String, texts: Map<String, String?>)
+    fun setTexts(itemId: Long, texts: Map<String, String?>)
 
-    fun texts(itemId: String): Map<String, String>
+    fun texts(itemId: Long): Map<String, String>
 
     /**
      * The item's pictures as the site lists them now, position 0 the cover. A picture whose address changed is a new
      * picture: its files and vector are forgotten.
      */
-    fun setPictures(itemId: String, urls: List<String?>)
+    fun setPictures(itemId: Long, urls: List<String?>)
+}
+
+/**
+ * THE NUMBERS OF A SOURCE'S ITEMS BY THE SITE'S IDS OF THEM, and back: a page names a work by the site's id, everything
+ * else by its number ([ItemStore.upsert]). A part of [ItemStore].
+ */
+interface ItemNumbers {
+    /** The number of the item the site names [siteId]; null of one not kept. */
+    fun idOf(siteId: String): Long?
+
+    /** The numbers of the items the site names [siteIds], by the site's id; one not kept left out. */
+    fun idsOf(siteIds: Collection<String>): Map<String, Long>
+
+    /** The sites' ids of the items [ids], by the number; one not kept left out. */
+    fun siteIdsOf(ids: Collection<Long>): Map<Long, String>
 }
 
 /**
@@ -116,7 +139,7 @@ interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeries
  */
 interface ItemFacetStore {
     /** Replaces the item's values of one facet. */
-    fun setFacet(itemId: String, facet: String, values: List<FacetValue>)
+    fun setFacet(itemId: Long, facet: String, values: List<FacetValue>)
 
     /** The names of facet values the items name by key; a name given before is replaced. */
     fun nameFacetValues(facet: String, names: Map<String, String>)
@@ -149,21 +172,21 @@ interface ItemFacetStore {
     fun setFacetValueParents(facet: String, parents: Map<String, Collection<String>>, whole: Boolean = true)
 
     /** The keys of the item's values of every facet. */
-    fun facets(itemId: String): Map<String, List<String>>
+    fun facets(itemId: Long): Map<String, List<String>>
 
     /** Every item's keys of one facet, streamed. */
-    fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit)
+    fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit)
 }
 
 /** THE REVIEWS OF A SOURCE'S ITEMS, as the site shows them ([ReviewData]). A part of [ItemStore]. */
 interface ItemReviewStore {
     /** Stores reviews of the item, a known one updated; none is deleted. */
-    fun saveReviews(itemId: String, reviews: List<ReviewData>)
+    fun saveReviews(itemId: Long, reviews: List<ReviewData>)
 
-    fun reviewIds(itemId: String): Set<String>
+    fun reviewIds(itemId: Long): Set<String>
 
     /** The texts of the item's stored reviews, by id: a review read whole is not replaced by its excerpt. */
-    fun reviewContents(itemId: String): Map<String, String>
+    fun reviewContents(itemId: Long): Map<String, String>
 }
 
 /** THE PARTS OF THE TEXT OF A SOURCE'S ITEMS — its chapters ([PartData]). A part of [ItemStore]. */
@@ -174,10 +197,10 @@ interface ItemPartStore {
      * the site, its text kept but no longer the work's, and a part named again is the work's again (owner, 2026-11-20:
      * "the chapters of the work became fewer, but the application does not follow it").
      */
-    fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean = false)
+    fun saveParts(itemId: Long, parts: List<PartData>, whole: Boolean = false)
 
     /** The parts of the item: id to whether its text is kept. */
-    fun parts(itemId: String): Map<String, Boolean>
+    fun parts(itemId: Long): Map<String, Boolean>
 }
 
 /**
@@ -194,7 +217,7 @@ interface ItemSeriesStore {
     fun keepSeries(series: SeriesData)
 
     /** The item's [position] in the series [key] — "#3", "Part 3 of" — as the work's own page tells it. */
-    fun placeInSeries(itemId: String, key: String, position: Int)
+    fun placeInSeries(itemId: Long, key: String, position: Int)
 }
 
 /**
@@ -222,11 +245,11 @@ data class SeriesData(
  * A work of a series as its page lists it: the item, and its number in the series when the page tells it ("1.", "Part 3
  * of"); of none, its place in a list [SeriesData.whole] is its order there.
  */
-data class SeriesWork(val itemId: String, val position: Int? = null)
+data class SeriesWork(val itemId: Long, val position: Int? = null)
 
-/** What every item has. */
+/** What every item has: the site's id of it [siteId] among them. */
 data class ItemHead(
-    val id: String,
+    val siteId: String,
     val url: String,
     val title: String,
     /** The release the item is at; the same for an item without versions. */
@@ -235,8 +258,13 @@ data class ItemHead(
     val updatedAt: Instant? = null,
 )
 
+/** What [ItemStore.upsert] did: the item's [id] — its number — and whether it is new or its version [changed]. */
+data class Upserted(val id: Long, val changed: Boolean)
+
+/** An item kept: its number [id] and the site's id of it [siteId]. */
 data class StoredItem(
-    val id: String,
+    val id: Long,
+    val siteId: String,
     val url: String,
     val title: String,
     val version: String,

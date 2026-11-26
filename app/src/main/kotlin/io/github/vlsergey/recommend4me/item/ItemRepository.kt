@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_VERSION
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.StoredItem
+import io.github.vlsergey.recommend4me.source.Upserted
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import java.time.Instant
 import org.jooq.DSLContext
@@ -38,7 +39,7 @@ internal const val NAME_LENGTH = 1000
 class ItemRepository
 private constructor(
     private val db: DSLContext,
-    private val changed: (Collection<String>) -> Unit,
+    private val changed: (Collection<Long>) -> Unit,
     dictionary: FacetDictionary,
     texts: Collection<String>,
 ) :
@@ -49,13 +50,14 @@ private constructor(
     ItemNumbers by ItemNumberRepository(db),
     ItemKeyList by ItemKeyRepository(db),
     ItemTexts by ItemTextRepository(db, changed, texts),
+    ItemSiteIds by ItemSiteIdRepository(db),
     ItemMeasures by ItemMeasureRepository(db, texts) {
 
     /** Of the source whose works have the texts of the keys [texts] ([SiteTexts.keysOf]). */
     constructor(
         db: DSLContext,
         texts: Collection<String>,
-        changed: (Collection<String>) -> Unit,
+        changed: (Collection<Long>) -> Unit,
     ) : this(
         db,
         { ids ->
@@ -67,32 +69,37 @@ private constructor(
     )
 
     /**
-     * Creates or updates an item; true when it is new or its version changed. The head and its version in one
-     * transaction: a stop between leaves no head without its versions.
+     * Creates or updates the item the site names [item] by its id: its number — a new item is given one — and whether
+     * it is new or its version changed. The head and its version in one transaction: a stop between leaves no head
+     * without its versions.
      */
-    fun upsert(item: ItemHead, now: Instant): Boolean {
-        val (changedVersion, retitled) =
+    fun upsert(item: ItemHead, now: Instant): Upserted {
+        val (changedVersion, retitled, id) =
             db.transactionResult { c ->
                 val tx = DSL.using(c)
                 val known =
-                    tx.select(ITEM.VERSION, ITEM.TITLE, ITEM.URL, ITEM.UPDATED_AT)
+                    tx.select(ITEM.VERSION, ITEM.TITLE, ITEM.URL, ITEM.UPDATED_AT, ITEM.INTERNAL_ID)
                         .from(ITEM)
-                        .where(ITEM.SITE_ID.eq(item.id))
+                        .where(ITEM.SITE_ID.eq(item.siteId))
                         .fetchOne()
                 val updatedAt = item.updatedAt ?: known?.value4() ?: now
-                if (known == null) {
-                    tx.insertInto(ITEM)
-                        .set(ITEM.SITE_ID, item.id)
-                        .set(ITEM.URL, item.url)
-                        .set(ITEM.TITLE, item.title)
-                        .set(ITEM.VERSION, item.version)
-                        .set(ITEM.UPDATED_AT, updatedAt)
-                        .set(ITEM.FIRST_SEEN_AT, now)
-                        .set(ITEM.CHANGED_AT, now)
-                        .set(ITEM.DATA_AT, now)
-                        .execute()
-                } else if (
-                    headChanged(known.value1(), known.value2(), known.value3(), known.value4(), item, updatedAt)
+                val number =
+                    known?.value5()
+                        ?: tx.insertInto(ITEM)
+                            .set(ITEM.SITE_ID, item.siteId)
+                            .set(ITEM.URL, item.url)
+                            .set(ITEM.TITLE, item.title)
+                            .set(ITEM.VERSION, item.version)
+                            .set(ITEM.UPDATED_AT, updatedAt)
+                            .set(ITEM.FIRST_SEEN_AT, now)
+                            .set(ITEM.CHANGED_AT, now)
+                            .set(ITEM.DATA_AT, now)
+                            .returningResult(ITEM.INTERNAL_ID)
+                            .fetchOne()!!
+                            .value1()!!
+                if (
+                    known != null &&
+                        headChanged(known.value1(), known.value2(), known.value3(), known.value4(), item, updatedAt)
                 ) {
                     tx.update(ITEM)
                         .set(ITEM.URL, item.url)
@@ -101,57 +108,53 @@ private constructor(
                         .set(ITEM.UPDATED_AT, updatedAt)
                         .set(ITEM.CHANGED_AT, now)
                         .set(ITEM.DATA_AT, now)
-                        .where(ITEM.SITE_ID.eq(item.id))
+                        .where(ITEM.INTERNAL_ID.eq(number))
                         .execute()
                 }
                 val newVersion = known?.value1() != item.version
                 if (newVersion) {
                     tx.insertInto(ITEM_VERSION)
-                        .set(ITEM_VERSION.ITEM_ID, item.id)
+                        .set(ITEM_VERSION.ITEM_ID, number)
                         .set(ITEM_VERSION.VERSION, item.version)
                         .set(ITEM_VERSION.UPDATED_AT, updatedAt)
                         .set(ITEM_VERSION.SEEN_AT, now)
                         .onDuplicateKeyIgnore()
                         .execute()
                 }
-                newVersion to (known == null || known.value2() != item.title)
+                Triple(newVersion, known == null || known.value2() != item.title, number)
             }
         // Told once it is kept: a reader of the change finds it
-        if (retitled) changed(listOf(item.id))
-        return changedVersion
+        if (retitled) changed(listOf(id))
+        return Upserted(id, changedVersion)
     }
 
-    fun find(itemId: String): StoredItem? = db.select(HEAD).from(ITEM).where(ITEM.SITE_ID.eq(itemId)).fetchOne(::head)
+    /** The item numbered [id] by the application, as the site says it. */
+    fun find(id: Long): StoredItem? = db.select(HEAD).from(ITEM).where(ITEM.INTERNAL_ID.eq(id)).fetchOne(::head)
 
-    /** The items [ids], in one query per thousand. */
-    fun heads(ids: Collection<String>): Map<String, StoredItem> {
-        val out = HashMap<String, StoredItem>()
+    /** The items [ids], by the application's numbers of them, in one query per thousand. */
+    fun heads(ids: Collection<Long>): Map<Long, StoredItem> {
+        val out = HashMap<Long, StoredItem>()
         ids.distinct().chunked(ITEM_BATCH).forEach { chunk ->
-            db.select(HEAD).from(ITEM).where(ITEM.SITE_ID.`in`(chunk)).fetch { out[it.get(ITEM.SITE_ID)!!] = head(it) }
+            db.select(HEAD).from(ITEM).where(ITEM.INTERNAL_ID.`in`(chunk)).fetch {
+                out[it.get(ITEM.INTERNAL_ID)!!] = head(it)
+            }
         }
         return out
     }
 
-    /** Every item, streamed. */
-    fun forEachHead(action: (StoredItem) -> Unit) {
-        db.select(HEAD).from(ITEM).fetchSize(HEADS_STREAMED).fetchLazy().use { cursor ->
-            cursor.forEach { action(head(it)) }
-        }
-    }
-
     fun count(): Int = db.fetchCount(ITEM)
 
-    fun exists(itemId: String): Boolean = db.fetchExists(ITEM, ITEM.SITE_ID.eq(itemId))
+    fun exists(id: Long): Boolean = db.fetchExists(ITEM, ITEM.INTERNAL_ID.eq(id))
 
     /**
      * The item removed from the library: everything the source database holds of it — its versions, values, texts,
      * pictures, reviews, parts and every vector of them go with it — and the pages kept of it alone. Nothing tells it
      * was there: seen on the site again, it is a work never seen.
      */
-    fun remove(itemId: String) = db.transaction { c ->
+    fun remove(itemId: Long) = db.transaction { c ->
         val tx = c.dsl()
         tx.deleteFrom(CAPTURED_PAGE).where(CAPTURED_PAGE.ITEM_ID.eq(itemId)).execute()
-        tx.deleteFrom(ITEM).where(ITEM.SITE_ID.eq(itemId)).execute()
+        tx.deleteFrom(ITEM).where(ITEM.INTERNAL_ID.eq(itemId)).execute()
     }
 
     fun latestUpdate(): Instant? = db.select(DSL.max(ITEM.UPDATED_AT)).from(ITEM).fetchOne()?.value1()
@@ -166,8 +169,8 @@ private constructor(
             .fetch(::head)
 
     /** The title of every item as the site gives it: item to title. */
-    fun titles(): Map<String, String> =
-        db.select(ITEM.SITE_ID, ITEM.TITLE)
+    fun titles(): Map<Long, String> =
+        db.select(ITEM.INTERNAL_ID, ITEM.TITLE)
             .from(ITEM)
             .fetchSize(STREAMED_ROWS)
             .fetchMap({ it.value1()!! }, { it.value2()!! })
@@ -176,11 +179,22 @@ private constructor(
         /** The heads streamed from the database at a time: memory, not meaning. */
         private const val HEADS_STREAMED = 2000
 
-        private val HEAD = listOf(ITEM.SITE_ID, ITEM.URL, ITEM.TITLE, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
+        private val HEAD =
+            listOf(
+                ITEM.INTERNAL_ID,
+                ITEM.SITE_ID,
+                ITEM.URL,
+                ITEM.TITLE,
+                ITEM.VERSION,
+                ITEM.UPDATED_AT,
+                ITEM.FIRST_SEEN_AT,
+            )
 
+        /** The head of the item of the row [r] as the site says it. */
         private fun head(r: Record) =
             StoredItem(
-                id = r.get(ITEM.SITE_ID)!!,
+                id = r.get(ITEM.INTERNAL_ID)!!,
+                siteId = r.get(ITEM.SITE_ID)!!,
                 url = r.get(ITEM.URL)!!,
                 title = r.get(ITEM.TITLE)!!,
                 version = r.get(ITEM.VERSION)!!,

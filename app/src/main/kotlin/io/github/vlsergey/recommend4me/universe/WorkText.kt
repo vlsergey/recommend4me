@@ -12,7 +12,7 @@ class WorkText(val place: TextPlace, val text: String)
 typealias FacetNames = (facet: String, keys: Collection<String>) -> Map<String, String>
 
 /** Every text of a work its characters are counted in, as [workPassages] gives them. */
-fun SourceStore.workTexts(itemId: String, names: FacetNames = items::facetNames): Sequence<String> =
+fun SourceStore.workTexts(itemId: Long, names: FacetNames = items::facetNames): Sequence<String> =
     workPassages(itemId, names).map { it.text }
 
 /**
@@ -21,7 +21,7 @@ fun SourceStore.workTexts(itemId: String, names: FacetNames = items::facetNames)
  * поттер" names Harry), a line each, and every chapter read. [names]: where the values' names are read — the store, or
  * a reading of every work's that has them all ([everyName]).
  */
-fun SourceStore.workPassages(itemId: String, names: FacetNames = items::facetNames): Sequence<WorkText> {
+fun SourceStore.workPassages(itemId: Long, names: FacetNames = items::facetNames): Sequence<WorkText> {
     val chapters = ArrayList<WorkText>()
     parts.forEachContent(itemId) { title, content ->
         val place =

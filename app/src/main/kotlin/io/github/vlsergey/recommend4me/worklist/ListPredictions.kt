@@ -19,9 +19,9 @@ import org.jooq.Record3
 object ListPredictions {
 
     /** Of the items [ids] of the [source], their predictions as the [db] holds them; an item of none left out. */
-    fun of(db: DSLContext, source: String, ids: Collection<String>): Map<String, Predicted> {
+    fun of(db: DSLContext, source: String, ids: Collection<Long>): Map<Long, Predicted> {
         if (ids.isEmpty()) return emptyMap()
-        val out = HashMap<String, Predicted>()
+        val out = HashMap<Long, Predicted>()
         ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             db.select(ITEM.ITEM_KEY, ITEM.PREDICTION, ITEM.MODEL_INTEREST)
                 .from(ITEM)
@@ -32,8 +32,8 @@ object ListPredictions {
     }
 
     /** Of every item of the [source] with a prediction, its prediction as the [db] holds it, in one pass. */
-    fun ofEvery(db: DSLContext, source: String): Map<String, Predicted> {
-        val out = HashMap<String, Predicted>()
+    fun ofEvery(db: DSLContext, source: String): Map<Long, Predicted> {
+        val out = HashMap<Long, Predicted>()
         db.select(ITEM.ITEM_KEY, ITEM.PREDICTION, ITEM.MODEL_INTEREST)
             .from(ITEM)
             .where(ITEM.SOURCE.eq(source), ITEM.PREDICTION.isNotNull)
@@ -87,14 +87,14 @@ object ListPredictions {
     }
 
     /** Of the items [ids] of the [source], those graded as the [db] holds them. */
-    private fun gradedOf(db: DSLContext, source: String, ids: Collection<String>): Set<String> =
+    private fun gradedOf(db: DSLContext, source: String, ids: Collection<Long>): Set<Long> =
         ListAmong.of(db, ids.map { ItemKey(source, it).toString() }) {
             db.select(ITEM.ITEM_KEY).from(ITEM).where(ListIndex.AMONG, ITEM.GRADED.isTrue).fetchSet {
                 ItemKey.parse(it.value1()!!).id
             }
         }
 
-    private fun put(out: MutableMap<String, Predicted>, r: Record3<String?, Double?, Double?>) {
+    private fun put(out: MutableMap<Long, Predicted>, r: Record3<String?, Double?, Double?>) {
         out[ItemKey.parse(r.value1()!!).id] = Predicted(r.value2()!!, r.value3())
     }
 

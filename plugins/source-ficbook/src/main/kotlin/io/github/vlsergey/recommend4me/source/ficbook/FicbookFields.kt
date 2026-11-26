@@ -28,7 +28,7 @@ import org.jsoup.nodes.Element
 internal class FicbookFields(private val items: ItemStore) {
 
     /** The direction, the rating and the status a card or a header shows as labels. */
-    fun badges(id: String, badges: Element?) {
+    fun badges(id: Long, badges: Element?) {
         badges ?: return
         badges.selectFirst(".direction")?.let { d ->
             // The site's classes are the standard keys; "unknown" — not told — is no direction
@@ -62,7 +62,7 @@ internal class FicbookFields(private val items: ItemStore) {
     /**
      * What the labelled lines of a card or a header say: the author, the fandoms, the series, the pairings, the size.
      */
-    fun described(id: String, info: Map<String, Element?>) {
+    fun described(id: Long, info: Map<String, Element?>) {
         info["Автор"]?.let { dd ->
             val authors =
                 dd.select("a[href^=/authors/]").mapNotNull { a ->
@@ -123,7 +123,7 @@ internal class FicbookFields(private val items: ItemStore) {
      * 2026-11-18: "a tag is a numeric id to the site, its name and description bound to it"); a link of no id gives it
      * by its name alone ([NAME_KEY]).
      */
-    fun tags(id: String, links: List<Element>) =
+    fun tags(id: Long, links: List<Element>) =
         items.setFacet(
             id,
             TAG,

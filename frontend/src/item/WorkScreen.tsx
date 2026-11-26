@@ -302,7 +302,7 @@ function Loading() {
 }
 
 /** The sites of the work, the one that says the most first: a press chooses what the left page reads, the arrow opens its page. */
-function SiteMarks({ sites, shown, onShow }: { sites: { source: string; item: string; url: string; title: string }[]; shown: ItemRef; onShow: (site: ItemRef) => void }) {
+function SiteMarks({ sites, shown, onShow }: { sites: { source: string; item: number; url: string; title: string }[]; shown: ItemRef; onShow: (site: ItemRef) => void }) {
   const { t } = useTranslation("item");
   return (
     <div className="flex flex-wrap items-center gap-1">

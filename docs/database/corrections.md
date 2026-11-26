@@ -11,7 +11,7 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 ```mermaid
 erDiagram
     tag_text_answer {
-        VARCHAR item_id PK
+        BIGINT item_id PK
         BIGINT tag PK
         VARCHAR part_id PK
         INTEGER paragraph_no PK

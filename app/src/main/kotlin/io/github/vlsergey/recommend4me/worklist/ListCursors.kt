@@ -6,7 +6,7 @@ import java.time.Instant
  * Where the writing of the list stands among the changes of a source's items, in their order — by the date of their
  * change, then by their key: after the item [id] changed [at] (none: among the items of no date of change).
  */
-data class ItemCursor(val at: Instant?, val id: String)
+data class ItemCursor(val at: Instant?, val id: Long)
 
 /** Where the writing of the list stands among the changes of the normalized works: after the work [id] changed [at]. */
 data class WorkCursor(val at: Instant, val id: Long)
@@ -25,7 +25,7 @@ internal class ListCursors(private val index: ListIndex) {
     fun of(source: String): ItemCursor? =
         index.stages.text(itemKey(source))?.let { kept ->
             val (at, id) = kept.split(SEPARATOR, limit = 2)
-            ItemCursor(at.takeIf { it.isNotEmpty() }?.let(Instant::parse), id)
+            ItemCursor(at.takeIf { it.isNotEmpty() }?.let(Instant::parse), id.toLong())
         }
 
     /** The writing of the source's items stands at [cursor] — none: from the first —, kept with the next commit. */

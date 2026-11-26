@@ -21,7 +21,7 @@ class GradesController(
     private val workEvents: WorkEvents,
 ) : GradesApi {
 
-    override fun rateItem(source: String, item: String, ratingRequest: RatingRequest): ResponseEntity<ItemSummary> =
+    override fun rateItem(source: String, item: Long, ratingRequest: RatingRequest): ResponseEntity<ItemSummary> =
         stores.answerOn(source, item) { store, head ->
             if (ratingRequest.grade !in Grades.RANGE) {
                 throw Refusal.BAD_GRADE.refuse(
@@ -36,7 +36,7 @@ class GradesController(
             card(ItemKey(source, item))
         }
 
-    override fun unrateItem(source: String, item: String, version: String?): ResponseEntity<ItemSummary> =
+    override fun unrateItem(source: String, item: Long, version: String?): ResponseEntity<ItemSummary> =
         stores.answerOn(source, item) { store, head ->
             store.ratings.unrate(item, version ?: head.version)
             workEvents.gradesChanged(ItemKey(source, item))
@@ -45,7 +45,7 @@ class GradesController(
 
     override fun markInterest(
         source: String,
-        item: String,
+        item: Long,
         interestRequest: InterestRequest,
     ): ResponseEntity<ItemSummary> =
         stores.answerOn(source, item) { store, _ ->
@@ -54,7 +54,7 @@ class GradesController(
             card(ItemKey(source, item))
         }
 
-    override fun unmarkInterest(source: String, item: String): ResponseEntity<ItemSummary> =
+    override fun unmarkInterest(source: String, item: Long): ResponseEntity<ItemSummary> =
         stores.answerOn(source, item) { store, _ ->
             store.interest.forget(item)
             workEvents.interestChanged(ItemKey(source, item))

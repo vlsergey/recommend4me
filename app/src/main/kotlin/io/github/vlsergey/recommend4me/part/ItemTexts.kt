@@ -20,13 +20,13 @@ class ItemTexts(private val db: DSLContext, private val store: PartStore) {
      * writes of the meantime freed ("Chunk 572645 not found", 2026-11-25: every pass of the manners failed so since
      * 04:14, planned again and again, the works' stages waiting behind it).
      */
-    fun forEach(portion: Int = PORTION, action: (itemId: String, texts: List<String>) -> Unit) {
-        var item: String? = null
+    fun forEach(portion: Int = PORTION, action: (itemId: Long, texts: List<String>) -> Unit) {
+        var item: Long? = null
         val parts = ArrayList<Pair<Int, String>>()
         fun flush() {
             item?.let { id ->
                 val ordered = parts.sortedBy { it.first }.map { it.second }
-                val texts = store.texts(id, ordered)
+                val texts = store.texts(id.toString(), ordered)
                 ordered.mapNotNull { texts[it] }.takeIf { it.isNotEmpty() }?.let { action(id, it) }
             }
             parts.clear()
@@ -47,7 +47,7 @@ class ItemTexts(private val db: DSLContext, private val store: PartStore) {
     }
 
     /** A part with a text as the database lists it. */
-    private class Listed(val itemId: String, val position: Int, val partId: String)
+    private class Listed(val itemId: Long, val position: Int, val partId: String)
 
     /** The [portion] parts with a text after the part [last] — of none, the first — in the order of the key. */
     private fun after(last: Listed?, portion: Int): List<Listed> =

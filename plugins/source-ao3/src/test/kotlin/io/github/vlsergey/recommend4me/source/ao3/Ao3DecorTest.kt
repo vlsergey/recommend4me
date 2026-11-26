@@ -20,14 +20,14 @@ class Ao3DecorTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals("93948516", source.itemIdOf("https://archiveofourown.org/works/93948516"))
+        assertEquals("93948516", source.siteIdOf("https://archiveofourown.org/works/93948516"))
         assertEquals(
             "93948516",
-            source.itemIdOf("https://archiveofourown.org/works/93948516/chapters/250718281#workskin"),
+            source.siteIdOf("https://archiveofourown.org/works/93948516/chapters/250718281#workskin"),
         )
-        assertEquals("93948516", source.itemIdOf("https://archiveofourown.org/works/93948516?view_full_work=true"))
-        assertNull(source.itemIdOf("https://archiveofourown.org/works/search?work_search%5Bquery%5D=x"))
-        assertNull(source.itemIdOf("https://archiveofourown.org/tags/Angst/works"))
+        assertEquals("93948516", source.siteIdOf("https://archiveofourown.org/works/93948516?view_full_work=true"))
+        assertNull(source.siteIdOf("https://archiveofourown.org/works/search?work_search%5Bquery%5D=x"))
+        assertNull(source.siteIdOf("https://archiveofourown.org/tags/Angst/works"))
     }
 
     @Test
@@ -58,13 +58,13 @@ class Ao3DecorTest {
         val html = page("list.html")
         val context = MemorySourceContext()
         val url = "https://archiveofourown.org/tags/Fullmetal%20Alchemist%20-%20All%20Media%20Types/works"
-        val captured = source.capture(CapturedPage(url, html, now), context)
+        val captured = context.sitesOf(source.capture(CapturedPage(url, html, now), context))
         val cards = decor.cards!!
         val linked =
             Jsoup.parse(html, url)
                 .select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertEquals(captured, linked)
     }
 

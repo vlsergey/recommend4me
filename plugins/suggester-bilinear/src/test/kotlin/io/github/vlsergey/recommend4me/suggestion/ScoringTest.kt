@@ -161,7 +161,7 @@ class ScoringTest {
                     InputBlock.of("text:notes", notes, BooleanArray(n) { it % 3 == 0 }),
                 )
             return SuggestionTask(
-                itemIds = List(n) { "item$it" },
+                itemIds = LongArray(n) { it.toLong() },
                 inputs = inputs,
                 values = names,
                 valueKeys = List(m) { "v$it" },

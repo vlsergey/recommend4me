@@ -10,7 +10,7 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
-data class Rating(val itemId: String, val version: String, val grade: Int, val ratedAt: Instant)
+data class Rating(val itemId: Long, val version: String, val grade: Int, val ratedAt: Instant)
 
 /** A grade of a work as it was given: through which item, at which version, and whether it stands. */
 data class GivenRating(
@@ -52,7 +52,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
     }
 
     /** The work of the item graded at the version it stands at, in place of the grade that stood. */
-    fun rate(itemId: String, version: String, grade: Int, now: Instant) {
+    fun rate(itemId: Long, version: String, grade: Int, now: Instant) {
         require(grade in Grades.RANGE) { "A grade is ${Grades.MIN}..${Grades.MAX}, not $grade" }
         val key = ItemKey(source, itemId)
         val work = works.of(key, now)
@@ -76,7 +76,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
      * The grade at the [version] taken back: the work's own of the version the item stands at, of a release before that
      * alone.
      */
-    fun unrate(itemId: String, version: String) {
+    fun unrate(itemId: Long, version: String) {
         val key = ItemKey(source, itemId)
         val work = works.of(key, Instant.now())
         val r = WORK_RATING
@@ -84,7 +84,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
         else db.deleteFrom(r).where(r.WORK.eq(work), r.VERSION.eq(version)).execute()
     }
 
-    private fun versionOf(itemId: String): String? =
+    private fun versionOf(itemId: Long): String? =
         db.select(SITE_WORK.VERSION)
             .from(SITE_WORK)
             .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.ITEM.eq(itemId))
@@ -106,11 +106,11 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
             }
     }
 
-    fun ofItem(itemId: String): List<Rating> =
+    fun ofItem(itemId: Long): List<Rating> =
         seen(SITE_WORK.SOURCE.eq(source).and(SITE_WORK.ITEM.eq(itemId))).sortedByDescending { it.ratedAt }
 
     /** Every grade of the work of the item as it was given, the newest first. */
-    fun given(itemId: String): List<GivenRating> {
+    fun given(itemId: Long): List<GivenRating> {
         val r = WORK_RATING
         val work = SITE_WORK.NORMALIZED
         return db.select(r.SOURCE, r.ITEM, r.VERSION, r.GRADE, r.RATED_AT, through.VERSION)
@@ -147,13 +147,13 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
     /**
      * The grades of the items [ids]: by their ids up to a [BATCH] of them; of more, every grade read and picked from.
      */
-    fun ofItems(ids: Collection<String>): List<Rating> {
+    fun ofItems(ids: Collection<Long>): List<Rating> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) all().filter { it.itemId in asked }
         else seen(WORK_RATING.GRADE.isNotNull.and(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked)))
     }
 
-    fun gradedItems(): Set<String> = all().mapTo(HashSet()) { it.itemId }
+    fun gradedItems(): Set<Long> = all().mapTo(HashSet()) { it.itemId }
 
     fun count(): Int = all().size
 

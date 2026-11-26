@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import io.github.vlsergey.recommend4me.source.SeriesWork
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
 import kotlin.test.Test
@@ -25,7 +24,7 @@ class Ao3PagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, name: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, page(name), now), context)
+        return context.sitesOf(source.capture(CapturedPage(url, page(name), now), context))
     }
 
     @Test
@@ -47,7 +46,7 @@ class Ao3PagesTest {
         assertEquals(listOf(Books.Status.IN_PROGRESS.key), context.facets.getValue("94578656")["status"])
         assertTrue(context.texts.getValue("94578656")["annotation"].orEmpty().isNotBlank())
         // A card's link is what the extension marks the card up by
-        assertEquals(ishvalan, source.itemIdOf("https://archiveofourown.org/works/$ishvalan"))
+        assertEquals(ishvalan, source.siteIdOf("https://archiveofourown.org/works/$ishvalan"))
     }
 
     @Test
@@ -176,7 +175,10 @@ class Ao3PagesTest {
         assertEquals("in-progress", series.status)
         assertEquals("Magic, and what it wants.", series.description)
         assertEquals(Instant.parse("2024-03-01T00:00:00Z"), series.begunAt)
-        assertEquals(listOf(SeriesWork("85351946", 5), SeriesWork("89821571", 6)), series.works)
+        assertEquals(
+            listOf("85351946" to 5, "89821571" to 6),
+            series.works.map { context.siteOf(it.itemId) to it.position },
+        )
         assertTrue(!series.whole)
     }
 

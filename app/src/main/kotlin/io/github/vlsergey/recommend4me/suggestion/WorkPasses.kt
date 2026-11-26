@@ -42,7 +42,7 @@ internal class WorkPasses(
     fun worksRead(
         store: SourceStore,
         encoder: TextEncoder,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         characters: CharactersRead = charactersRead(store),
         card: Boolean = false,
         inputs: Boolean = true,
@@ -68,8 +68,8 @@ internal class WorkPasses(
      * portions at every walk while the source does not change, each a query by the table's key, nothing held between
      * them.
      */
-    fun forEachPortion(store: SourceStore, action: (List<String>) -> Unit) {
-        var after: String? = null
+    fun forEachPortion(store: SourceStore, action: (List<Long>) -> Unit) {
+        var after: Long? = null
         do {
             val keys = store.items.keysAfter(after, most)
             after = keys.lastOrNull()?.id
@@ -78,7 +78,7 @@ internal class WorkPasses(
     }
 
     /** The works [ids], [most] of them at a time in the order of their ids: a few works of a pass, not every one. */
-    fun forEachPortion(ids: Collection<String>, action: (List<String>) -> Unit) =
+    fun forEachPortion(ids: Collection<Long>, action: (List<Long>) -> Unit) =
         ids.distinct().sorted().chunked(most).forEach(action)
 
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */

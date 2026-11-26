@@ -14,6 +14,6 @@ import org.jooq.impl.DSL
 object SourceItems {
 
     /** The rows of the items [ids] of the source [of]: [source] and [item] the columns of the table's key. */
-    fun of(source: Field<String?>, item: Field<String?>, of: String, ids: Collection<String>): Condition =
+    fun of(source: Field<String?>, item: Field<Long?>, of: String, ids: Collection<Long>): Condition =
         DSL.row(source, item).`in`(ids.map { DSL.row(DSL.`val`(of, source), DSL.`val`(it, item)) })
 }

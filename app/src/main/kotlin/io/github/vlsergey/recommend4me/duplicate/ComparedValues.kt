@@ -112,7 +112,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
     }
 
     /** The works [ids] alone, by their keys; their numbers of size of the [sizes] numbers. */
-    fun of(ids: List<String>, sizes: Collection<String>): Compared {
+    fun of(ids: List<Long>, sizes: Collection<String>): Compared {
         val names = ArrayList<String>()
         val byName = HashMap<String, Int>()
         val read = ListFacetValues.of(index, ids.map { ItemKey(s.id, it) })
@@ -185,7 +185,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         read: List<String>,
         values: Array<IntArray>,
         /** The works, by their places. */
-        val ids: List<String>,
+        val ids: List<Long>,
         val authors: Array<LongArray>,
         /** Every work's authors' names one after another; none of a work of no author. */
         val authorNames: List<String?>,
@@ -271,7 +271,7 @@ internal class ComparedFacets(private val s: SourceStore) {
      * models' as the index keeps them ([ListModelValues]) — what a screen of a pair shows, not of the index (user,
      * 2026-11-18: the screens are of the databases, the search alone of the index); the authors apart.
      */
-    fun shown(ids: List<String>, index: ListIndex): Map<String, List<String>> {
+    fun shown(ids: List<Long>, index: ListIndex): Map<Long, List<String>> {
         val byFacet = ListRows.facetsOf(s, ids, index.searching { ListModelValues.of(it, s.id, ids) })
         return ids.associateWith { id ->
             byFacet

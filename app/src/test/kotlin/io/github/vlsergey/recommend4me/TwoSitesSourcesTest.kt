@@ -44,7 +44,7 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
         jobs.cancel("beta")
         background.run()
         assertEquals(3, jobs.status("beta").newItems)
-        assertNotNull(items.getItem("beta", "s3").body)
+        assertNotNull(items.getItem("beta", idOf("beta", "s3")).body)
         assertEquals("CANCELLED", jobs.status("beta").state.name)
         assertNull(jobs.resumable("beta"), "stopped by the user, it waits for the user")
 
@@ -69,26 +69,26 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
         assertEquals("DONE", jobs.status("beta").state.name, "state ${jobs.status("beta")}")
         assertEquals(1, jobs.status("beta").newItems)
         assertNull(jobs.resumable("beta"))
-        assertNotNull(items.getItem("beta", "u1").body)
+        assertNotNull(items.getItem("beta", idOf("beta", "u1")).body)
     }
 
     @Test
     fun `a work graded asks the site for nothing — its page is loaded on the user's press alone`() {
         beta("b5|Deep|depth|Short")
-        gradesController.rateItem("beta", "b5", RatingRequest(5))
+        gradesController.rateItem("beta", idOf("beta", "b5"), RatingRequest(5))
         background.run()
-        assertTrue("b5" !in Beta.refreshed)
-        gradesController.unrateItem("beta", "b5", null)
+        assertTrue(idOf("beta", "b5") !in Beta.refreshed)
+        gradesController.unrateItem("beta", idOf("beta", "b5"), null)
     }
 
     @Test
     fun `kept pages are read again when the parser changes`() {
         alpha("a7|Quiet harbour|harbour|Boats at rest||")
-        assertEquals("Quiet harbour", items.getItem("alpha", "a7").body!!.summary.title)
+        assertEquals("Quiet harbour", items.getItem("alpha", idOf("alpha", "a7")).body!!.summary.title)
         Alpha.version = 2
         try {
             captured.reparse()
-            assertEquals("QUIET HARBOUR", items.getItem("alpha", "a7").body!!.summary.title)
+            assertEquals("QUIET HARBOUR", items.getItem("alpha", idOf("alpha", "a7")).body!!.summary.title)
         } finally {
             Alpha.version = 1
         }
@@ -101,17 +101,17 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     @Test
     fun `a kept page is read again by the way of reading of the day it was downloaded`() {
         alpha("a10|Calm bay|harbour|Boats at rest||")
-        assertEquals("Calm bay", items.getItem("alpha", "a10").body!!.summary.title)
+        assertEquals("Calm bay", items.getItem("alpha", idOf("alpha", "a10")).body!!.summary.title)
         val downloaded = Instant.now()
         try {
             // A way of the pages downloaded from tomorrow: the page of today is not its own, read by the way of its day
             Alpha.ways = listOf(PageParser(null, 1), PageParser(downloaded.plus(Duration.ofDays(1)), 2))
             captured.reparse()
-            assertEquals("Calm bay", items.getItem("alpha", "a10").body!!.summary.title)
+            assertEquals("Calm bay", items.getItem("alpha", idOf("alpha", "a10")).body!!.summary.title)
             // A way of the pages downloaded since yesterday: the page of today is its own, read by it again
             Alpha.ways = listOf(PageParser(null, 1), PageParser(downloaded.minus(Duration.ofDays(1)), 2))
             captured.reparse()
-            assertEquals("CALM BAY", items.getItem("alpha", "a10").body!!.summary.title)
+            assertEquals("CALM BAY", items.getItem("alpha", idOf("alpha", "a10")).body!!.summary.title)
         } finally {
             Alpha.ways = null
             captured.reparse()
@@ -121,38 +121,41 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     @Test
     fun `a review and a picture are marked, taken back, and only with a mark of +1 or -1`() {
         alpha("a8|Storm|storm|A storm at sea|cover.png|The storm scene is wonderful")
-        assertEquals(204, marksController.markReview("alpha", "a8", "r1", Mark(1)).statusCode.value())
-        assertEquals(1, items.getItem("alpha", "a8").body!!.reviews.single().mark)
-        assertEquals(204, marksController.unmarkReview("alpha", "a8", "r1").statusCode.value())
-        assertNull(items.getItem("alpha", "a8").body!!.reviews.single().mark)
-        assertEquals(404, marksController.markReview("alpha", "a8", "no-such", Mark(1)).statusCode.value())
-        assertThrows<Refused> { marksController.markReview("alpha", "a8", "r1", Mark(0)) }
+        assertEquals(204, marksController.markReview("alpha", idOf("alpha", "a8"), "r1", Mark(1)).statusCode.value())
+        assertEquals(1, items.getItem("alpha", idOf("alpha", "a8")).body!!.reviews.single().mark)
+        assertEquals(204, marksController.unmarkReview("alpha", idOf("alpha", "a8"), "r1").statusCode.value())
+        assertNull(items.getItem("alpha", idOf("alpha", "a8")).body!!.reviews.single().mark)
+        assertEquals(
+            404,
+            marksController.markReview("alpha", idOf("alpha", "a8"), "no-such", Mark(1)).statusCode.value(),
+        )
+        assertThrows<Refused> { marksController.markReview("alpha", idOf("alpha", "a8"), "r1", Mark(0)) }
 
-        assertEquals(204, marksController.markPicture("alpha", "a8", 0, Mark(-1)).statusCode.value())
-        assertEquals(-1, items.getItem("alpha", "a8").body!!.pictures.single().mark)
-        marksController.unmarkPicture("alpha", "a8", 0)
-        assertNull(items.getItem("alpha", "a8").body!!.pictures.single().mark)
-        assertEquals(404, marksController.markPicture("alpha", "a8", 7, Mark(1)).statusCode.value())
+        assertEquals(204, marksController.markPicture("alpha", idOf("alpha", "a8"), 0, Mark(-1)).statusCode.value())
+        assertEquals(-1, items.getItem("alpha", idOf("alpha", "a8")).body!!.pictures.single().mark)
+        marksController.unmarkPicture("alpha", idOf("alpha", "a8"), 0)
+        assertNull(items.getItem("alpha", idOf("alpha", "a8")).body!!.pictures.single().mark)
+        assertEquals(404, marksController.markPicture("alpha", idOf("alpha", "a8"), 7, Mark(1)).statusCode.value())
     }
 
     @Test
     fun `a picture is downloaded once and served from the file after, one the host has not is sent to the host`() {
         alpha("a9|Cover|cover|A work with a cover|cover.png|")
         pictureHits.clear()
-        val first = items.getPicture("alpha", "a9", 0, false)
+        val first = items.getPicture("alpha", idOf("alpha", "a9"), 0, false)
         assertEquals(200, first.statusCode.value())
         assertEquals("image/png", first.headers.contentType.toString())
         assertTrue((first.body as FileSystemResource).file.readBytes().contentEquals(PNG))
-        assertEquals(200, items.getPicture("alpha", "a9", 0, false).statusCode.value())
+        assertEquals(200, items.getPicture("alpha", idOf("alpha", "a9"), 0, false).statusCode.value())
         assertEquals(listOf("/cover.png"), pictureHits.toList())
         // The original not kept: the browser is sent to the site for it
-        assertEquals(302, items.getPicture("alpha", "a9", 0, true).statusCode.value())
+        assertEquals(302, items.getPicture("alpha", idOf("alpha", "a9"), 0, true).statusCode.value())
 
         alpha("a10|Lost cover|cover|A cover the host lost|lost.png|")
-        val lost = items.getPicture("alpha", "a10", 0, false)
+        val lost = items.getPicture("alpha", idOf("alpha", "a10"), 0, false)
         assertEquals(302, lost.statusCode.value())
         assertEquals("$pictureBase/lost.png", lost.headers.location.toString())
-        assertEquals(404, items.getPicture("alpha", "a10", 3, false).statusCode.value())
+        assertEquals(404, items.getPicture("alpha", idOf("alpha", "a10"), 3, false).statusCode.value())
     }
 
     @Test
@@ -188,7 +191,7 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
                 "m$k|Task $k|${if (k % 2 == 0) "sea" else "land"}" +
                     "|${if (k % 2 == 0) "Ships and storms at sea" else "Fields and farms on land"} $k||"
             )
-            gradesController.rateItem("alpha", "m$k", RatingRequest(if (k % 2 == 0) 5 else 1))
+            gradesController.rateItem("alpha", idOf("alpha", "m$k"), RatingRequest(if (k % 2 == 0) 5 else 1))
         }
         // Planned at once, not waited for: the request answers with the model as it is
         assertEquals(200, model.trainModel("books").statusCode.value())
@@ -203,6 +206,6 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
         )
         assertTrue(model.getModel("books").body!!.trained)
         assertEquals(404, model.getModel("nothing").statusCode.value())
-        (1..8).forEach { gradesController.unrateItem("alpha", "m$it", null) }
+        (1..8).forEach { gradesController.unrateItem("alpha", idOf("alpha", "m$it"), null) }
     }
 }

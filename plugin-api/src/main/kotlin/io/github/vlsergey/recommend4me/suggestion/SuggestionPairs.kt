@@ -178,8 +178,11 @@ class SuggestionPairs(task: SuggestionTask) {
         /** How many folds the items are dealt into. */
         const val FOLDS = 5
 
-        /** The fold of an item by its id: the same every time, whatever else the task holds. */
-        fun foldOf(id: String, folds: Int = FOLDS): Int = (id.hashCode() and Int.MAX_VALUE) % folds
+        /**
+         * The fold of an item by its number: the same every time, whatever else the task holds. The items numbered one
+         * after another go round the folds, every fold of as many as the others.
+         */
+        fun foldOf(id: Long, folds: Int = FOLDS): Int = Math.floorMod(id, folds)
 
         /** A chance kept off 0 and 1: a certainty proved wrong would weigh without bound. */
         private const val EDGE = 1e-6

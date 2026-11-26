@@ -26,7 +26,7 @@ class MarkingController(private val marking: Marking) : MarkingApi {
         else ResponseEntity.notFound().build()
     }
 
-    override fun unanswerMarking(source: String, item: String, facet: String, value: String): ResponseEntity<Unit> =
+    override fun unanswerMarking(source: String, item: Long, facet: String, value: String): ResponseEntity<Unit> =
         if (marking.unanswer(source, item, facet, value)) ResponseEntity.noContent().build()
         else ResponseEntity.notFound().build()
 }

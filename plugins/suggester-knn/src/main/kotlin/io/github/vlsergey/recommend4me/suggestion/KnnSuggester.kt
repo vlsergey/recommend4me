@@ -237,12 +237,12 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
 
     /** Of every value the user answered on of every work — confirmed, then rejected — the score held out. */
     private class Answered {
-        private val items = ArrayList<String>()
+        private val items = ArrayList<Long>()
         private val values = ArrayList<Int>()
         private val scores = ArrayList<Float>()
 
         /** The [chances] of the values [asked] of the work [id]. */
-        fun add(id: String, asked: IntArray, chances: FloatArray) {
+        fun add(id: Long, asked: IntArray, chances: FloatArray) {
             asked.forEach { v ->
                 items += id
                 values += v
@@ -250,7 +250,7 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
             }
         }
 
-        fun scores() = HeldOutScores(items, values.toIntArray(), scores.toFloatArray())
+        fun scores() = HeldOutScores(items.toLongArray(), values.toIntArray(), scores.toFloatArray())
     }
 
     companion object {

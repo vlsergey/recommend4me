@@ -129,7 +129,7 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         if (facet == FANDOM) tags.map { WantedPage("$BASE/fandom$it") } else emptyList()
 
-    override fun itemIdOf(url: String): String? =
+    override fun siteIdOf(url: String): String? =
         (WORK_ADDRESS.find(url) ?: READER_ADDRESS.find(url))?.groupValues?.get(1)
 
     override val pageDecor =
@@ -153,7 +153,7 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
             cards = CardDecor("div.FicTable[id^='fic_']", ".FicTable_Title h4 a[href^='/fic']"),
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = FanficsMePages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> = FanficsMePages(context).read(page)
 
     override fun scrape(mode: SourceMode, context: SourceContext, job: Job) =
         FanficsMeSync(context, client).run(mode, job)
@@ -164,13 +164,14 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
      * The work's own page and its whole text in the reader, read as if the browser had sent them. The text of a work
      * rated NC-17 the site shows only to a reader logged in: of it, the header alone.
      */
-    override fun refresh(itemId: String, context: SourceContext): Boolean {
-        val url = itemUrl(itemId)
+    override fun refresh(itemId: Long, context: SourceContext): Boolean {
+        val site = context.items.find(itemId)?.siteId
+        val url = site?.let(::itemUrl)
         val pages = FanficsMePages(context)
         val html =
-            client.get(url)?.takeIf { itemId in pages.read(CapturedPage(url, it, Instant.now())) } ?: return false
+            url?.let(client::get)?.takeIf { itemId in pages.read(CapturedPage(url, it, Instant.now())) } ?: return false
         context.keepPage(url, html, itemId)
-        val reader = "$BASE/read.php?id=$itemId"
+        val reader = "$BASE/read.php?id=$site"
         client.get(reader)?.let { text ->
             if (itemId in pages.read(CapturedPage(reader, text, Instant.now()))) context.keepPage(reader, text, itemId)
         }

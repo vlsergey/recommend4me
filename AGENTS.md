@@ -284,3 +284,16 @@ the background works out is checked after `background.run()`.
 a work is shown with"), named after it and holding all of it: never "part 2", never a cut where the
 lines ran out, never a bag of helpers. If the honest name of a piece is a kind of code rather than a
 thing it is about, the cut is wrong.
+
+**One name, one meaning** (owner, 2026-11-26). Functions of one name in one scope do the same thing of
+other inputs — one work or many, a text or its bytes —, never different things: `of(site)` beside
+`of(author)`, a `set(key, value)` of settings beside a `set(itemId, signal)` of signals, `strings(out, list)`
+writing beside `strings(input)` reading are named apart (`ofSite`, `setSignal`, `writeStrings`).
+
+**A type changes in every interface it crosses** (owner, 2026-11-26). When what a value is changes — a
+work named by the site's id becoming the application's number of it — the plugins' API, the OpenAPI
+contract and the formats of the files change with it, to the right type, an array of primitives where
+it is many (`LongArray`, not `List<String>`): never a number passed as text, never a value converted at
+the boundary to keep an interface as it was. A work is named everywhere by its number (`item.internal_id`);
+the site's id (`item.site_id`) is only what a source reads of its pages and makes addresses of
+(`ItemHead.siteId`, `StoredItem.siteId`, `Source.itemUrl`, `Source.siteIdOf`).

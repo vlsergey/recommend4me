@@ -15,7 +15,7 @@ internal class ScoredPortions(private val scoring: Scoring) {
     private var works = 0
 
     /** The pairs answered on, one after another: the item's id, the value, the score. */
-    private val items = ArrayList<String>()
+    private val items = ArrayList<Long>()
     private val values = ArrayList<Int>()
     private val scores = ArrayList<Float>()
 
@@ -62,8 +62,8 @@ internal class ScoredPortions(private val scoring: Scoring) {
         return FloatArray(m) { (sums[it] / n).toFloat() }
     }
 
-    /** The scores of the pairs answered on, by the items' ids, in the order the portions handed them over. */
-    fun heldOut(): HeldOutScores = HeldOutScores(items.toList(), values.toIntArray(), scores.toFloatArray())
+    /** The scores of the pairs answered on, by the items' numbers, in the order the portions handed them over. */
+    fun heldOut(): HeldOutScores = HeldOutScores(items.toLongArray(), values.toIntArray(), scores.toFloatArray())
 
     private companion object {
         /** The items scored at once for the shares: memory, not meaning. */

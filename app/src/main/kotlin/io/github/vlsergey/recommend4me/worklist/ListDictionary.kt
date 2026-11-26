@@ -25,7 +25,7 @@ import org.jooq.DSLContext
 internal object ListDictionary {
 
     /** The items to be written, by source ([named]); whether more is left after them ([more]). */
-    class Portion(val named: Map<String, Set<String>>, val more: Boolean)
+    class Portion(val named: Map<String, Set<Long>>, val more: Boolean)
 
     private val NONE = Portion(emptyMap(), false)
 

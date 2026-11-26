@@ -24,7 +24,7 @@ class HistoryController(private val stores: Stores, private val works: Works) : 
                 val clusters = works.of(type)
                 type.sources.flatMap { s ->
                     // A grade or a mark is of a work: once, by the item that names it
-                    fun names(id: String) = ItemKey(s.id, id).let { clusters.representative(it) == it }
+                    fun names(id: Long) = ItemKey(s.id, id).let { clusters.representative(it) == it }
                     val grades =
                         s.ratings
                             .all()
@@ -66,7 +66,7 @@ class HistoryController(private val stores: Stores, private val works: Works) : 
                     val heads = s.items.heads(latest.map { it.first }.toSet())
                     val fields = s.corrections.allFields()
                     latest.map { (id, at, entry) ->
-                        at to entry(heads[id]?.let { Corrected.title(it.title, fields[id].orEmpty()) } ?: id)
+                        at to entry(heads[id]?.let { Corrected.title(it.title, fields[id].orEmpty()) } ?: id.toString())
                     }
                 }
             }

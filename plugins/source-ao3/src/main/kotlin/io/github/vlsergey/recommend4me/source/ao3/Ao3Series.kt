@@ -47,16 +47,25 @@ internal class Ao3Series(private val items: ItemStore) {
                     },
                 begunAt = lines["Series Begun"]?.let(::dated),
                 updatedAt = lines["Series Updated"]?.let(::dated),
-                works =
-                    doc.select("ul.series.work.index > li.work[id^=work_]").map { card ->
-                        SeriesWork(card.id().removePrefix("work_"), number(card, key))
-                    },
+                works = works(doc, key),
             )
         )
     }
 
+    /**
+     * The works the series' page [doc] lists, in its order, each with its number in the series [key]: the works of its
+     * cards, written before it.
+     */
+    private fun works(doc: Document, key: String): List<SeriesWork> {
+        val cards = doc.select("ul.series.work.index > li.work[id^=work_]")
+        val ids = items.idsOf(cards.map { it.id().removePrefix("work_") })
+        return cards.mapNotNull { card ->
+            ids[card.id().removePrefix("work_")]?.let { SeriesWork(it, number(card, key)) }
+        }
+    }
+
     /** The number of the work [id] in the series of the link [a], as the text around it says: "Part 3 of". */
-    fun place(id: String, key: String, a: Element) {
+    fun place(id: Long, key: String, a: Element) {
         a.parent()
             ?.let { PART.find(it.text())?.groupValues?.get(1)?.toIntOrNull() }
             ?.let {

@@ -88,12 +88,12 @@ erDiagram
     }
     held_out {
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         DOUBLE score
     }
     held_out_explained {
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         DOUBLE score "null"
         DOUBLE grade_place "null"
         CLOB explanation "null"
@@ -114,13 +114,13 @@ erDiagram
     mark_likeness_axes {
         VARCHAR mark_kind PK
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         VARBINARY axes
     }
     mark_likeness_strength {
         VARCHAR mark_kind PK
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         VARBINARY strength
     }
     model {
@@ -164,7 +164,7 @@ erDiagram
         VARCHAR reranker PK
         VARCHAR query PK
         VARCHAR source PK
-        VARCHAR item_id PK
+        BIGINT item_id PK
         BIGINT texts_hash
         REAL score
     }

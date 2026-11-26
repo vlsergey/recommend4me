@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(CastNames::class.java)
 
 /** The texts of the casts of these works of a source were encoded: the models that read them read them anew. */
-data class SiteItemCastEncodeEvent(val source: String, val ids: List<String>)
+data class SiteItemCastEncodeEvent(val source: String, val ids: List<Long>)
 
 /**
  * Every change of the casts of the works of the [scope] of the [type] encoded ([WorkStage.CAST]): the stages reading
@@ -114,7 +114,7 @@ class CastNames(
     /**
      * The texts of the casts of the works [ids] of the [store] not encoded yet, encoded now; the works that had any.
      */
-    private fun encode(store: SourceStore, ids: Collection<String>): List<String> {
+    private fun encode(store: SourceStore, ids: Collection<Long>): List<Long> {
         val facet = WorkCasts.facetOf(store) ?: return emptyList()
         val entries = store.items.facetsOf(ids).mapValues { it.value[facet].orEmpty() }
         val texts =

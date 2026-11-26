@@ -31,44 +31,55 @@ class WorkStagesTest : SiteTestBase() {
     @Autowired lateinit var plugins: Plugins
     @Autowired lateinit var context: ConfigurableApplicationContext
 
-    private fun stages(vararg ids: String): Map<String, WorkStages> =
-        WorkStages.of(lists.of("books"), site, ids.toList())
+    private fun stages(vararg ids: Long): Map<Long, WorkStages> = WorkStages.of(lists.of("books"), site, ids.toList())
 
     @Test
     fun `a stage does again the works whose data it reads changed, and no other`() {
         capture("ws1|The first lantern|space|A lantern lit on a far shore||")
         capture("ws2|The second lantern|space|A lantern lit on a near shore||")
         background.run()
-        val written = stages("ws1", "ws2")
-        assertTrue(written.getValue("ws1")[WorkStage.VECTORS] > 0, "the vectors of a new work made")
+        val written = stages(idOf(site, "ws1"), idOf(site, "ws2"))
+        assertTrue(written.getValue(idOf(site, "ws1"))[WorkStage.VECTORS] > 0, "the vectors of a new work made")
 
         // A mark of interest: none of the vectors, the fields, the search reads it
-        gradesController.markInterest(site, "ws1", InterestRequest(true))
+        gradesController.markInterest(site, idOf(site, "ws1"), InterestRequest(true))
         background.run()
-        val marked = stages("ws1", "ws2")
+        val marked = stages(idOf(site, "ws1"), idOf(site, "ws2"))
         listOf(WorkStage.VECTORS, WorkStage.FIELDS, WorkStage.TEXTS).forEach { stage ->
-            assertEquals(written.getValue("ws1")[stage], marked.getValue("ws1")[stage], "$stage of the work marked")
+            assertEquals(
+                written.getValue(idOf(site, "ws1"))[stage],
+                marked.getValue(idOf(site, "ws1"))[stage],
+                "$stage of the work marked",
+            )
         }
 
         // An answer: the vectors read it, of its work alone
-        corrections.correctFacet(site, "ws2", FacetCorrection(facet = "tags", added = true, key = "lighthouse"))
+        corrections.correctFacet(
+            site,
+            idOf(site, "ws2"),
+            FacetCorrection(facet = "tags", added = true, key = "lighthouse"),
+        )
         background.run()
-        val answered = stages("ws1", "ws2")
+        val answered = stages(idOf(site, "ws1"), idOf(site, "ws2"))
         assertTrue(
-            answered.getValue("ws2")[WorkStage.VECTORS] > marked.getValue("ws2")[WorkStage.VECTORS],
+            answered.getValue(idOf(site, "ws2"))[WorkStage.VECTORS] >
+                marked.getValue(idOf(site, "ws2"))[WorkStage.VECTORS],
             "the vectors of the work answered on looked at again",
         )
         // Of the other work, what reads neither a model nor the search of the tests: the answer refits the models of
         // the fields, whose works are all done again after them, and the search of the tests keeps nothing — made anew
         // whole every time
-        assertEquals(marked.getValue("ws1")[WorkStage.VECTORS], answered.getValue("ws1")[WorkStage.VECTORS])
+        assertEquals(
+            marked.getValue(idOf(site, "ws1"))[WorkStage.VECTORS],
+            answered.getValue(idOf(site, "ws1"))[WorkStage.VECTORS],
+        )
     }
 
     @Test
     fun `a work's document holds its texts and the vector of its title, and the vectors made anew of a text changed`() {
         capture("wt1|The third lantern|space|A lantern lit on a high cliff||")
         background.run()
-        val key = ItemKey(site, "wt1")
+        val key = ItemKey(site, idOf(site, "wt1"))
         val title = ListTexts.vectorField(plugins.textEncoder()!!.id, TextVectors.TITLE)
         val text = ListTexts.textField("annotation")
         fun held() = HeldTexts.of(lists.of("books"), listOf(key), listOf(title, text))[key].orEmpty()
@@ -87,13 +98,13 @@ class WorkStagesTest : SiteTestBase() {
     fun `an index marked current as of nought is compared whole, every stage of its works kept`() {
         capture("wz1|The fourth lantern|space|A lantern lit in a deep bay||")
         background.run()
-        val before = stages("wz1").getValue("wz1")
+        val before = stages(idOf(site, "wz1")).getValue(idOf(site, "wz1"))
         val index = lists.of("books")
         ListCursors.nought(index)
         index.commit()
         listIndexing.plan("books", "start")
         background.run()
-        val after = stages("wz1").getValue("wz1")
+        val after = stages(idOf(site, "wz1")).getValue(idOf(site, "wz1"))
         // Of the stages of no model: the fields, the expectations and the search are done again as a model of the
         // shared application is fitted by the tests before, whatever the index
         listOf(WorkStage.VECTORS, WorkStage.WINDOWS, WorkStage.CAST, WorkStage.SETS).forEach {
@@ -109,13 +120,16 @@ class WorkStagesTest : SiteTestBase() {
         // The stage never did the work and keeps no mark of its source — as every stage before they kept marks, and a
         // stage or a source new
         val index = lists.of("books")
-        index.set(WorkStage.VECTORS.column, mapOf(ItemKey(site, "wm1") to 0L))
+        index.set(WorkStage.VECTORS.column, mapOf(ItemKey(site, idOf(site, "wm1")) to 0L))
         index.stages.forget { it.startsWith("mark:${WorkStage.VECTORS.name}:") && it.endsWith(":$site") }
         index.commit()
 
         context.publishEvent(ApplicationReadyEvent(SpringApplication(), arrayOf(), context, Duration.ZERO))
         background.run()
         textVectors.encodeNow("books")
-        assertTrue(stages("wm1").getValue("wm1")[WorkStage.VECTORS] > 0, "the work its data older than the start done")
+        assertTrue(
+            stages(idOf(site, "wm1")).getValue(idOf(site, "wm1"))[WorkStage.VECTORS] > 0,
+            "the work its data older than the start done",
+        )
     }
 }

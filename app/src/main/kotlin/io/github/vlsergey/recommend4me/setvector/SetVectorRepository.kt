@@ -24,14 +24,14 @@ enum class SetKind(val key: String) {
 class SetVectorRepository(private val db: DSLContext) {
 
     /** What every item's stored vector of [kind] by the directions [embeddingId] was made of: how many members. */
-    fun sources(kind: SetKind, embeddingId: Long): Map<String, Int> =
+    fun sources(kind: SetKind, embeddingId: Long): Map<Long, Int> =
         db.select(SET_VECTOR.ITEM_ID, SET_VECTOR.SOURCE)
             .from(SET_VECTOR)
             .where(SET_VECTOR.KIND.eq(kind.name), SET_VECTOR.EMBEDDING_ID.eq(embeddingId))
             .fetch()
             .associate { it.value1()!! to it.value2()!! }
 
-    fun save(itemId: String, kind: SetKind, embeddingId: Long, source: Int, vector: FloatArray) {
+    fun save(itemId: Long, kind: SetKind, embeddingId: Long, source: Int, vector: FloatArray) {
         val packed = Vectors.pack(vector)
         db.insertInto(SET_VECTOR)
             .set(SET_VECTOR.ITEM_ID, itemId)
@@ -49,8 +49,8 @@ class SetVectorRepository(private val db: DSLContext) {
     /**
      * The vectors of the items by the directions in use ([current], kind to embedding id): item to block key to vector.
      */
-    fun ofMany(ids: Collection<String>, current: Map<SetKind, Long>): Map<String, Map<String, FloatArray>> {
-        val out = HashMap<String, MutableMap<String, FloatArray>>()
+    fun ofMany(ids: Collection<Long>, current: Map<SetKind, Long>): Map<Long, Map<String, FloatArray>> {
+        val out = HashMap<Long, MutableMap<String, FloatArray>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(SET_VECTOR.ITEM_ID, SET_VECTOR.KIND, SET_VECTOR.EMBEDDING_ID, SET_VECTOR.VEC)
                 .from(SET_VECTOR)
@@ -65,11 +65,11 @@ class SetVectorRepository(private val db: DSLContext) {
     }
 
     /** Every stored vector by the directions in use, streamed: (item, block key, vector). */
-    fun forEach(current: Map<SetKind, Long>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) =
+    fun forEach(current: Map<SetKind, Long>, action: (itemId: Long, key: String, vector: FloatArray) -> Unit) =
         db.streamed("SELECT item_id, kind, embedding_id, vec FROM set_vector", emptyList()) { r ->
             val kind = SetKind.valueOf(r.getString(KIND_COLUMN))
             if (current[kind] == (r.getObject(EMBEDDING_COLUMN) as Number?)?.toLong())
-                action(r.getString(ITEM_COLUMN), kind.key, Vectors.unpack(r.getBytes(VECTOR_COLUMN)))
+                action(r.getLong(ITEM_COLUMN), kind.key, Vectors.unpack(r.getBytes(VECTOR_COLUMN)))
         }
 
     private companion object {

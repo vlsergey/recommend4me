@@ -23,7 +23,7 @@ class Answering(private val events: ApplicationEventPublisher) {
      * facet of one value a value added takes the place of the user's others; a character said one of the work's main
      * ones is its secondary one no more, and the other way round.
      */
-    fun write(store: SourceStore, item: String, facet: String, key: String, added: Boolean, name: String? = null) {
+    fun write(store: SourceStore, item: Long, facet: String, key: String, added: Boolean, name: String? = null) {
         store.corrections.setFacet(item, facet, key, added, name, Instant.now())
         if (added && store.schema.facet(facet)?.single == true) {
             store.corrections
@@ -43,7 +43,7 @@ class Answering(private val events: ApplicationEventPublisher) {
      * A tag the work has by a tag under it the user confirmed is not said to be not the work's: the answer on that one
      * is.
      */
-    fun refuseImplied(store: SourceStore, item: String, facet: String, key: String) {
+    fun refuseImplied(store: SourceStore, item: Long, facet: String, key: String) {
         val hierarchy = store.hierarchies()[facet] ?: return
         val under = hierarchy.descendants(key)
         store.corrections
@@ -63,7 +63,7 @@ class Answering(private val events: ApplicationEventPublisher) {
      * of the facets, the search and the model of the grades read the user's answers: fitted, indexed and learnt anew in
      * the background ([WorkFieldChangeEvent]).
      */
-    fun answered(store: SourceStore, item: String, facets: Collection<String>, change: () -> Unit) {
+    fun answered(store: SourceStore, item: Long, facets: Collection<String>, change: () -> Unit) {
         val started = System.currentTimeMillis()
         change()
         facets.forEach { events.publishEvent(WorkFieldChangeEvent(store.type, store.id, item, it)) }

@@ -56,7 +56,7 @@ class TwoSitesPlugins {
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://alpha\\.example/work/.*"))
 
-        override fun itemUrl(itemId: String) = "https://alpha.example/work/$itemId"
+        override fun itemUrl(siteId: String) = "https://alpha.example/work/$siteId"
 
         override val parserVersion: Int
             get() = version
@@ -65,21 +65,24 @@ class TwoSitesPlugins {
         override val parsers: List<PageParser>
             get() = ways ?: listOf(PageParser(null, version))
 
-        override fun capture(page: CapturedPage, context: SourceContext): List<String> {
+        override fun capture(page: CapturedPage, context: SourceContext): List<Long> {
             val parts = page.html.split('|')
-            val (id, title, tags) = parts
+            val (site, title, tags) = parts
             val annotation = parts[3]
             val picture = parts[4]
             val review = parts[5]
-            context.items.upsert(
-                ItemHead(
-                    id,
-                    itemUrl(id),
-                    if (PageParser.of(parsers, page.capturedAt).version >= 2) title.uppercase() else title,
-                    updatedAt = Instant.parse("2026-01-01T00:00:00Z"),
-                ),
-                page.capturedAt,
-            )
+            val id =
+                context.items
+                    .upsert(
+                        ItemHead(
+                            site,
+                            itemUrl(site),
+                            if (PageParser.of(parsers, page.capturedAt).version >= 2) title.uppercase() else title,
+                            updatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                        ),
+                        page.capturedAt,
+                    )
+                    .id
             context.items.setFacet(
                 id,
                 Books.TAG.key,
@@ -121,7 +124,7 @@ class TwoSitesPlugins {
         override val modes = setOf(SourceMode.SCRAPE_ALL, SourceMode.UPDATES, SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://beta\\.example/work/.*"))
 
-        override fun itemUrl(itemId: String) = "https://beta.example/work/$itemId"
+        override fun itemUrl(siteId: String) = "https://beta.example/work/$siteId"
 
         override fun valueUrl(facet: String, key: String, name: String) =
             if (facet == Books.AUTHOR.key) "https://beta.example/author/$key" else null
@@ -131,31 +134,35 @@ class TwoSitesPlugins {
 
         override val settings = listOf(SettingDef("cookie", secret = true), SettingDef("delay", default = "5"))
 
-        override fun capture(page: CapturedPage, context: SourceContext): List<String> {
+        override fun capture(page: CapturedPage, context: SourceContext): List<Long> {
             val parts = page.html.split('|')
-            val (id, title, tags) = parts
-            write(context, id, title, tags, parts[3], page.capturedAt)
-            return listOf(id)
+            val (site, title, tags) = parts
+            return listOf(write(context, site, title, tags, parts[3], page.capturedAt))
         }
 
+        /** The work the site names [site] written: its number. */
         private fun write(
             context: SourceContext,
-            id: String,
+            site: String,
             title: String,
             tags: String,
             annotation: String,
             now: Instant,
-        ) {
-            context.items.upsert(
-                ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
-                now,
-            )
+        ): Long {
+            val id =
+                context.items
+                    .upsert(
+                        ItemHead(site, itemUrl(site), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
+                        now,
+                    )
+                    .id
             context.items.setFacet(
                 id,
                 Books.TAG.key,
                 tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it) },
             )
             context.items.setTexts(id, mapOf("annotation" to annotation))
+            return id
         }
 
         override fun scrape(mode: SourceMode, context: SourceContext, job: Job) {
@@ -175,17 +182,15 @@ class TwoSitesPlugins {
             throw JobCancelled()
         }
 
-        override fun refresh(itemId: String, context: SourceContext): Boolean {
+        override fun refresh(itemId: Long, context: SourceContext): Boolean {
             refreshed += itemId
-            context.items.setTexts(
-                itemId,
-                mapOf("annotation" to "The whole page of $itemId, loaded on the user's press"),
-            )
+            val site = context.items.find(itemId)?.siteId
+            context.items.setTexts(itemId, mapOf("annotation" to "The whole page of $site, loaded on the user's press"))
             return true
         }
 
         companion object {
-            val refreshed: MutableList<String> = Collections.synchronizedList(ArrayList())
+            val refreshed: MutableList<Long> = Collections.synchronizedList(ArrayList())
         }
     }
 }

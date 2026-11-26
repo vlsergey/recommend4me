@@ -13,7 +13,7 @@ import org.jooq.impl.DSL
 object ListSelection {
 
     /** The ids of the items of the [source] whose facet [facetId] has a value of every one of the [groups]. */
-    fun idsOf(index: ListIndex, source: String, facetId: String, groups: List<Set<String>>): Set<String> =
+    fun idsOf(index: ListIndex, source: String, facetId: String, groups: List<Set<String>>): Set<Long> =
         index.searching { db ->
             val v = ITEM_VALUE
             val each = groups.map { g ->

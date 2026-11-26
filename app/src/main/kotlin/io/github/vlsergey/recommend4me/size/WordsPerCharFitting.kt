@@ -83,7 +83,7 @@ class WordsPerCharFitting(
     }
 
     /** The items [ids] of the [source] changed, for the [reason]. */
-    private fun named(source: String, ids: List<String>, reason: String) =
+    private fun named(source: String, ids: List<Long>, reason: String) =
         plan(stores.typeOf(source), ids.map { ItemKey(source, it).toString() }, reason)
 
     private fun plan(type: TypeStore, keys: List<String>, reason: String) {

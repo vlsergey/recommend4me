@@ -230,14 +230,14 @@ class CatalogueReader(
         heads: List<ItemKeys>,
         laps: Laps = Laps(),
         /** The site's values of the items, read already by the operation: not read again. */
-        read: Map<String, Map<String, List<String>>>? = null,
+        read: Map<Long, Map<String, List<String>>>? = null,
         /**
          * The values the models gave the items beyond the site's own as the index of the list keeps them
          * ([ListModelValues]): no model run of them; null — made now by the chain of the models kept.
          */
-        kept: Map<String, Map<String, List<String>>>? = null,
+        kept: Map<Long, Map<String, List<String>>>? = null,
         /** Told, of every item, the values the chain run now gave it beyond the site's own: what the index keeps. */
-        given: MutableMap<String, Map<String, List<String>>>? = null,
+        given: MutableMap<Long, Map<String, List<String>>>? = null,
     ): List<CatalogueItem> {
         val ids = heads.map { it.id }
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
@@ -374,9 +374,9 @@ class CatalogueReader(
      */
     private fun vectorsOf(
         s: SourceStore,
-        ids: List<String>,
+        ids: List<Long>,
         embeddings: Map<SetKind, Long>,
-        put: (id: String, block: String, v: FloatArray, picture: Boolean) -> Unit,
+        put: (id: Long, block: String, v: FloatArray, picture: Boolean) -> Unit,
     ) {
         plugins.textEncoder()?.let { encoder ->
             val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }

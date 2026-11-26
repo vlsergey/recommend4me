@@ -59,9 +59,12 @@ internal class FicbookSeries(private val items: ItemStore) {
         }
     }
 
-    /** The works the links lead to, in their order. */
-    private fun works(links: List<Element>): List<SeriesWork> =
-        links.mapNotNull { workId(it.attr("href")) }.distinct().map { SeriesWork(it) }
+    /** The works the links lead to, in their order, of those written: a work never seen is not of a series yet. */
+    private fun works(links: List<Element>): List<SeriesWork> {
+        val sites = links.mapNotNull { workId(it.attr("href")) }.distinct()
+        val ids = items.idsOf(sites)
+        return sites.mapNotNull { ids[it] }.map { SeriesWork(it) }
+    }
 
     companion object {
         /** The heading of a series' page: "Серия «Изгиб Вселенной»". */

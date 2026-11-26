@@ -2,8 +2,8 @@ package io.github.vlsergey.recommend4me.source.authortoday
 
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import io.github.vlsergey.recommend4me.source.SeriesWork
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,7 +22,7 @@ class AuthorTodayPagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, html: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, html, now), context)
+        return context.sitesOf(source.capture(CapturedPage(url, html, now), context))
     }
 
     @Test
@@ -240,7 +240,7 @@ class AuthorTodayPagesTest {
         assertEquals(Instant.parse("2026-11-07T21:15:07.7972251Z"), series.updatedAt)
         assertTrue(series.description!!.startsWith("Все ли, что делается, - к лучшему?"), series.description)
         assertEquals(22, series.works.size)
-        assertEquals(SeriesWork("300411", 1), series.works.first())
+        assertEquals("300411" to 1, series.works.first().let { context.siteOf(it.itemId) to it.position })
         assertEquals((1..22).toList(), series.works.map { it.position })
         assertTrue(series.whole)
         // A page of a series of several pages, 30 works a page, is not every work of it
@@ -265,14 +265,18 @@ class AuthorTodayPagesTest {
     @Test
     fun `an author's list of series gives each with its status, description and every work of it in its order`() {
         val context = MemorySourceContext()
+        // Of the works the list names, those written before: a work never seen is not of a series yet
+        listOf("639991", "650808").forEach {
+            context.items.upsert(ItemHead(it, "https://author.today/work/$it", it), now)
+        }
         capture(context, "https://author.today/u/denratmanov/series", page("user-series.html"))
         assertEquals(listOf("59008", "40669", "32216", "30377", "25283"), context.series.keys.toList())
         val first = context.series.getValue("59008")
         assertEquals("Миллениум", first.title)
         assertEquals("in-progress", first.status)
         assertTrue(first.description!!.startsWith("Твое рождение было ошибкой"), first.description)
-        assertEquals(listOf("639991", "650808"), first.works.take(2).map { it.itemId })
+        assertEquals(listOf("639991", "650808"), first.works.map { context.siteOf(it.itemId) })
         assertEquals("finished", context.series.getValue("32216").status)
-        assertEquals(22, context.series.getValue("30377").works.size)
+        assertEquals(emptyList(), context.series.getValue("30377").works)
     }
 }

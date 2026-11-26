@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class LuceneSearchTest {
 
-    private fun doc(id: String, title: String, author: String, text: String, language: String = "en") =
+    private fun doc(id: Long, title: String, author: String, text: String, language: String = "en") =
         SearchDocument(
             ItemKey("test", id),
             listOf(
@@ -21,9 +21,9 @@ class LuceneSearchTest {
 
     private val documents =
         listOf(
-            doc("1", "Stolen Memories", "Herandu Games", "A detective story in a rainy city."),
-            doc("2", "Beach Day", "Somebody", "Her clothes were stolen at the beach, and the day went on from there."),
-            doc("3", "Повелитель драконов", "Иван Петров", "Юноша находит яйцо дракона и становится всадником.", "ru"),
+            doc(1, "Stolen Memories", "Herandu Games", "A detective story in a rainy city."),
+            doc(2, "Beach Day", "Somebody", "Her clothes were stolen at the beach, and the day went on from there."),
+            doc(3, "Повелитель драконов", "Иван Петров", "Юноша находит яйцо дракона и становится всадником.", "ru"),
         )
 
     private val context =
@@ -42,13 +42,13 @@ class LuceneSearchTest {
             search.rebuild("books", documents.asSequence())
             // The words standing together in one text beat a title that has one of them
             val clothes = search.search("books", "stolen clothes", "en", context)
-            assertEquals("2", clothes.keys.first().id)
+            assertEquals(2L, clothes.keys.first().id)
             // A developer's name typed in part
-            assertEquals(listOf("1"), search.search("books", "herand", "en", context).keys.map { it.id })
+            assertEquals(listOf(1L), search.search("books", "herand", "en", context).keys.map { it.id })
             // Another case of a Russian word
-            assertEquals(listOf("3"), search.search("books", "драконы", "ru", context).keys.map { it.id })
+            assertEquals(listOf(3L), search.search("books", "драконы", "ru", context).keys.map { it.id })
 
-            val match = search.matches("books", clothes, clothes.keys, context).getValue(ItemKey("test", "2"))
+            val match = search.matches("books", clothes, clothes.keys, context).getValue(ItemKey("test", 2))
             // The field by its key: the application tells where in the work it is
             assertEquals("annotation", match.field)
             assertTrue(match.highlights.isNotEmpty())
@@ -61,7 +61,7 @@ class LuceneSearchTest {
         val scene = chapter.indexOf("Наутро")
         val withChapter =
             SearchDocument(
-                ItemKey("test", "4"),
+                ItemKey("test", 4),
                 listOf(
                     SearchField("title", "Название", 1.0f, listOf("Тихий берег"), naming = true),
                     SearchField("annotation", "Аннотация", 0.6f, listOf("История о двух людях у моря.")),
@@ -71,7 +71,7 @@ class LuceneSearchTest {
             )
         val other =
             SearchDocument(
-                ItemKey("test", "5"),
+                ItemKey("test", 5),
                 listOf(SearchField("title", "Название", 1.0f, listOf("Другое"), naming = true)),
                 "ru",
             )
@@ -79,7 +79,7 @@ class LuceneSearchTest {
             object : SearchContext by context {
                 // The application's: the scene of the chapter nearest
                 override fun nearest(line: String) =
-                    mapOf(ItemKey("test", "4") to SearchNearest(0.9, SearchPassage("part:1", scene, chapter.length)))
+                    mapOf(ItemKey("test", 4) to SearchNearest(0.9, SearchPassage("part:1", scene, chapter.length)))
 
                 override fun documents(keys: Collection<ItemKey>) =
                     listOf(withChapter, other).filter { it.key in keys }.associateBy { it.key }
@@ -87,12 +87,12 @@ class LuceneSearchTest {
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", sequenceOf(withChapter, other))
             val found = search.search("books", "свидание у маяка утром", "ru", byMeaning)
-            assertEquals("4", found.keys.first().id)
-            val nearest = found.nearest.getValue(ItemKey("test", "4"))
+            assertEquals(4L, found.keys.first().id)
+            val nearest = found.nearest.getValue(ItemKey("test", 4))
             assertEquals("part:1", nearest.field)
             assertEquals(chapter.substring(scene), nearest.text(withChapter))
             val shown =
-                search.matches("books", found, listOf(ItemKey("test", "4")), byMeaning).getValue(ItemKey("test", "4"))
+                search.matches("books", found, listOf(ItemKey("test", 4)), byMeaning).getValue(ItemKey("test", 4))
             assertEquals("part:1", shown.field)
             // The passage whole, every sentence of it: its vector found the work, not one sentence's
             assertTrue(shown.byMeaning, shown.text)
@@ -105,7 +105,7 @@ class LuceneSearchTest {
         val tags = "exhibitionism, nudity, public"
         val doc =
             SearchDocument(
-                ItemKey("test", "8"),
+                ItemKey("test", 8),
                 listOf(
                     SearchField("title", "Название", 1.0f, listOf("Обнажённая"), naming = true),
                     SearchField("tags", "Теги", 0.9f, listOf(tags)),
@@ -115,7 +115,7 @@ class LuceneSearchTest {
         val byMeaning =
             object : SearchContext by context {
                 override fun nearest(line: String) =
-                    mapOf(ItemKey("test", "8") to SearchNearest(0.9, SearchPassage("tags", 0, tags.length)))
+                    mapOf(ItemKey("test", 8) to SearchNearest(0.9, SearchPassage("tags", 0, tags.length)))
 
                 override fun documents(keys: Collection<ItemKey>) =
                     listOf(doc).filter { it.key in keys }.associateBy { it.key }
@@ -123,7 +123,7 @@ class LuceneSearchTest {
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", sequenceOf(doc))
             val found = search.search("books", "голышом", "ru", byMeaning)
-            val shown = search.matches("books", found, found.keys, byMeaning).getValue(ItemKey("test", "8"))
+            val shown = search.matches("books", found, found.keys, byMeaning).getValue(ItemKey("test", 8))
             assertEquals("tags", shown.field)
             assertEquals(tags, shown.text)
         }
@@ -143,14 +143,14 @@ class LuceneSearchTest {
             }
         val long =
             SearchDocument(
-                ItemKey("test", "7"),
+                ItemKey("test", 7),
                 listOf(SearchField("title", "Название", 1.0f, listOf("Долгая сага"), naming = true)) + chapters,
                 "ru",
             )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", sequenceOf(long))
             val found = search.search("books", "прошёл день", "ru", context)
-            assertEquals(listOf("7"), found.keys.map { it.id })
+            assertEquals(listOf(7L), found.keys.map { it.id })
         }
     }
 
@@ -185,14 +185,14 @@ class LuceneSearchTest {
         }
         // Another run: the index opened again as it was left
         LuceneIndex(dir.resolve("types").resolve("books").resolve("search-index")).use { index ->
-            val changed = listOf(documents[0], doc("2", "Beach Night", "Somebody", "The night at the beach."))
+            val changed = listOf(documents[0], doc(2, "Beach Night", "Somebody", "The night at the beach."))
             val asked = ArrayList<ItemKey>()
             assertEquals(1, update(index, changed, asked, documents.map { it.key } - changed.map { it.key }.toSet()))
-            assertEquals(listOf(ItemKey("test", "2")), asked)
+            assertEquals(listOf(ItemKey("test", 2)), asked)
             index.search { searcher -> assertEquals(2, index.items(searcher)) }
         }
         LuceneSearch(dir).use { search ->
-            assertEquals(listOf("2"), search.search("books", "night", "en", context).keys.map { it.id })
+            assertEquals(listOf(2L), search.search("books", "night", "en", context).keys.map { it.id })
             assertTrue(search.search("books", "драконы", "ru", context).keys.isEmpty())
         }
     }
@@ -201,7 +201,7 @@ class LuceneSearchTest {
     fun `an update is found without a rebuild`() {
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", documents.take(1).asSequence())
-            val added = doc("9", "Lighthouse Keeper", "Nobody", "A quiet game about a lighthouse.")
+            val added = doc(9, "Lighthouse Keeper", "Nobody", "A quiet game about a lighthouse.")
             val asked = mutableListOf<Collection<ItemKey>>()
             val made = { keys: Collection<ItemKey> ->
                 asked += keys
@@ -209,18 +209,18 @@ class LuceneSearchTest {
             }
             val prints = mapOf(added.key to DocumentPrints.of(added))
             assertEquals(1, search.update("books", prints, made, emptyList()))
-            assertEquals(listOf("9"), search.search("books", "lighthouse", "en", context).keys.map { it.id })
+            assertEquals(listOf(9L), search.search("books", "lighthouse", "en", context).keys.map { it.id })
             // Of the same fingerprint again, no document is made: nothing it is made of changed
             assertEquals(0, search.update("books", prints, made, emptyList()))
             assertEquals(listOf(listOf(added.key)), asked.map { it.toList() })
-            search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", "9")))
+            search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", 9)))
             assertTrue(search.search("books", "lighthouse", "en", context).keys.isEmpty())
         }
     }
 
     @Test
     fun `a chapter a card names alone is read only where the index holds the line's words`() {
-        val key = ItemKey("test", "6")
+        val key = ItemKey("test", 6)
         val chapters =
             mapOf(
                 "part:1" to "Дождь шёл всю ночь, и никто не выходил из дома до самого утра.",

@@ -40,7 +40,7 @@ class TasksController(
         type: String?,
         source: String?,
         facet: String?,
-        item: String?,
+        item: Long?,
     ): ResponseEntity<QueuedTask> {
         val work = Task(what, type, source, facet, item)
         val found =

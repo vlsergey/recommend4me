@@ -108,7 +108,7 @@ class Ffn : Source {
     /** An author of the site by their own page, "https://www.fanfiction.net/u/123/Name". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
-    override fun itemIdOf(url: String): String? = workIdOf(url)
+    override fun siteIdOf(url: String): String? = workIdOf(url)
 
     override val pageDecor =
         PageDecor(
@@ -126,7 +126,7 @@ class Ffn : Source {
             nextPage = "#content_wrapper_inner > center > a:last-child",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> =
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> =
         FfnPages(context.items, context.database).read(page)
 
     companion object {

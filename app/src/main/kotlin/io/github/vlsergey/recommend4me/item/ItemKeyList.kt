@@ -8,7 +8,7 @@ import org.jooq.SelectJoinStep
 import org.jooq.impl.DSL
 
 /** What the list sorts and filters by. */
-data class ItemKeys(val id: String, val version: String, val updatedAt: Instant, val firstSeenAt: Instant)
+data class ItemKeys(val id: Long, val version: String, val updatedAt: Instant, val firstSeenAt: Instant)
 
 /**
  * THE KEYS OF THE ITEMS OF A SOURCE — what the list of a content type sorts and filters by: id, version, update, when
@@ -22,10 +22,10 @@ interface ItemKeyList {
      * The keys of the items after the item [after] — from the first when null — in the order of their ids, [count] at
      * most: every item read a portion at a time, each a query by the table's key, no cursor held between them.
      */
-    fun keysAfter(after: String?, count: Int): List<ItemKeys>
+    fun keysAfter(after: Long?, count: Int): List<ItemKeys>
 
     /** The keys of the items [ids], a batch of them a query. */
-    fun keysOf(ids: Collection<String>): List<ItemKeys>
+    fun keysOf(ids: Collection<Long>): List<ItemKeys>
 }
 
 /** The [ItemKeyList] of the source database [db]. */
@@ -33,21 +33,21 @@ internal class ItemKeyRepository(private val db: DSLContext) : ItemKeyList {
 
     override fun keys(): List<ItemKeys> = select().fetchSize(STREAMED_ROWS).fetch(::keysOf)
 
-    override fun keysAfter(after: String?, count: Int): List<ItemKeys> =
+    override fun keysAfter(after: Long?, count: Int): List<ItemKeys> =
         select()
-            .where(after?.let { ITEM.SITE_ID.gt(it) } ?: DSL.noCondition())
-            .orderBy(ITEM.SITE_ID)
+            .where(after?.let { ITEM.INTERNAL_ID.gt(it) } ?: DSL.noCondition())
+            .orderBy(ITEM.INTERNAL_ID)
             .limit(count)
             .fetch(::keysOf)
 
-    override fun keysOf(ids: Collection<String>): List<ItemKeys> =
+    override fun keysOf(ids: Collection<Long>): List<ItemKeys> =
         ids.distinct().chunked(ITEM_BATCH).flatMap { chunk ->
-            select().where(ITEM.SITE_ID.`in`(chunk)).fetch(::keysOf)
+            select().where(ITEM.INTERNAL_ID.`in`(chunk)).fetch(::keysOf)
         }
 
-    private fun select(): SelectJoinStep<Record4<String?, String?, Instant?, Instant?>> =
-        db.select(ITEM.SITE_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT).from(ITEM)
+    private fun select(): SelectJoinStep<Record4<Long?, String?, Instant?, Instant?>> =
+        db.select(ITEM.INTERNAL_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT).from(ITEM)
 
-    private fun keysOf(r: Record4<String?, String?, Instant?, Instant?>) =
+    private fun keysOf(r: Record4<Long?, String?, Instant?, Instant?>) =
         ItemKeys(r.value1()!!, r.value2()!!, r.value3()!!, r.value4()!!)
 }

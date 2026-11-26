@@ -40,23 +40,18 @@ class AuthorTodayPages(context: SourceContext) {
     private val reader = AuthorTodayReader(items)
     private val series = AuthorTodaySeries(items)
 
-    fun read(page: CapturedPage): List<String> {
+    /** The works the page wrote, by their numbers. */
+    fun read(page: CapturedPage): List<Long> {
         val doc = Jsoup.parse(page.html, page.url)
         val path = runCatching { URI(page.url).path }.getOrDefault("")
         // The user's own marks are shown only to a user who is logged in: a guest's page says nothing of them
         val loggedIn = LOGGED_IN.find(page.html)?.groupValues?.get(1) == "true"
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += cards(doc, page.capturedAt, loggedIn)
         // A series' own page, and an author's list of series: after the cards, whose works they list
         AuthorTodaySeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (AUTHOR_SERIES.matches(path)) series.list(doc)
-        WORK.matchEntire(path)?.let { m ->
-            val id = m.groupValues[1]
-            when (m.groupValues[2]) {
-                "" -> work(doc, page.html, id, page.capturedAt, loggedIn)?.let { touched += it }
-                "/reviews" -> if (reviews.list(doc, id)) touched += id
-            }
-        }
+        WORK.matchEntire(path)?.let { m -> workPage(doc, page, m, loggedIn)?.let { touched += it } }
         REVIEW.matchEntire(path)?.let { m -> reviews.review(doc, m.groupValues[1])?.let { touched += it } }
         READER.matchEntire(path)?.let { m ->
             // "Read" opens the reader at the work alone, "/reader/676118": the chapter it shows is the page's
@@ -65,6 +60,19 @@ class AuthorTodayPages(context: SourceContext) {
             if (chapter != null) reader.chapter(doc, m.groupValues[1], chapter, page.capturedAt)?.let { touched += it }
         }
         return touched.toList()
+    }
+
+    /**
+     * A work's own page [m] — the work's, or its list of reviews, of a work known — written: the work's number; none of
+     * a page that told nothing.
+     */
+    private fun workPage(doc: Document, page: CapturedPage, m: MatchResult, loggedIn: Boolean): Long? {
+        val site = m.groupValues[1]
+        return when (m.groupValues[2]) {
+            "" -> work(doc, page.html, site, page.capturedAt, loggedIn)
+            "/reviews" -> items.idOf(site)?.takeIf { reviews.list(doc, it) }
+            else -> null
+        }
     }
 
     /** The chapter of [workId] the reader's page names as its canonical address. */
@@ -77,26 +85,25 @@ class AuthorTodayPages(context: SourceContext) {
     // --- Cards of a list ---
 
     /** Every card of a work on the page. */
-    private fun cards(doc: Document, now: Instant, loggedIn: Boolean): List<String> =
+    private fun cards(doc: Document, now: Instant, loggedIn: Boolean): List<Long> =
         doc.select(".book-row").mapNotNull { card ->
             cardHead(card, now)?.also { id -> cardFields(card, id, loggedIn) }
         }
 
-    /** The work a card is of, written with its title and day: its id; none of a card that names no work. */
-    private fun cardHead(card: Element, now: Instant): String? {
+    /** The work a card is of, written with its title and day: its number; none of a card that names no work. */
+    private fun cardHead(card: Element, now: Instant): Long? {
         val link = card.selectFirst(".book-title a[href^=/work/]")
-        val id = link?.let { WORK_ID.find(it.attr("href"))?.groupValues?.get(1) }
+        val site = link?.let { WORK_ID.find(it.attr("href"))?.groupValues?.get(1) }
         val title = link?.text()?.trim()?.ifEmpty { null }
-        if (id == null || title == null) return null
-        items.upsert(ItemHead(id, "$BASE/work/$id", title, updatedAt = WorkBlock(card).updatedAt()), now)
-        return id
+        if (site == null || title == null) return null
+        return items.upsert(ItemHead(site, "$BASE/work/$site", title, updatedAt = WorkBlock(card).updatedAt()), now).id
     }
 
     /**
      * What a card tells of its work [id] besides its head: the fields, the numbers, the annotation, the cover — and, to
      * the user [loggedIn], the shelf of the library.
      */
-    private fun cardFields(card: Element, id: String, loggedIn: Boolean) {
+    private fun cardFields(card: Element, id: Long, loggedIn: Boolean) {
         val block = WorkBlock(card)
         block.authors(".book-author a[href^=/u/]").takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
         AuthorTodayGenres.genresIn(card.select(".book-genres a[href^=/work/genre/]")).let { (form, genres) ->
@@ -125,7 +132,7 @@ class AuthorTodayPages(context: SourceContext) {
      * The age ratings the site lets the work have: its "18+" is NC-17 to NC-21, its lack G to R; which one, the model
      * works out of the tags (user, 2026-10-26).
      */
-    private fun ageRating(id: String, adult: Boolean) {
+    private fun ageRating(id: Long, adult: Boolean) {
         AgeRating.write(
             items,
             id,
@@ -136,12 +143,13 @@ class AuthorTodayPages(context: SourceContext) {
 
     // --- A work's page ---
 
-    private fun work(doc: Document, html: String, id: String, now: Instant, loggedIn: Boolean): String? {
+    /** A work's page, of the work the site names [site]: its number; none of a page without its panel. */
+    private fun work(doc: Document, html: String, site: String, now: Instant, loggedIn: Boolean): Long? {
         val panel = doc.selectFirst(".book-meta-panel")
         val title = panel?.selectFirst(".book-title")?.text()?.trim()?.ifEmpty { null }
         if (panel == null || title == null) return null
         val block = WorkBlock(panel)
-        items.upsert(ItemHead(id, "$BASE/work/$id", title, updatedAt = block.updatedAt()), now)
+        val id = items.upsert(ItemHead(site, "$BASE/work/$site", title, updatedAt = block.updatedAt()), now).id
         block.authors(".book-authors a[href^=/u/]").takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
         val (form, genres) = AuthorTodayGenres.genresIn(panel.select(".book-genres a[href^=/work/genre/]"))
         // The tags of the block of them; no block — a changed markup — is no word that the work has none
@@ -172,7 +180,7 @@ class AuthorTodayPages(context: SourceContext) {
      * The numbers of the work its page shows: its size and views on its [panel], the likes of its like button ([like])
      * or of the panel, the comments, the reviews and the awards; whether its comments are closed ([commentsClosed]).
      */
-    private fun workNumbers(doc: Document, block: WorkBlock, panel: Element, id: String, like: MatchResult?) {
+    private fun workNumbers(doc: Document, block: WorkBlock, panel: Element, id: Long, like: MatchResult?) {
         items.setNumbers(
             id,
             listOfNotNull(
@@ -197,7 +205,7 @@ class AuthorTodayPages(context: SourceContext) {
     }
 
     /** The annotation and the author's notes of the work's tab of texts. */
-    private fun workTexts(doc: Document, id: String) {
+    private fun workTexts(doc: Document, id: Long) {
         // The texts of the tab of them; no tab — a changed markup — is no word that the work has none
         if (doc.selectFirst("#tab-annotation") == null) return
         val annotation = doc.select("#tab-annotation .annotation .rich-content")
@@ -217,7 +225,7 @@ class AuthorTodayPages(context: SourceContext) {
      * The chapters the work's table of contents names, each with the day it came out, without their texts: every
      * chapter the work has on the site — one it no longer names is taken off it.
      */
-    private fun chapters(doc: Document, id: String) {
+    private fun chapters(doc: Document, id: Long) {
         val parts =
             doc.select("#tab-chapters .table-of-content li").mapIndexedNotNull { i, li ->
                 val a = li.selectFirst("a[href^=/reader/]") ?: return@mapIndexedNotNull null

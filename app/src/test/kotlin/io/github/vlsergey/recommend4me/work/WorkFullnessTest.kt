@@ -21,34 +21,34 @@ class WorkFullnessTest {
         Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
             val works = WorkRepository(dictionaries.dsl)
             val now = Instant.now()
-            works.bindNew("a", mapOf("1" to "v", "2" to "v"), now)
-            works.bindNew("b", mapOf("3" to "v"), now)
-            assertEquals(listOf("1", "2"), works.unmeasured("a"))
-            works.measured("a", mapOf("1" to 5L, "2" to 70L), emptySet())
-            works.membership.merge(works.of(ItemKey("a", "2"), now), works.of(ItemKey("a", "1"), now), now)
-            works.membership.merge(works.of(ItemKey("b", "3"), now), works.of(ItemKey("a", "1"), now), now)
+            works.bindNew("a", mapOf(1L to "v", 2L to "v"), now)
+            works.bindNew("b", mapOf(3L to "v"), now)
+            assertEquals(listOf(1L, 2L), works.unmeasured("a"))
+            works.measured("a", mapOf(1L to 5L, 2L to 70L), emptySet())
+            works.membership.merge(works.of(ItemKey("a", 2), now), works.of(ItemKey("a", 1), now), now)
+            works.membership.merge(works.of(ItemKey("b", 3), now), works.of(ItemKey("a", 1), now), now)
 
             // Never measured, last; the one saying the most first
             val clusters = WorkClusters.of(works.groups(listOf("a", "b")).values.toList())
             assertEquals(
-                listOf(ItemKey("a", "2"), ItemKey("a", "1"), ItemKey("b", "3")),
-                clusters.fullestFirst(ItemKey("b", "3")),
+                listOf(ItemKey("a", 2), ItemKey("a", 1), ItemKey("b", 3)),
+                clusters.fullestFirst(ItemKey("b", 3)),
             )
-            assertEquals(ItemKey("a", "2"), clusters.shown(ItemKey("a", "1")))
-            assertEquals(ItemKey("a", "1"), clusters.representative(ItemKey("b", "3")))
+            assertEquals(ItemKey("a", 2), clusters.shown(ItemKey("a", 1)))
+            assertEquals(ItemKey("a", 1), clusters.representative(ItemKey("b", 3)))
 
-            works.measured("b", mapOf("3" to 900L), emptySet())
+            works.measured("b", mapOf(3L to 900L), emptySet())
             assertEquals(emptyList(), works.unmeasured("b"))
             assertEquals(
-                ItemKey("b", "3"),
-                WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).shown(ItemKey("a", "2")),
+                ItemKey("b", 3),
+                WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).shown(ItemKey("a", 2)),
             )
 
             // A finished book's page first, though the others say more
-            works.measured("a", mapOf("1" to 5L, "2" to 70L), setOf("1"))
+            works.measured("a", mapOf(1L to 5L, 2L to 70L), setOf(1L))
             assertEquals(
-                listOf(ItemKey("a", "1"), ItemKey("b", "3"), ItemKey("a", "2")),
-                WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).fullestFirst(ItemKey("a", "2")),
+                listOf(ItemKey("a", 1), ItemKey("b", 3), ItemKey("a", 2)),
+                WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).fullestFirst(ItemKey("a", 2)),
             )
         }
     }

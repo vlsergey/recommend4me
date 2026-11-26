@@ -8,7 +8,7 @@ import java.time.Instant
 import org.jooq.DSLContext
 
 /** The user's word that whether the work [itemId] has the value [key] of the [facet] is not clear of it. */
-data class Unknown(val itemId: String, val facet: String, val key: String, val saidAt: Instant)
+data class Unknown(val itemId: Long, val facet: String, val key: String, val saidAt: Instant)
 
 /**
  * The user's word, of the normalized works (in the dictionaries) as the items of one source see them, that whether a
@@ -17,7 +17,7 @@ data class Unknown(val itemId: String, val facet: String, val key: String, val s
  */
 class UnknownRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
-    fun say(itemId: String, facet: String, key: String, now: Instant) {
+    fun say(itemId: Long, facet: String, key: String, now: Instant) {
         val u = WORK_FACET_UNKNOWN
         db.insertInto(u)
             .set(u.WORK, works.of(ItemKey(source, itemId), now))
@@ -29,7 +29,7 @@ class UnknownRepository(private val db: DSLContext, private val source: String, 
             .execute()
     }
 
-    fun forget(itemId: String, facet: String, key: String) {
+    fun forget(itemId: Long, facet: String, key: String) {
         val u = WORK_FACET_UNKNOWN
         db.deleteFrom(u)
             .where(u.WORK.eq(works.of(ItemKey(source, itemId), Instant.now())), u.FACET.eq(facet), u.VALUE_KEY.eq(key))

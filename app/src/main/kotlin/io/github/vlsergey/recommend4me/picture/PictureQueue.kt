@@ -18,7 +18,7 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
      * [encoder] or of an item in [keep]; not failed, or failed and due to be tried again. In the order of [itemIds],
      * every picture of an item together.
      */
-    fun pendingOf(itemIds: List<String>, encoder: String, keep: Set<String>, limit: Int): List<Picture> {
+    fun pendingOf(itemIds: List<Long>, encoder: String, keep: Set<Long>, limit: Int): List<Picture> {
         if (itemIds.isEmpty()) return emptyList()
         val out = ArrayList<Picture>()
         itemIds.chunked(PICTURES_BATCH).forEach { chunk ->
@@ -27,7 +27,11 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
             val keepHere = chunk.filter { it in keep }
             out +=
                 db.selectFrom(PICTURE)
-                    .where(PICTURE.ITEM_ID.`in`(chunk), due(), PICTURE.FULL_FILE.isNull)
+                    .where(
+                        PICTURE.ITEM_ID.`in`(chunk),
+                        due(),
+                        PICTURE.FULL_FILE.isNull,
+                    )
                     .and(
                         analyzedBy(encoder)
                             .not()
@@ -42,30 +46,34 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
     /**
      * The items with a picture not analysed by [encoder] yet and not downloaded (not failed, or due to be tried again).
      */
-    fun itemsWithPending(encoder: String): Set<String> =
+    fun itemsWithPending(encoder: String): Set<Long> =
         db.selectDistinct(PICTURE.ITEM_ID)
             .from(PICTURE)
             .where(due(), analyzedBy(encoder).not(), PICTURE.FULL_FILE.isNull)
             .fetchSet { it.value1()!! }
 
     /** The pictures of the items [itemIds] downloaded — their original on disk — and not analysed by [encoder] yet. */
-    fun downloadedOf(itemIds: Collection<String>, encoder: String): List<Picture> =
+    fun downloadedOf(itemIds: Collection<Long>, encoder: String): List<Picture> =
         itemIds.distinct().chunked(PICTURES_BATCH).flatMap { chunk ->
             db.selectFrom(PICTURE)
-                .where(PICTURE.ITEM_ID.`in`(chunk), PICTURE.FULL_FILE.isNotNull, analyzedBy(encoder).not())
+                .where(
+                    PICTURE.ITEM_ID.`in`(chunk),
+                    PICTURE.FULL_FILE.isNotNull,
+                    analyzedBy(encoder).not(),
+                )
                 .orderBy(PICTURE.ITEM_ID, PICTURE.POSITION)
                 .fetch { pictureOf(it, encoder) }
         }
 
     /** The items with a picture downloaded and not analysed by [encoder] yet. */
-    fun itemsDownloaded(encoder: String): Set<String> =
+    fun itemsDownloaded(encoder: String): Set<Long> =
         db.selectDistinct(PICTURE.ITEM_ID)
             .from(PICTURE)
             .where(PICTURE.FULL_FILE.isNotNull, analyzedBy(encoder).not())
             .fetchSet { it.value1()!! }
 
     /** The picture downloaded: its files on disk, whatever failed before past. */
-    fun saveDownloaded(itemId: String, position: Int, previewFile: String?, fullFile: String) {
+    fun saveDownloaded(itemId: Long, position: Int, previewFile: String?, fullFile: String) {
         db.update(PICTURE)
             .set(PICTURE.PREVIEW_FILE, previewFile)
             .set(PICTURE.FULL_FILE, fullFile)
@@ -81,7 +89,7 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
      * again — and whatever failed before past.
      */
     fun saveAnalysis(
-        itemId: String,
+        itemId: Long,
         position: Int,
         vector: FloatArray?,
         encoder: String,
@@ -111,7 +119,7 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
      * The picture's download failed the [failures]-th time in a row: tried again at [retryAt], never when it is null —
      * a picture that cannot be decoded, or is gone (404).
      */
-    fun saveError(itemId: String, position: Int, error: String, failures: Int, retryAt: Instant?) {
+    fun saveError(itemId: Long, position: Int, error: String, failures: Int, retryAt: Instant?) {
         db.update(PICTURE)
             .set(PICTURE.ERROR, error.take(ERROR_LENGTH))
             .set(PICTURE.FAILURES, failures)

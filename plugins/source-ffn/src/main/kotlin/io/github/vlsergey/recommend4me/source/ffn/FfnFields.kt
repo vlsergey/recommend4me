@@ -26,7 +26,7 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
      * What the site's line of a work tells ([FfnLine]): its rating, language, genres as its tags, characters and
      * pairings, status and numbers; its fandoms of a line that names them.
      */
-    fun line(id: String, line: FfnLine) {
+    fun line(id: Long, line: FfnLine) {
         if (line.fandoms.isNotEmpty()) fandoms(id, line.fandoms)
         line.crossover?.let(directory::crossover)?.let { fandoms(id, it) }
         line.rating?.let { r -> RATINGS[r]?.let { AgeRating.write(items, id, listOf(it)) } }
@@ -47,7 +47,7 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
      * The work's fandoms by their names, each of its archive's path — the one the page links ([known]), else the one
      * kept of its name ([FfnFandoms.keysOf]); every work of the site is fan fiction.
      */
-    fun fandoms(id: String, names: List<String>, known: Map<String, String> = emptyMap()) {
+    fun fandoms(id: Long, names: List<String>, known: Map<String, String> = emptyMap()) {
         val fandoms = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (fandoms.isEmpty()) return
         val had = items.facets(id)[FANDOM].orEmpty()
@@ -67,7 +67,7 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
     fun learn(paths: Map<String, String>) {
         val fresh = directory.learn(paths)
         if (fresh.isEmpty()) return
-        val named = ArrayList<Pair<String, List<String>>>()
+        val named = ArrayList<Pair<Long, List<String>>>()
         items.forEachFacet(FANDOM) { id, keys -> if (keys.any { it in fresh }) named += id to keys }
         named.forEach { (id, keys) ->
             val now = directory.keysOf(keys)
@@ -77,7 +77,7 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
     }
 
     /** The site's section the work's fandom is in: "Books", "Anime/Manga". */
-    fun category(id: String, name: String) = items.setFacet(id, CATEGORY, listOf(FacetValue(name, name)))
+    fun category(id: Long, name: String) = items.setFacet(id, CATEGORY, listOf(FacetValue(name, name)))
 
     companion object {
         /**

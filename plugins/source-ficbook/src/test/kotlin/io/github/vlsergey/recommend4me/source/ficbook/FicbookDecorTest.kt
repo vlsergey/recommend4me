@@ -22,11 +22,11 @@ class FicbookDecorTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals(work, source.itemIdOf("https://ficbook.net/readfic/$work"))
-        assertEquals(work, source.itemIdOf("https://ficbook.net/readfic/$work/12345#part_content"))
-        assertEquals(work, source.itemIdOf("https://ficbook.net/readfic/$work/comments"))
-        assertEquals(work, source.itemIdOf("https://ficbook.net/readfic/$work?source=premium"))
-        assertNull(source.itemIdOf("https://ficbook.net/fanfiction/no_fandom/originals"))
+        assertEquals(work, source.siteIdOf("https://ficbook.net/readfic/$work"))
+        assertEquals(work, source.siteIdOf("https://ficbook.net/readfic/$work/12345#part_content"))
+        assertEquals(work, source.siteIdOf("https://ficbook.net/readfic/$work/comments"))
+        assertEquals(work, source.siteIdOf("https://ficbook.net/readfic/$work?source=premium"))
+        assertNull(source.siteIdOf("https://ficbook.net/fanfiction/no_fandom/originals"))
     }
 
     @Test
@@ -65,13 +65,15 @@ class FicbookDecorTest {
         val html = page("fandom-originals.html")
         val context = MemorySourceContext()
         val captured =
-            source.capture(CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", html, now), context)
+            context.sitesOf(
+                source.capture(CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", html, now), context)
+            )
         val doc = Jsoup.parse(html, "https://ficbook.net/fanfiction/no_fandom/originals")
         val cards = decor.cards!!
         val linked =
             doc.select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertTrue(linked.containsAll(captured), "$linked hold $captured")
     }
 

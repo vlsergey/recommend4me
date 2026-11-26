@@ -48,8 +48,8 @@ internal class OneFacetModel(
      * Made now as [FacetChain.chances] are, none kept, nothing waited for, a portion of the works at a time; a work the
      * facet's model does not score, or a value it does not know, has none.
      */
-    fun chancesOfValue(store: SourceStore, ids: Collection<String>, facet: String, key: String): Map<String, Double> {
-        val out = HashMap<String, Double>()
+    fun chancesOfValue(store: SourceStore, ids: Collection<Long>, facet: String, key: String): Map<Long, Double> {
+        val out = HashMap<Long, Double>()
         ids.distinct().chunked(TaskPortions.MOST).forEach { portion ->
             val scored = scoredOf(store, portion, facet)
             val v = scored?.data?.values?.indexOf(key) ?: -1
@@ -62,7 +62,7 @@ internal class OneFacetModel(
      * The [facet]'s chances of the works [ids] by the model kept, the facets before it in the chain made of them first;
      * null when the source has no such facet, it was never fitted, or there is nothing to read with.
      */
-    private fun scoredOf(store: SourceStore, ids: Collection<String>, facet: String): FacetChain.Scored? {
+    private fun scoredOf(store: SourceStore, ids: Collection<Long>, facet: String): FacetChain.Scored? {
         val facets = chain.facetsOf(store)
         val k = facets.indexOfFirst { it.key == facet }
         val suggester = plugins.suggester(store.id, facet)
@@ -77,10 +77,10 @@ internal class OneFacetModel(
      * The scores of the value [v] of every work of [ids] among the works [scored], a chunk of them at a time, the
      * database refused; the scores closed after.
      */
-    private fun chancesOf(scored: FacetChain.Scored, ids: Collection<String>, v: Int): Map<String, Double> =
+    private fun chancesOf(scored: FacetChain.Scored, ids: Collection<Long>, v: Int): Map<Long, Double> =
         DatabaseRefused.during("the chances of one value of ${scored.data.ids.size} works") {
             scored.scores.use { scores ->
-                val out = HashMap<String, Double>()
+                val out = HashMap<Long, Double>()
                 val asked = ids.toHashSet()
                 // A work none of whose texts is encoded yet has none ([FacetData.judged])
                 scored.data.ids.indices

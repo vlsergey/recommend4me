@@ -25,7 +25,7 @@ internal class AffFields(private val items: ItemStore) {
     /**
      * The archive the work is in: its subdomain, as the site's menu names it; of the original writing, no fan fiction.
      */
-    fun archive(id: String, archive: String) {
+    fun archive(id: Long, archive: String) {
         items.setFacet(id, ARCHIVE, listOf(FacetValue(archive, AffCodes.ARCHIVES[archive] ?: archive)))
         val kind = if (archive == AffCodes.ORIGINAL) UniverseFacets.ORIGINAL else UniverseFacets.FANFICTION
         items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(kind)))
@@ -39,14 +39,14 @@ internal class AffFields(private val items: ItemStore) {
      * site sorts its nodes by ("+", "-") are not of their names. The fandom is known by its archive and its name
      * ([fandomKey]): the page of a fandom is its archive's.
      */
-    fun located(id: String, written: List<String>) {
+    fun located(id: Long, archive: String, written: List<String>) {
         val nodes = written.map(::nodeName).filter { it.isNotEmpty() }
         if (nodes.isEmpty()) return
         val path = nodes.joinToString(" » ")
         items.setFacet(id, CATEGORY, listOf(FacetValue(path.lowercase(), path)))
         val section = nodes.indexOfFirst { it.lowercase() in SECTIONS }
         val fandom = if (section < 0) nodes.last() else nodes.getOrNull(section - 1)
-        fandom?.let { items.setFacet(id, FANDOM, listOf(FacetValue(fandomKey(Aff.archiveOf(id), it), it))) }
+        fandom?.let { items.setFacet(id, FANDOM, listOf(FacetValue(fandomKey(archive, it), it))) }
         val pairings = if (section < 0) emptyList() else nodes.drop(section + 1).filter { '/' in it }
         if (pairings.isNotEmpty()) {
             items.setFacet(id, PAIRING, pairings.map(::pairing).distinctBy { it.key })
@@ -56,7 +56,7 @@ internal class AffFields(private val items: ItemStore) {
     }
 
     /** The site's rating on the age rating's scale: its four steps in order, "SFW" either of the two lowest. */
-    fun rating(id: String, written: String) {
+    fun rating(id: Long, written: String) {
         AgeRating.write(items, id, RATINGS[written.replace(Regex("\\s+"), " ").trim()].orEmpty())
     }
 
@@ -65,7 +65,7 @@ internal class AffFields(private val items: ItemStore) {
      * tag of the site — named by its short name ([AffCodes.nameOf]), as other sites name such a tag ("Angst", "BDSM"):
      * of one name, the tags of every site are one normalized tag; what the site tells of it in full its description.
      */
-    fun codes(id: String, written: List<String>) {
+    fun codes(id: Long, written: List<String>) {
         val codes = written.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val keys = codes.map { it.lowercase() }
         val status =
@@ -113,7 +113,7 @@ internal class AffFields(private val items: ItemStore) {
      * The kinds of the work's relationships, of its category's node ([section]) and of its codes ([codes]) together:
      * each tells some, neither all. Written once both are read: a card tells both.
      */
-    private fun directions(id: String, section: List<StandardValue>, codes: List<String>) {
+    private fun directions(id: Long, section: List<StandardValue>, codes: List<String>) {
         val known = items.facets(id)[DIRECTION].orEmpty()
         val told = section + codes.mapNotNull { CODED[it] }
         if (told.isEmpty()) return

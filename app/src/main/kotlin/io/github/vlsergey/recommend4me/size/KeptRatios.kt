@@ -38,9 +38,9 @@ class KeptRatios(private val weights: Map<String, Double>) {
         source: String,
         compared: ComparedValues.Compared,
         /** The words and the characters of the items that have a text counted, read only of a model kept. */
-        textsOf: () -> Map<String, Pair<Double, Double>>,
+        textsOf: () -> Map<Long, Pair<Double, Double>>,
         /** The classes of the characters of their texts, read only of a site of a rule kept. */
-        classesOf: () -> Map<String, IntArray>,
+        classesOf: () -> Map<Long, IntArray>,
     ): DoubleArray? {
         if (!fitted) return null
         val rule = ruleOf(source)

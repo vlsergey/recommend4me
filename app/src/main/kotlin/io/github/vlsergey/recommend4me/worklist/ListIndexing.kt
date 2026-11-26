@@ -56,7 +56,7 @@ class ListIndexing(
      * The [datum] of the items [ids] of the source [s] changed: dated
      * ([io.github.vlsergey.recommend4me.item.ItemChanges]), the writing planned for the [reason] the interface words.
      */
-    fun itemsChanged(s: SourceStore, ids: Collection<String>, datum: WorkDatum, reason: String) {
+    fun itemsChanged(s: SourceStore, ids: Collection<Long>, datum: WorkDatum, reason: String) {
         if (ids.isEmpty()) return
         s.changes.changed(ids, datum, Instant.now())
         plan(s.type, reason)
@@ -132,7 +132,7 @@ class ListIndexing(
         val portion = ListChanges.next(type, { works.ofKeys(type, it) }, cursors, PORTION, started.toEpochMilli())
         // The documents a change of the dictionaries reaches, compared with what their drafts make now
         val dictionary = ListDictionary.next(type, index, PORTION)
-        val named = HashMap<String, Set<String>>(portion.named)
+        val named = HashMap<String, Set<Long>>(portion.named)
         dictionary.named.forEach { (source, ids) -> named.merge(source, ids) { a, b -> a + b } }
         val clusters = works.ofKeys(type, named.flatMap { (source, ids) -> ids.map { ItemKey(source, it) } })
         val more = portion.more || dictionary.more
@@ -194,7 +194,7 @@ class ListIndexing(
      */
     private fun writeNamed(
         s: SourceStore,
-        ids: Set<String>,
+        ids: Set<Long>,
         index: ListIndex,
         clusters: WorkClusters,
         changed: MutableSet<WorkDatum>,
@@ -211,7 +211,7 @@ class ListIndexing(
             )
         val found = rows.mapTo(HashSet()) { it.key.id }
         val filters = ListRows.filterIds(s)
-        val drafted = HashSet<String>()
+        val drafted = HashSet<Long>()
         val other = rows.mapNotNull { r ->
             val before = written[r.key.id]
             when {

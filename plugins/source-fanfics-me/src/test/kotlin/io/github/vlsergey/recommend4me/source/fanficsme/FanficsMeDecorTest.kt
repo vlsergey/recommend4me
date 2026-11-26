@@ -46,13 +46,13 @@ class FanficsMeDecorTest {
     fun `every card of a list links to its work`() {
         val html = page("find.html")
         val context = MemorySourceContext()
-        val captured = source.capture(CapturedPage("https://fanfics.me/find", html, now), context)
+        val captured = context.sitesOf(source.capture(CapturedPage("https://fanfics.me/find", html, now), context))
         val doc = Jsoup.parse(html, "https://fanfics.me/find")
         val cards = decor.cards!!
         val linked =
             doc.select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertEquals(captured, linked)
     }
 }

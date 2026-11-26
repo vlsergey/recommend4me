@@ -30,7 +30,9 @@ class Scoring(
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        tasks.resumption.resumes(WRITE) { left, reason -> left.work.item?.let { planWrite(ItemKey.parse(it), reason) } }
+        tasks.resumption.resumes(WRITE) { left, reason ->
+            left.work.item?.let { planWrite(ItemKey(left.work.source!!, it), reason) }
+        }
     }
 
     /**
@@ -103,7 +105,7 @@ class Scoring(
      */
     private fun planWrite(key: ItemKey, reason: String) {
         val type = stores.typeOf(key.source)
-        tasks.plan(Task(WRITE, type = type.id, item = key.toString()), Instant.now(), reason) {
+        tasks.plan(Task(WRITE, type = type.id, source = key.source, item = key.id), Instant.now(), reason) {
             val made = predictionOf(key, null) ?: return@plan
             val index = indexes.of(type.id)
             ListPredictions.write(index, type, made.toList())

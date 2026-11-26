@@ -71,7 +71,7 @@ class Marking(
      * [characters] — the universes as the works are shown, the site's, the model's kept and the user's word on top, of
      * the index of the list; of any other, every work.
      */
-    private fun scope(s: SourceStore, characters: List<String>?, universesOf: Map<String, Set<String>>): Set<String> {
+    private fun scope(s: SourceStore, characters: List<String>?, universesOf: Map<String, Set<String>>): Set<Long> {
         val def = s.schema.facet(UniverseFacet.KEY)
         val needed = characters.orEmpty().map { universesOf[it].orEmpty() }
         return when {
@@ -118,7 +118,7 @@ class Marking(
         s: SourceStore,
         asked: Asked,
         judged: MutableList<MarkingRow>,
-        open: () -> Set<String>,
+        open: () -> Set<Long>,
     ): List<MarkingRow> {
         val answers =
             s.corrections
@@ -155,7 +155,7 @@ class Marking(
                 clusters.getValue(stores.typeOf(r.store.id)).members(ItemKey(r.store.id, r.id)).drop(1)
         }
         val linked = linkedItems(others.values.flatten())
-        val out = HashMap<Pair<String, String>, MarkedWork>()
+        val out = HashMap<Pair<String, Long>, MarkedWork>()
         rows
             .groupBy { it.store }
             .forEach { (s, own) ->
@@ -233,7 +233,7 @@ class Marking(
     }
 
     /** The work of the source, the facet of its layer; refused or none as [works] refuses them. */
-    private fun storeOf(source: String, item: String, facet: String, value: String): SourceStore? {
+    private fun storeOf(source: String, item: Long, facet: String, value: String): SourceStore? {
         val store =
             sourcesOf(facet).firstOrNull { it.id == source }
                 ?: throw Refusal.NO_FIELD.refuse(
@@ -250,7 +250,7 @@ class Marking(
      * original ones aside) as the work's main ones; NO — answered so, of a pairing its characters as they are; UNKNOWN
      * — the answer taken back, asked so no more. False when there is no such work.
      */
-    fun answer(source: String, item: String, facet: String, value: String, verdict: MarkVerdict): Boolean {
+    fun answer(source: String, item: Long, facet: String, value: String, verdict: MarkVerdict): Boolean {
         val store = storeOf(source, item, facet, value) ?: return false
         val had = store.corrections.facetsOf(item).any { it.facet == facet && it.key == value }
         when (verdict) {
@@ -287,7 +287,7 @@ class Marking(
     /**
      * The user's word on whether the work has the value taken back, whatever it was. False when there is no such work.
      */
-    fun unanswer(source: String, item: String, facet: String, value: String): Boolean {
+    fun unanswer(source: String, item: Long, facet: String, value: String): Boolean {
         val store = storeOf(source, item, facet, value) ?: return false
         val had = store.corrections.facetsOf(item).any { it.facet == facet && it.key == value }
         answering.answered(store, item, if (had) listOf(facet) else emptyList()) {

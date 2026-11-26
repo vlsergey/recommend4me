@@ -37,7 +37,7 @@ private fun siteField(store: SourceStore, def: FacetDef) =
     )
 
 /** The source [source] when it has the item [item]; null when it has not. */
-private fun Stores.withItem(source: String, item: String): SourceStore? =
+private fun Stores.withItem(source: String, item: Long): SourceStore? =
     source(source)?.takeIf { it.items.find(item) != null }
 
 /**
@@ -85,7 +85,7 @@ private fun knownField(store: SourceStore, field: String): Boolean =
  * The work [other] of a source is joined with the work [item] of the [store]: refused of two content types, and of a
  * work with itself.
  */
-private fun refuseJoin(store: SourceStore, item: String, other: SourceStore, otherItem: String) {
+private fun refuseJoin(store: SourceStore, item: Long, other: SourceStore, otherItem: Long) {
     if (other.type != store.type) {
         throw Refusal.JOIN_TYPES.refuse(
             HttpStatus.BAD_REQUEST,
@@ -118,7 +118,7 @@ class CorrectionsController(
     private val answering: Answering,
 ) : CorrectionsApi {
 
-    private fun corrected(store: SourceStore, item: String): ResponseEntity<ItemDetails> {
+    private fun corrected(store: SourceStore, item: Long): ResponseEntity<ItemDetails> {
         events.publishEvent(WorkChangeEvent(store.id, listOf(item)))
         recommendations.scheduleRetrain(store.type, "correction")
         // Its chances made of the change as the work is read
@@ -127,7 +127,7 @@ class CorrectionsController(
 
     override fun correctFacet(
         source: String,
-        item: String,
+        item: Long,
         facetCorrection: ApiFacetCorrection,
     ): ResponseEntity<FacetAnswer> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
@@ -162,7 +162,7 @@ class CorrectionsController(
 
     override fun uncorrectFacet(
         source: String,
-        item: String,
+        item: Long,
         facet: String,
         key: String,
     ): ResponseEntity<FacetAnswer> {
@@ -171,17 +171,17 @@ class CorrectionsController(
         return ResponseEntity.ok(FacetAnswer(facet, key, AnsweredFacets.of(store, item, facet)))
     }
 
-    override fun completeFacet(source: String, item: String, facet: String): ResponseEntity<Unit> =
+    override fun completeFacet(source: String, item: Long, facet: String): ResponseEntity<Unit> =
         complete(source, item, facet, true)
 
-    override fun uncompleteFacet(source: String, item: String, facet: String): ResponseEntity<Unit> =
+    override fun uncompleteFacet(source: String, item: Long, facet: String): ResponseEntity<Unit> =
         complete(source, item, facet, false)
 
     /**
      * The user's word that the item's values of the [facet] are all named, or its taking back; the facet's chances made
      * current apart.
      */
-    private fun complete(source: String, item: String, facet: String, complete: Boolean): ResponseEntity<Unit> {
+    private fun complete(source: String, item: Long, facet: String, complete: Boolean): ResponseEntity<Unit> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         editableFacet(store, facet)
         answering.answered(store, item, listOf(facet)) {
@@ -192,7 +192,7 @@ class CorrectionsController(
 
     override fun correctField(
         source: String,
-        item: String,
+        item: Long,
         field: String,
         fieldCorrection: FieldCorrection,
     ): ResponseEntity<ItemDetails> {
@@ -202,13 +202,13 @@ class CorrectionsController(
         return corrected(store, item)
     }
 
-    override fun uncorrectField(source: String, item: String, field: String): ResponseEntity<ItemDetails> {
+    override fun uncorrectField(source: String, item: Long, field: String): ResponseEntity<ItemDetails> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         store.corrections.unsetField(item, field)
         return corrected(store, item)
     }
 
-    override fun linkItem(source: String, item: String, itemRef: ItemRef): ResponseEntity<ItemDetails> {
+    override fun linkItem(source: String, item: Long, itemRef: ItemRef): ResponseEntity<ItemDetails> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         val other =
             stores.withItem(itemRef.source, itemRef.item)
@@ -224,9 +224,9 @@ class CorrectionsController(
 
     override fun unlinkItem(
         source: String,
-        item: String,
+        item: Long,
         otherSource: String,
-        otherItem: String,
+        otherItem: Long,
     ): ResponseEntity<ItemDetails> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         stores.typeOf(source).links.unlink(ItemKey(source, item), ItemKey(otherSource, otherItem), Instant.now())

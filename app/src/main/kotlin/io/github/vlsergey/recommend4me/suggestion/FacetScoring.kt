@@ -31,7 +31,7 @@ internal class FacetScoring {
         var given = 0L
         var wide = 0
         var most = 0
-        var mostOf: String? = null
+        var mostOf: Long? = null
     }
 
     /** Every work of the [pass] scored by the [model], its cutoff made anew; nothing of a model of no calibration. */

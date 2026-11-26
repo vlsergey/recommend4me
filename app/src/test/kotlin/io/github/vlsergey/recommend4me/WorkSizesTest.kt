@@ -41,47 +41,49 @@ class WorkSizesTest : SiteTestBase() {
     fun `a number the site states shown as it is, the other worked out by the words per character the texts teach`() {
         captureOn(A, "z1|The Long Road|river|A road along a river||")
         captureOn(B, "z2|The Short Road|river|A road along a brook||")
+        // The works by the application's numbers of them
+        val z1 = idOf(A, "z1")
+        val z2 = idOf(B, "z2")
         val type = stores.type(TYPE)!!
         val a = stores.source(A)!!
         val b = stores.source(B)!!
-        a.items.setNumbers("z1", mapOf("words" to 900.0))
-        b.items.setNumbers("z2", mapOf("chars" to 6000.0))
+        a.items.setNumbers(z1, mapOf("words" to 900.0))
+        b.items.setNumbers(z2, mapOf("chars" to 6000.0))
         // Words of five letters and a space: one word to six characters
-        a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
+        a.parts.save(z1, listOf(PartData("1", 0, null, "слово ".repeat(1000))))
         // Written past the application's events: their documents of the index of the list, which the model reads, made
-        listIndexing.itemsChanged(a, listOf("z1"), WorkDatum.DATA, "items")
-        listIndexing.itemsChanged(b, listOf("z2"), WorkDatum.DATA, "items")
+        listIndexing.itemsChanged(a, listOf(z1), WorkDatum.DATA, "items")
+        listIndexing.itemsChanged(b, listOf(z2), WorkDatum.DATA, "items")
         background.run()
         sizeLearning.fit(type)
-        assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())
-        val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
+        assertEquals(1000, a.parts.counts.counted().getValue(z1).first.toInt())
+        val first = workSizes.ofItems(type, a, listOf(z1), a.items.numbersOf(listOf(z1)), emptyMap()).getValue(z1)
         assertEquals(SizeNumber(900.0, true), first.words)
         assertEquals(false, first.chars!!.stated)
         assertTrue(first.chars!!.value in 5300.0..5500.0, first.chars.toString())
-        val second =
-            workSizes.ofItems(type, b, listOf("z2"), b.items.numbersOf(listOf("z2")), emptyMap()).getValue("z2")
+        val second = workSizes.ofItems(type, b, listOf(z2), b.items.numbersOf(listOf(z2)), emptyMap()).getValue(z2)
         assertEquals(SizeNumber(6000.0, true), second.chars)
         assertEquals(false, second.words!!.stated)
         // Of the one example the model has, its ratio
         assertTrue(second.words!!.value in 950.0..1050.0, second.words.toString())
         // The search of duplicates writes the words it compared with the pair — an answered pair is kept by it —:
         // what the pairs are sorted by their size by
-        val z1 = ItemKey(A, "z1")
-        val z2 = ItemKey(B, "z2")
+        val one = ItemKey(A, z1)
+        val two = ItemKey(B, z2)
         duplicates.answerDuplicate(
             TYPE,
-            DuplicateAnswer(ItemRef(A, "z1"), ItemRef(B, "z2"), DuplicateAnswer.Verdict.DIFFERENT),
+            DuplicateAnswer(ItemRef(A, z1), ItemRef(B, z2), DuplicateAnswer.Verdict.DIFFERENT),
         )
         background.run()
         duplicates.searchDuplicates(TYPE)
         background.run()
-        val pair = type.links.ordered(z1, z2)
+        val pair = type.links.ordered(one, two)
         val kept = type.duplicates.reads.ofPairs(listOf(pair)).single()
-        val words = if (pair.first == z1) kept.words to kept.otherWords else kept.otherWords to kept.words
+        val words = if (pair.first == one) kept.words to kept.otherWords else kept.otherWords to kept.words
         assertEquals(900f, words.first)
         assertTrue(words.second!! in 950f..1050f, words.toString())
         // A text changed is counted anew as it is written, the item's sum with it
-        a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
-        assertEquals(1.0 to 5.0, a.parts.counts.counted()["z1"])
+        a.parts.save(z1, listOf(PartData("1", 0, null, "слово")))
+        assertEquals(1.0 to 5.0, a.parts.counts.counted()[z1])
     }
 }

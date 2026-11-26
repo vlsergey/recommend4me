@@ -60,8 +60,9 @@ class PagesController(
     override fun getPage(url: String): ResponseEntity<PageView> {
         val store = sourceOf(url) ?: return ResponseEntity.notFound().build()
         val decor = store.source.pageDecor
-        val itemId = runCatching { store.source.itemIdOf(url) }.getOrNull()
-        val item = itemId?.takeIf { store.items.find(it) != null }?.let { item(store, it, decor) }
+        // The site names the work of its page by its id; the application, by its own number of it
+        val itemId = runCatching { store.source.siteIdOf(url) }.getOrNull()?.let(store.items::idOf)
+        val item = itemId?.let { item(store, it, decor) }
         return ResponseEntity.ok(
             PageView(
                 source = store.id,
@@ -77,7 +78,7 @@ class PagesController(
      * The work of the item [itemId] as the site's page shows it — every step timed, told to the log: what the extension
      * waits for.
      */
-    private fun item(store: SourceStore, itemId: String, decor: PageDecor?): PageItem? {
+    private fun item(store: SourceStore, itemId: Long, decor: PageDecor?): PageItem? {
         val laps = Laps()
         val started = System.currentTimeMillis()
         val made = WholeReadRefused.during("the page's work ${store.id}/$itemId") { item(store, itemId, decor, laps) }
@@ -86,7 +87,7 @@ class PagesController(
         return made
     }
 
-    private fun item(store: SourceStore, itemId: String, decor: PageDecor?, laps: Laps): PageItem? {
+    private fun item(store: SourceStore, itemId: Long, decor: PageDecor?, laps: Laps): PageItem? {
         val key = ItemKey(store.id, itemId)
         val type = stores.typeOf(store.id)
         // Which items are one work: of this work alone, read once for the whole page
@@ -160,7 +161,7 @@ class PagesController(
             store.schema.facets.filter { it.suggest || it.infer }.map { it.key }
 
     /** The pictures of the item [itemId] with the user's marks on them. */
-    private fun picturesOf(store: SourceStore, itemId: String): List<PagePicture> {
+    private fun picturesOf(store: SourceStore, itemId: Long): List<PagePicture> {
         val marks = store.marks.pictureMarksOf(itemId)
         return store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
             PagePicture(p.position, p.url, marks.firstOrNull { it.position == p.position && it.url == p.url }?.mark)
@@ -173,13 +174,16 @@ class PagesController(
         val ids =
             cardsRequest.links.distinct().mapNotNull { link ->
                 val absolute = runCatching { base?.resolve(link)?.toString() ?: link }.getOrDefault(link)
-                runCatching { store.source.itemIdOf(absolute) }.getOrNull()?.let { link to it }
+                runCatching { store.source.siteIdOf(absolute) }.getOrNull()?.let { link to it }
             }
-        val known = store.items.heads(ids.map { it.second })
-        val keys = ids.map { it.second }.filter { it in known }.distinct().map { ItemKey(store.id, it) }
+        // The works the site names by its ids, by the application's numbers of them
+        val numbers = store.items.idsOf(ids.map { it.second })
+        val known = store.items.heads(numbers.values)
+        val keys = numbers.values.filter { it in known }.distinct().map { ItemKey(store.id, it) }
         val summaries = cards.cards(stores.typeOf(store.id), keys).associateBy { it.item }
         return ResponseEntity.ok(
-            ids.mapNotNull { (link, id) ->
+            ids.mapNotNull { (link, site) ->
+                val id = numbers[site] ?: return@mapNotNull null
                 summaries[id]?.let { s ->
                     CardView(
                         link,

@@ -155,7 +155,7 @@ class Ficbook : Source {
             else NAME_KEY + runCatching { URLDecoder.decode(key.replace("+", "%2B"), Charsets.UTF_8) }.getOrDefault(key)
         }
 
-    override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
+    override fun siteIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor =
         PageDecor(
@@ -179,7 +179,7 @@ class Ficbook : Source {
             nextPage = "nav.pagination a.arrow:has(svg.arrow-right)",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> = FicbookPages(context).read(page)
 
     /**
      * A tag by its own page, which says what it means; one known by its name alone ([NAME_KEY]) by the site's search of

@@ -29,6 +29,8 @@ class PartsOutOfDatabaseTest {
                     "INSERT INTO item (item_id, url, title, version, updated_at, first_seen_at) " +
                         "VALUES ('w1', 'u', 't', '', NOW(), NOW())"
                 )
+                // The other stores named by the works' numbers, as the tool of that move marks it (V41)
+                s.execute("CREATE TABLE works_numbered_elsewhere(at TIMESTAMP WITH TIME ZONE)")
                 s.execute(
                     "INSERT INTO part (item_id, part_id, position, content, encoder) " +
                         "VALUES ('w1', 'p1', 0, 'Lorem ipsum', 'enc')"
@@ -60,8 +62,10 @@ class PartsOutOfDatabaseTest {
                 assertNull(paragraphs[0])
                 assertEquals("h1", paragraphs[1]!!.hash)
                 val repository = PartRepository(db.dsl, store)
-                assertEquals("Lorem ipsum", repository.text("w1", "p1")!!.second)
-                assertEquals(2, repository.windows.windowCountsOf(listOf("w1"), "enc")["w1"])
+                // The works kept by their numbers since (V37-V42); the store of the parts named so by the tool of
+                // that move, not run here
+                val w1 = db.dsl.fetchValue("SELECT internal_id FROM item WHERE site_id = 'w1'") as Long
+                assertEquals(2, repository.windows.windowCountsOf(listOf(w1), "enc")[w1])
                 // The columns and the tables of the texts and the vectors gone from the file
                 val tables = db.dsl.meta().tables.map { it.name.lowercase() }
                 assertEquals(false, "part_vector" in tables || "part_paragraph_vector" in tables)

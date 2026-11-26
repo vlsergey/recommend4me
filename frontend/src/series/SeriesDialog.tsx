@@ -32,7 +32,7 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
   const [sort, setSort] = usePref<SeriesSort>("series.works.sort", "ORDER");
   // Two works dropped one on the other: made one once the user says so
   const [merging, setMerging] = useState<{ first: ItemRef; second: ItemRef } | null>(null);
-  const takeOut = async (source: string, item: string) => {
+  const takeOut = async (source: string, item: number) => {
     ensureOk(await api.DELETE("/api/types/{type}/series/works", { params: { path: { type: type.id }, query: { source, item } } }));
     await queryClient.invalidateQueries({ queryKey: seriesWindowsKey(type.id) });
     await queryClient.invalidateQueries({ queryKey: ["item"] });

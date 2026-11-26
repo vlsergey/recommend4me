@@ -9,8 +9,8 @@ class SearchSnippetTest {
 
     @Test
     fun `a work shown with the snippet judged is judged so, shown with another of it not judged at all`() {
-        val w1 = ItemKey("site", "w1")
-        val w2 = ItemKey("site", "w2")
+        val w1 = ItemKey("site", 1)
+        val w2 = ItemKey("site", 2)
         val opening = SearchSnippet("annotation", "Dragons over the castle")
         val ending = SearchSnippet("part:c9", "The dragon sleeps at last")
         val judged =

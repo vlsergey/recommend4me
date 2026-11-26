@@ -10,8 +10,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * by each: of ten thousand works a portion, a second and more a reading. Lives as long as the reading.
  */
 class EveryItemFacets(
-    val site: Map<String, Map<String, List<String>>>,
-    val corrections: Map<String, List<FacetCorrection>>,
+    val site: Map<Long, Map<String, List<String>>>,
+    val corrections: Map<Long, List<FacetCorrection>>,
 ) {
     /** The user's answers of every item in one list. */
     val allCorrections: List<FacetCorrection> by lazy { corrections.values.flatten() }
@@ -21,7 +21,7 @@ class EveryItemFacets(
          * Every value of every facet of every item of the [store], by item and facet: one pass over its table, a work's
          * facets in arrays ([WorkFacets]).
          */
-        fun siteOf(store: SourceStore): Map<String, Map<String, List<String>>> {
+        fun siteOf(store: SourceStore): Map<Long, Map<String, List<String>>> {
             val reading = WorkFacets.Reading()
             store.items.forEachFacetValue(reading::add)
             return reading.done()

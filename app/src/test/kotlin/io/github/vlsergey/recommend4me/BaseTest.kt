@@ -39,6 +39,13 @@ import org.springframework.test.context.TestPropertySource
 abstract class BaseTest {
     @Autowired lateinit var stores: Stores
 
+    /**
+     * The application's number of the work the site [source] names [siteId]: what the API, the stores and the plugins
+     * name a work by; the site's id is what the site's pages say.
+     */
+    protected fun idOf(source: String, siteId: String): Long =
+        stores.source(source)?.items?.idOf(siteId) ?: error("$source has no work $siteId")
+
     @Autowired lateinit var tasks: Tasks
 
     /**
@@ -48,6 +55,9 @@ abstract class BaseTest {
     @Autowired lateinit var background: HeldBackground
 
     companion object {
+        /** A number no work of the tests has: a work asked for that is not there. */
+        const val ABSENT_WORK = Long.MAX_VALUE
+
         @JvmStatic @BeforeAll fun clean(info: TestInfo) = TestDataFolder.clean(info.testClass.get())
     }
 }

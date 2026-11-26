@@ -17,9 +17,9 @@ internal class FanficsMeComments(private val items: ItemStore) {
      * The comments the page shows, on the work's own page and its page of comments: a quote of another comment left
      * out, and the name of the one answered that opens it.
      */
-    fun read(doc: Document, id: String, now: Instant): Boolean {
+    fun read(doc: Document, id: Long, now: Instant): Boolean {
         val list = doc.select("table.MessageBody[id^=$COMMENT_PREFIX]")
-        if (list.isEmpty() || items.find(id) == null) return false
+        if (list.isEmpty()) return false
         items.saveReviews(
             id,
             list.mapNotNull { c ->

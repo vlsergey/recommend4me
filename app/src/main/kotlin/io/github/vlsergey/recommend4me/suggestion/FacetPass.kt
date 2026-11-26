@@ -53,14 +53,14 @@ internal class FacetPass(
      * chain, whose context the facets before it make of the works' inputs ([FacetChain.before]). Of the works [only],
      * when given: the works the model learns of, not every one.
      */
-    fun forEach(inputs: Boolean, only: Collection<String>? = null, action: (Portion) -> Unit) {
-        val portion = { ids: List<String> -> read(ids, inputs, action) }
+    fun forEach(inputs: Boolean, only: Collection<Long>? = null, action: (Portion) -> Unit) {
+        val portion = { ids: List<Long> -> read(ids, inputs, action) }
         val passes = reading.passes
         if (only == null) passes.forEachPortion(store, portion) else passes.forEachPortion(only, portion)
     }
 
     /** The portion of the works [ids], read and handed to [action]. */
-    private fun read(ids: List<String>, inputs: Boolean, action: (Portion) -> Unit) {
+    private fun read(ids: List<Long>, inputs: Boolean, action: (Portion) -> Unit) {
         checkpoint()
         val withInputs = inputs || k > 0
         val passes = reading.passes
@@ -85,7 +85,7 @@ internal class FacetPass(
      * THE WALK OF THE WORKS' VALUES ALONE: what the works [only] — every work when null — tell of the value side of the
      * facet ([ValueCount]).
      */
-    fun counted(only: Collection<String>? = null): ValueCount {
+    fun counted(only: Collection<Long>? = null): ValueCount {
         val count = ValueCount(facet.key)
         forEach(inputs = false, only = only) { p ->
             val told =

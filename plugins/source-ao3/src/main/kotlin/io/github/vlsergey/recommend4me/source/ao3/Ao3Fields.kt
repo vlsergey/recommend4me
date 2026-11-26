@@ -31,7 +31,7 @@ internal class Ao3Fields(private val items: ItemStore) {
     /** The numbers of the works in their series. */
     private val series = Ao3Series(items)
 
-    fun authors(id: String, links: List<Element>) {
+    fun authors(id: Long, links: List<Element>) {
         val authors =
             links
                 .mapNotNull { a ->
@@ -42,7 +42,7 @@ internal class Ao3Fields(private val items: ItemStore) {
         if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
     }
 
-    fun fandoms(id: String, links: List<Element>) {
+    fun fandoms(id: Long, links: List<Element>) {
         val fandoms = links.map { it.text().trim() }.filter { it.isNotEmpty() }.distinct()
         if (fandoms.isEmpty()) return
         items.setFacet(id, FANDOM, fandoms.map { FacetValue(it, it) })
@@ -55,7 +55,7 @@ internal class Ao3Fields(private val items: ItemStore) {
     }
 
     /** The categories as the standard directions, shared with ficbook's; "No category" is none. */
-    fun category(id: String, written: List<String>) {
+    fun category(id: Long, written: List<String>) {
         items.setFacet(
             id,
             CATEGORY,
@@ -64,7 +64,7 @@ internal class Ao3Fields(private val items: ItemStore) {
     }
 
     /** The rating the archive states, on the age rating's scale; "Not Rated", or one unknown, tells nothing. */
-    fun rating(id: String, written: String) {
+    fun rating(id: Long, written: String) {
         AgeRating.write(items, id, listOfNotNull(RATINGS[written]))
     }
 
@@ -75,7 +75,7 @@ internal class Ao3Fields(private val items: ItemStore) {
      * and the other tags.
      */
     fun tagged(
-        id: String,
+        id: Long,
         warnings: List<Element>,
         relationships: List<Element>,
         characters: List<Element>,
@@ -108,7 +108,7 @@ internal class Ao3Fields(private val items: ItemStore) {
     }
 
     /** The work's series of the link [a], and its number there as the text around the link says ("Part 6 of"). */
-    fun series(id: String, a: Element) {
+    fun series(id: Long, a: Element) {
         val key = a.attr("href").removePrefix("/series/").substringBefore('?').substringBefore('/')
         if (key.isEmpty()) return
         items.setFacet(id, SERIES, listOf(FacetValue(key, a.text().trim())))
@@ -119,7 +119,7 @@ internal class Ao3Fields(private val items: ItemStore) {
      * The numbers of a card's or a header's statistics, and the status the chapters tell: "4/7" and "4/?" are in
      * progress.
      */
-    fun stats(id: String, dl: Element) {
+    fun stats(id: Long, dl: Element) {
         fun count(name: String) = dl.selectFirst("dd.$name")?.text()?.let(::number)
         val chapters = dl.selectFirst("dd.chapters")?.text()?.trim()
         items.setNumbers(
@@ -145,7 +145,7 @@ internal class Ao3Fields(private val items: ItemStore) {
     }
 
     /** The language the element [dd] names, its code in its `lang`; none when it names none. */
-    fun language(id: String, dd: Element) {
+    fun language(id: Long, dd: Element) {
         val name = dd.text().trim()
         if (name.isNotEmpty())
             items.setFacet(id, LANGUAGE, listOf(FacetValue(dd.attr("lang").ifEmpty { name.lowercase() }, name)))

@@ -11,16 +11,16 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /** The user's word on whether a work is interesting to read at all, and when it was said. */
-data class InterestMark(val itemId: String, val interesting: Boolean, val markedAt: Instant)
+data class InterestMark(val itemId: Long, val interesting: Boolean, val markedAt: Instant)
 
 /**
  * The interest marks of the normalized works (in the dictionaries), one a work, as the items of one source see them.
  */
 class InterestRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
-    private fun workOf(itemId: String, now: Instant) = works.of(ItemKey(source, itemId), now)
+    private fun workOf(itemId: Long, now: Instant) = works.of(ItemKey(source, itemId), now)
 
-    fun mark(itemId: String, interesting: Boolean, now: Instant) {
+    fun mark(itemId: Long, interesting: Boolean, now: Instant) {
         val i = WORK_INTEREST
         db.insertInto(i)
             .set(i.WORK, workOf(itemId, now))
@@ -32,19 +32,19 @@ class InterestRepository(private val db: DSLContext, private val source: String,
             .execute()
     }
 
-    fun ofItem(itemId: String): InterestMark? = seen(itemId).firstOrNull()
+    fun ofItem(itemId: Long): InterestMark? = seen(itemId).firstOrNull()
 
     /** Every mark the source's items have: item to mark. */
-    fun all(): Map<String, InterestMark> = seenOf(null).associateBy { it.itemId }
+    fun all(): Map<Long, InterestMark> = seenOf(null).associateBy { it.itemId }
 
     /** The marks of the items [ids]: by their ids up to a [BATCH] of them; of more, every mark read and picked from. */
-    fun ofItems(ids: Collection<String>): Map<String, InterestMark> {
+    fun ofItems(ids: Collection<Long>): Map<Long, InterestMark> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) all().filterKeys { it in asked }
         else seenOf(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked)).associateBy { it.itemId }
     }
 
-    private fun seen(itemId: String): List<InterestMark> =
+    private fun seen(itemId: Long): List<InterestMark> =
         seenOf(SITE_WORK.SOURCE.eq(source).and(SITE_WORK.ITEM.eq(itemId)))
 
     /** The marks of the source's items [items] picks — the condition on the source among it —; of all when null. */
@@ -73,7 +73,7 @@ class InterestRepository(private val db: DSLContext, private val source: String,
     }
 
     /** The mark of the work of the item taken back. */
-    fun forget(itemId: String) {
+    fun forget(itemId: Long) {
         db.deleteFrom(WORK_INTEREST).where(WORK_INTEREST.WORK.eq(workOf(itemId, Instant.now()))).execute()
     }
 }

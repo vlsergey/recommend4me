@@ -185,7 +185,7 @@ erDiagram
     }
     site_work {
         VARCHAR source PK
-        VARCHAR item PK
+        BIGINT item PK
         BIGINT normalized FK
         TIMESTAMPTZ bound_at
         VARCHAR version
@@ -342,9 +342,9 @@ erDiagram
         BIGINT id PK
         TIMESTAMPTZ said_at
         VARCHAR source
-        VARCHAR item
+        BIGINT item
         VARCHAR other_source
-        VARCHAR other_item
+        BIGINT other_item
         VARCHAR answer "null"
         VARCHAR answer_before "null"
         BOOLEAN restored
@@ -353,7 +353,7 @@ erDiagram
     work_rating {
         BIGINT work PK, FK
         VARCHAR source PK
-        VARCHAR item PK
+        BIGINT item PK
         VARCHAR version PK
         INTEGER grade
         TIMESTAMPTZ rated_at

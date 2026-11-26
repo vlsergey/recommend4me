@@ -26,13 +26,13 @@ internal class Named(val names: Map<String, List<String>>, val without: Set<Stri
 internal class Vocabulary(
     val values: Map<String, String>,
     /** The values each item may have; null of an item that may have any — of the vocabulary's, of the model's. */
-    val allowed: ((String) -> Set<String>?)?,
+    val allowed: ((Long) -> Set<String>?)?,
     /**
      * The names a work's own words are looked for by in the index ([SearchProvider.mentions]) ([Named]): null for a
      * work not counted. [valuesOf]: the values a name found is of. Of the candidates of one work and of the passages
      * naming a value alone: no model reads them.
      */
-    val names: ((String) -> Named?)? = null,
+    val names: ((Long) -> Named?)? = null,
     val valuesOf: (String) -> Collection<String> = { listOf(it) },
     /**
      * Of the pairings: the [names] are of characters, a value two of them named in one paragraph
@@ -44,7 +44,7 @@ internal class Vocabulary(
     /**
      * The values the site gives each item as examples of the facet ([FacetDef.examplesFrom]); null for a facet without.
      */
-    val examples: ((String) -> List<String>)? = null,
+    val examples: ((Long) -> List<String>)? = null,
     /**
      * Every name each value goes by, each a text that names it ([NameHint]); none for a facet whose values are not
      * named in texts.
@@ -59,7 +59,7 @@ internal class Vocabulary(
      * Of each item, the values of its [allowed] it may not have after all ([SuggestionTask.barred]): [allowed] one set
      * for every work of the same universes, this the work's own; null: none.
      */
-    val barred: ((String) -> Set<String>)? = null,
+    val barred: ((Long) -> Set<String>)? = null,
 ) {
     /**
      * How often each item's own words name each value, by [names], of the index of the [search] — a call for every map
@@ -68,10 +68,10 @@ internal class Vocabulary(
      */
     fun mentions(
         store: SourceStore,
-        ids: Collection<String>?,
+        ids: Collection<Long>?,
         typeId: String,
         search: SearchProvider?,
-    ): ((String) -> Map<String, Int>?)? {
+    ): ((Long) -> Map<String, Int>?)? {
         val of = names
         if (of == null || search == null) return null
         val asked = asked(store, ids, of)
@@ -86,9 +86,9 @@ internal class Vocabulary(
      * once: one reading of it for them all. Every work of the source when all of them are: the index read whole, not a
      * work at a time.
      */
-    private fun asked(store: SourceStore, ids: Collection<String>?, of: (String) -> Named?): List<NamesAsked> {
+    private fun asked(store: SourceStore, ids: Collection<Long>?, of: (Long) -> Named?): List<NamesAsked> {
         val wanted = ids ?: store.items.keys().map { it.id }
-        val groups = IdentityHashMap<Named, MutableList<String>>()
+        val groups = IdentityHashMap<Named, MutableList<Long>>()
         wanted.forEach { id -> of(id)?.let { groups.getOrPut(it) { ArrayList() } += id } }
         return groups.map { (named, works) ->
             NamesAsked(
@@ -105,8 +105,8 @@ internal class Vocabulary(
         typeId: String,
         search: SearchProvider,
         asked: List<NamesAsked>,
-    ): Map<String, Map<String, Int>> {
-        val counted = HashMap<String, Map<String, Int>>()
+    ): Map<Long, Map<String, Int>> {
+        val counted = HashMap<Long, Map<String, Int>>()
         search.together(typeId, asked).forEach { byItem ->
             byItem.forEach { (key, pairs) ->
                 if (key.source == store.id)
@@ -124,8 +124,8 @@ internal class Vocabulary(
         typeId: String,
         search: SearchProvider,
         asked: List<NamesAsked>,
-    ): Map<String, Map<String, Int>> {
-        val counted = HashMap<String, Map<String, Int>>()
+    ): Map<Long, Map<String, Int>> {
+        val counted = HashMap<Long, Map<String, Int>>()
         search.mentions(typeId, asked).forEach { byItem ->
             byItem.forEach { (key, found) ->
                 if (key.source != store.id) return@forEach

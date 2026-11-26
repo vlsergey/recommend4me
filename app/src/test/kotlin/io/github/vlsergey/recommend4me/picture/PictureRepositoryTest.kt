@@ -22,36 +22,38 @@ class PictureRepositoryTest {
                 Instant.now(),
                 Instant.now(),
             )
+            // The application's number of the work: what every store names it by
+            val i1 = db.dsl.fetchValue("SELECT internal_id FROM item WHERE site_id = 'i1'") as Long
             val pictures = PictureRepository(db.dsl)
-            pictures.sync("i1", listOf("https://host/0.png", "https://host/1.png"))
-            fun pending() = pictures.queue.pendingOf(listOf("i1"), "enc", emptySet(), 10).map { it.position }
+            pictures.sync(i1, listOf("https://host/0.png", "https://host/1.png"))
+            fun pending() = pictures.queue.pendingOf(listOf(i1), "enc", emptySet(), 10).map { it.position }
             assertEquals(listOf(0, 1), pending())
 
             // The cover failed the third time: not tried again till then
             val later = Instant.now().plusSeconds(3600)
-            pictures.queue.saveError("i1", 0, "HTTP 503 from https://host/0.png", 3, later)
+            pictures.queue.saveError(i1, 0, "HTTP 503 from https://host/0.png", 3, later)
             // The screenshot is gone: never
-            pictures.queue.saveError("i1", 1, "HTTP 404 from https://host/1.png", 1, null)
+            pictures.queue.saveError(i1, 1, "HTTP 404 from https://host/1.png", 1, null)
             assertEquals(emptyList(), pending())
             assertEquals(emptySet(), pictures.queue.itemsWithPending("enc"))
             assertEquals(later.toEpochMilli(), pictures.queue.nextRetry()!!.toEpochMilli())
-            assertEquals(3, pictures.find("i1", 0, null)!!.failures)
+            assertEquals(3, pictures.find(i1, 0, null)!!.failures)
 
             // Due: tried again, its failures counted on
-            pictures.queue.saveError("i1", 0, "HTTP 503 from https://host/0.png", 3, Instant.now().minusSeconds(1))
+            pictures.queue.saveError(i1, 0, "HTTP 503 from https://host/0.png", 3, Instant.now().minusSeconds(1))
             assertEquals(listOf(0), pending())
-            assertEquals(setOf("i1"), pictures.queue.itemsWithPending("enc"))
+            assertEquals(setOf(i1), pictures.queue.itemsWithPending("enc"))
 
             // Downloaded: the failures are past
-            pictures.queue.saveAnalysis("i1", 0, null, "enc", "i1/0-preview.png", null, Instant.now())
-            val cover = pictures.find("i1", 0, null)!!
+            pictures.queue.saveAnalysis(i1, 0, null, "enc", "i1/0-preview.png", null, Instant.now())
+            val cover = pictures.find(i1, 0, null)!!
             assertNull(cover.error)
             assertEquals(0, cover.failures)
             assertNull(pictures.queue.nextRetry())
 
             // A new address is a new picture: the one gone is tried again
-            pictures.sync("i1", listOf("https://host/0.png", "https://host/1-new.png"))
-            assertEquals(0, pictures.find("i1", 1, null)!!.failures)
+            pictures.sync(i1, listOf("https://host/0.png", "https://host/1-new.png"))
+            assertEquals(0, pictures.find(i1, 1, null)!!.failures)
             assertEquals(listOf(0, 1), pending())
         }
     }

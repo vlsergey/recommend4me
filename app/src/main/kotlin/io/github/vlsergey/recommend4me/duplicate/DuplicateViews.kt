@@ -98,7 +98,7 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
 private class ShownWorks(
     type: TypeStore,
     private val s: SourceStore,
-    ids: List<String>,
+    ids: List<Long>,
     sizes: WorkSizes,
     lists: ListIndexes,
 ) {
@@ -176,11 +176,11 @@ private class ShownWorks(
         facet?.let { f -> s.names(f, facets.values.flatMap { it[f].orEmpty() }.distinct()) }.orEmpty()
 
     /** The values of the [facet] the work [id] has, as their [names] name them. */
-    private fun named(id: String, facet: String, names: Map<String, String>): List<String> =
+    private fun named(id: Long, facet: String, names: Map<String, String>): List<String> =
         facets[id]?.get(facet).orEmpty().map { names[it] ?: it }
 
     /** The work [id] as a pair shows it; null when it is no longer there. */
-    fun described(id: String): Described? {
+    fun described(id: Long): Described? {
         val head = heads[id] ?: return null
         val written = fields[id].orEmpty()
         val authors = authorFacet?.let { f -> facets[id]?.get(f) }.orEmpty()
@@ -211,7 +211,7 @@ private class ShownWorks(
     }
 
     /** The values of the work [id] of every facet compared it has, named, by their names. */
-    private fun comparedOf(id: String): List<ShownFacet> = namedBy.mapNotNull { (family, def) ->
+    private fun comparedOf(id: Long): List<ShownFacet> = namedBy.mapNotNull { (family, def) ->
         byFamily[id]?.get(family)?.let { keys ->
             ShownFacet(
                 key = family,

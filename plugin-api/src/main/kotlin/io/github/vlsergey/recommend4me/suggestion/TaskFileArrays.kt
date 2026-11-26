@@ -6,8 +6,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 
 /**
- * THE ARRAYS OF A TASK'S FILE ([SuggestionTaskFile]) as it writes and reads them: a list of strings, an array of ints,
- * a list of such arrays, a matrix — its size first, then its elements in order.
+ * THE ARRAYS OF A TASK'S FILE ([SuggestionTaskFile]) as it writes and reads them: a list of strings, an array of ints
+ * or of longs, a list of such arrays, a matrix — its size first, then its elements in order.
  */
 internal object TaskFileArrays {
     fun strings(out: DataOutputStream, list: List<String>) {
@@ -16,6 +16,13 @@ internal object TaskFileArrays {
     }
 
     fun strings(input: DataInputStream): List<String> = List(input.readInt()) { input.readUTF() }
+
+    fun longs(out: DataOutputStream, a: LongArray) {
+        out.writeInt(a.size)
+        a.forEach(out::writeLong)
+    }
+
+    fun longs(input: DataInputStream): LongArray = LongArray(input.readInt()) { input.readLong() }
 
     fun ints(out: DataOutputStream, a: IntArray) {
         out.writeInt(a.size)

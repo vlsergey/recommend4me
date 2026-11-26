@@ -107,7 +107,7 @@ class AuthorToday : Source {
     /** An author of the site by their own page, "https://author.today/u/login". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
-    override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
+    override fun siteIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val signals =
         listOf(
@@ -147,8 +147,7 @@ class AuthorToday : Source {
             nextPage = "ul.pagination li.next a[rel=next][href]",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> =
-        AuthorTodayPages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> = AuthorTodayPages(context).read(page)
 
     companion object {
         /** An author's own page: their key. */

@@ -20,11 +20,11 @@ object HeldTexts {
      * Of every item of the [source] the index holds, the value of each of the [fields] it has, by the field's place
      * among them, as committed — handed on at once.
      */
-    fun forEvery(index: ListIndex, source: String, fields: List<String>, action: (String, Int, ByteArray) -> Unit) =
+    fun forEvery(index: ListIndex, source: String, fields: List<String>, action: (Long, Int, ByteArray) -> Unit) =
         index.searching { db ->
-            val prefix = ItemKey(source, "").toString()
+            val prefix = "$source/"
             read(db, fields, { key -> key.startsWith(prefix) }) { key, k, value ->
-                action(key.substring(prefix.length), k, value)
+                action(key.substring(prefix.length).toLong(), k, value)
             }
         }
 

@@ -40,11 +40,11 @@ class SearchWeightsTest {
         val found =
             SearchResult(
                 "d",
-                listOf(ItemKey("s", "1"), ItemKey("s", "2")),
+                listOf(ItemKey("s", 1), ItemKey("s", 2)),
                 null,
-                features = mapOf(ItemKey("s", "1") to work(6.0, 0.2), ItemKey("s", "2") to work(5.0, 2.8)),
+                features = mapOf(ItemKey("s", 1) to work(6.0, 0.2), ItemKey("s", 2) to work(5.0, 2.8)),
             )
-        assertEquals(listOf(ItemKey("s", "2"), ItemKey("s", "1")), weights.ordered(found).keys)
+        assertEquals(listOf(ItemKey("s", 2), ItemKey("s", 1)), weights.ordered(found).keys)
         // A feature a work lacks is 0 of it
         assertTrue(weights.score(mapOf("words" to 2.0)) > weights.score(emptyMap()))
     }
@@ -93,7 +93,7 @@ class SearchWeightsTest {
     fun `the first of every way of finding stands at the top, whatever the weights`() {
         val weights =
             SearchWeights(mapOf("meaning" to FeatureWeight(10.0, 0.0, 1.0), "words" to FeatureWeight(0.01, 0.0, 1.0)))
-        val keys = (1..5).map { ItemKey("s", "$it") }
+        val keys = (1..5).map { ItemKey("s", it.toLong()) }
         val found =
             SearchResult(
                 "enf",
@@ -107,13 +107,13 @@ class SearchWeightsTest {
                         keys[3] to mapOf("meaning" to 0.1, "words" to 1.0),
                         keys[4] to mapOf("meaning" to 0.1, "words" to 5.0),
                         // A way of finding no weight was learnt of: its first at the top too
-                    ) + mapOf(ItemKey("s", "6") to mapOf("name" to 2.0)),
+                    ) + mapOf(ItemKey("s", 6) to mapOf("name" to 2.0)),
             )
-        val withName = SearchResult(found.line, keys + ItemKey("s", "6"), null, features = found.features)
+        val withName = SearchResult(found.line, keys + ItemKey("s", 6), null, features = found.features)
         val order = weights.ordered(withName).keys
         // The first by meaning, by words, by the name, in the order of the weights; then the rest by the weights
         assertEquals(
-            listOf(keys[0], keys[4], ItemKey("s", "6"), keys[1], keys[2], keys[3]),
+            listOf(keys[0], keys[4], ItemKey("s", 6), keys[1], keys[2], keys[3]),
             order,
         )
     }
@@ -133,12 +133,12 @@ class SearchWeightsTest {
 
     @Test
     fun `the works judged in the order of how far they answer a line, the first ones the most`() {
-        val fits = ItemKey("s", "1")
-        val partly = ItemKey("s", "2")
-        val not = ItemKey("s", "3")
+        val fits = ItemKey("s", 1)
+        val partly = ItemKey("s", 2)
+        val not = ItemKey("s", 3)
         val judged = mapOf(fits to SearchFit.FITS, partly to SearchFit.PARTLY, not to SearchFit.NOT)
         // The best order, and the works not judged left out
-        assertEquals(1.0, SearchQuality.ndcg(listOf(ItemKey("s", "9"), fits, partly, not), judged, 10))
+        assertEquals(1.0, SearchQuality.ndcg(listOf(ItemKey("s", 9), fits, partly, not), judged, 10))
         val swapped = assertNotNull(SearchQuality.ndcg(listOf(partly, fits, not), judged, 10))
         val last = assertNotNull(SearchQuality.ndcg(listOf(not, partly, fits), judged, 10))
         assertTrue(swapped < 1.0 && last < swapped, "swapped $swapped, last $last")

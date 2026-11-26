@@ -8,13 +8,13 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * marked of interest ([rated]) — read of every work of the source once a pass, not two and three times a facet (owner,
  * 2026-11-21: "remove the repeats").
  */
-internal class UserWord(val answers: Answers, val rated: Set<String>) {
+internal class UserWord(val answers: Answers, val rated: Set<Long>) {
 
     /**
      * The works the user answered on of the facet [facet] — a value said it has or has not, or its values said all
      * named: what its model learns of.
      */
-    fun answered(facet: String): Set<String> {
+    fun answered(facet: String): Set<Long> {
         val said = answers.all.filter { it.facet == facet }.mapTo(HashSet()) { it.itemId }
         answers.complete.forEach { (id, facets) -> if (facet in facets) said += id }
         return said

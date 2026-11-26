@@ -15,7 +15,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
  */
 object AnsweredFacets {
 
-    fun of(store: SourceStore, item: String, facet: String): List<AnsweredFacet> {
+    fun of(store: SourceStore, item: Long, facet: String): List<AnsweredFacet> {
         val corrections = store.corrections.facetsOf(item)
         val hierarchies = store.hierarchies()
         val said = corrections.filter { it.added }.groupBy({ it.facet }, { it.key })

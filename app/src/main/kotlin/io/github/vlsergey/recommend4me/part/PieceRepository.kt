@@ -13,14 +13,14 @@ import org.jooq.DSLContext
 class PieceRepository(private val db: DSLContext, private val store: PartStore) {
 
     /** The codes of the chapter [partId] of the item, made by the projection [key]. */
-    fun save(itemId: String, partId: String, key: String, codes: ByteArray) {
-        store.pieces.put(itemId, partId, codes)
+    fun save(itemId: Long, partId: String, key: String, codes: ByteArray) {
+        store.pieces.put(itemId.toString(), partId, codes)
         db.update(PART).set(PART.PIECES, key).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
     }
 
     /** The codes of the text field [field] of the item, made by the projection [key]. */
-    fun saveText(itemId: String, field: String, key: String, codes: ByteArray) {
-        store.pieces.put(itemId, textKey(field), codes)
+    fun saveText(itemId: Long, field: String, key: String, codes: ByteArray) {
+        store.pieces.put(itemId.toString(), textKey(field), codes)
         db.update(TEXT_VECTOR)
             .set(TEXT_VECTOR.PIECES, key)
             .where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(field))
@@ -28,7 +28,7 @@ class PieceRepository(private val db: DSLContext, private val store: PartStore) 
     }
 
     /** The codes of the texts [texts] of the item — parts' ids or [textKey]s —, by text; a text of none left out. */
-    fun of(itemId: String, texts: Collection<String>): Map<String, ByteArray> = store.pieces.of(itemId, texts)
+    fun of(itemId: Long, texts: Collection<String>): Map<String, ByteArray> = store.pieces.of(itemId.toString(), texts)
 
     companion object {
         /** A text field's key among the parts' ids of its item: no part's id begins so. */

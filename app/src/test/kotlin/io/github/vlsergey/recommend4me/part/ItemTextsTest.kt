@@ -18,10 +18,15 @@ class ItemTextsTest : SiteTestBase() {
         parts.forEach { (id, n) ->
             capture("$id|The texts of $id|space|A work of parts||")
             // The parts' ids in another order than their places: read in the order of their places
-            store.parts.save(id, (1..n).map { k -> PartData("p${n - k}", k, "Part $k", "Part $k of $id", null) })
+            store.parts.save(
+                idOf(site, id),
+                (1..n).map { k -> PartData("p${n - k}", k, "Part $k", "Part $k of $id", null) },
+            )
         }
+        // The works by the application's numbers of them, in the order they were written
+        val numbers = parts.keys.associateBy { idOf(site, it) }
         val read = LinkedHashMap<String, List<String>>()
-        store.parts.texts.forEach(portion = 2) { id, texts -> if (id in parts) read[id] = texts }
+        store.parts.texts.forEach(portion = 2) { id, texts -> numbers[id]?.let { read[it] = texts } }
         assertEquals(parts.keys.toList(), read.keys.toList(), "every item once, in the order of the key")
         parts.forEach { (id, n) -> assertEquals((1..n).map { "Part $it of $id" }, read[id], id) }
     }

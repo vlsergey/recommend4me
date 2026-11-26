@@ -14,7 +14,7 @@ import io.github.vlsergey.recommend4me.universe.LayerDraft
 import org.springframework.stereotype.Component
 
 /** [WorkChances] as they are made, a facet after another. */
-internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Chance>>>
+internal typealias MadeChances = HashMap<Long, HashMap<String, Map<String, Chance>>>
 
 /**
  * THE CHAIN OF THE FACETS: the chances of works made in memory by the models kept, a facet after another, in the order
@@ -56,7 +56,7 @@ internal class FacetChain(
      */
     fun chances(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         through: String? = null,
         laps: Laps = Laps(),
         known: EveryItemFacets? = null,
@@ -72,7 +72,7 @@ internal class FacetChain(
      */
     fun chancesOf(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         wanted: Collection<String>,
         laps: Laps = Laps(),
         known: EveryItemFacets? = null,
@@ -86,7 +86,7 @@ internal class FacetChain(
      */
     fun chain(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         upTo: Int,
         laps: Laps = Laps(),
         known: EveryItemFacets? = null,
@@ -196,14 +196,14 @@ internal class FacetChain(
     }
 
     /** The drafts of the layer of the works [ids], of their site's values [known] already when given. */
-    private fun draftsOf(store: SourceStore, ids: Collection<String>, known: EveryItemFacets?) =
+    private fun draftsOf(store: SourceStore, ids: Collection<Long>, known: EveryItemFacets?) =
         if (known == null) WorkDrafts.of(store, ids) else WorkDrafts.of(store, ids, known.site)
 
     /** The drafts of the layer of the works [ids] as their chances: 1, marked so, till the model gives its own. */
     fun seeded(
         store: SourceStore,
-        ids: Collection<String>,
-        drafts: Map<String, List<LayerDraft>> = WorkDrafts.of(store, ids),
+        ids: Collection<Long>,
+        drafts: Map<Long, List<LayerDraft>> = WorkDrafts.of(store, ids),
     ): MadeChances {
         val made = MadeChances()
         drafts.forEach { (id, list) ->

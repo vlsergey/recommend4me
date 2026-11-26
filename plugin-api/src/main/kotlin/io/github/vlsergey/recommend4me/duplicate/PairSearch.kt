@@ -21,7 +21,7 @@ import io.github.vlsergey.recommend4me.matrix.SparseRows
  */
 class SiteWorks(
     val source: String,
-    val ids: List<String>,
+    val ids: LongArray,
     val titles: Rows,
     val titleLengths: FloatArray,
     val authorNames: Rows,

@@ -12,8 +12,7 @@ internal class AuthorTodayReviews(private val items: ItemStore) {
      * The reviews of a work as its page of reviews lists them: excerpts of the long ones. A review read whole on its
      * own page before is not replaced by its excerpt.
      */
-    fun list(doc: Document, workId: String): Boolean {
-        if (items.find(workId) == null) return false
+    fun list(doc: Document, workId: Long): Boolean {
         val known = items.reviewContents(workId)
         val reviews =
             doc.select("article.post[id^=post_]").mapNotNull { article ->
@@ -34,15 +33,15 @@ internal class AuthorTodayReviews(private val items: ItemStore) {
         return reviews.isNotEmpty()
     }
 
-    /** A review read whole, on its own page, of a work known; the work's id. */
-    fun review(doc: Document, reviewId: String): String? {
+    /** A review read whole, on its own page, of a work known; the work's number. */
+    fun review(doc: Document, reviewId: String): Long? {
         val article = doc.selectFirst("article.full-post")
         val workId =
             article
                 ?.selectFirst(".book-review-info .book-title a[href^=/work/]")
                 ?.attr("href")
                 ?.let { WORK_ID.find(it)?.groupValues?.get(1) }
-                ?.takeIf { items.find(it) != null }
+                ?.let(items::idOf)
         val body = article?.select(".fr-view.rich-content")?.firstOrNull { it.closest(".book-review-info") == null }
         if (article == null || workId == null || body == null) return null
         items.saveReviews(

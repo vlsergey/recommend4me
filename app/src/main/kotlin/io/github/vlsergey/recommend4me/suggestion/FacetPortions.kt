@@ -13,7 +13,7 @@ internal class FacetPortions(
     private val pass: FacetPass,
     private val side: ValueSide,
     /** The works the model learns of: those the user answered on of the facet ([answered]). */
-    private val works: Collection<String>,
+    private val works: Collection<Long>,
 ) : TaskPortions {
     override val items: Int = works.size
 
@@ -34,7 +34,7 @@ internal class FacetPortions(
     }
 
     /** What the user said of the works answered on, by the work's id, as the last walk read them. */
-    private val said = HashMap<String, Said>()
+    private val said = HashMap<Long, Said>()
 
     override fun forEach(action: (SuggestionTask) -> Unit) =
         pass.forEach(inputs = true, only = works) { p ->

@@ -1,8 +1,8 @@
 import type { ItemRef } from "@/api/client";
 
 /**
- * The item a link opens: `#item=<source>/<item>` — the browser extension links to it. The item's
- * id may hold slashes of its own: only the first one ends the source.
+ * The item a link opens: `#item=<source>/<item>`, the item by the application's number of it — the
+ * browser extension links to it.
  */
 const PREFIX = "#item=";
 
@@ -12,8 +12,11 @@ export function readItemHash(): ItemRef | null {
   const rest = hash.slice(PREFIX.length);
   const slash = rest.indexOf("/");
   if (slash <= 0 || slash === rest.length - 1) return null;
+  // The application's number of the item: a link of a site's id of before opens nothing
+  const item = Number(rest.slice(slash + 1));
+  if (!Number.isSafeInteger(item)) return null;
   try {
-    return { source: decodeURIComponent(rest.slice(0, slash)), item: decodeURIComponent(rest.slice(slash + 1)) };
+    return { source: decodeURIComponent(rest.slice(0, slash)), item };
   } catch {
     // A broken escape in a hand-made link: nothing to open
     return null;
@@ -32,5 +35,5 @@ export function writeItemHash(ref: ItemRef | null) {
 
 /** The address that opens an item over whatever is open: a link to another work from a work's dialog. */
 export function itemHref(ref: ItemRef): string {
-  return `${PREFIX}${encodeURIComponent(ref.source)}/${ref.item.split("/").map(encodeURIComponent).join("/")}`;
+  return `${PREFIX}${encodeURIComponent(ref.source)}/${ref.item}`;
 }

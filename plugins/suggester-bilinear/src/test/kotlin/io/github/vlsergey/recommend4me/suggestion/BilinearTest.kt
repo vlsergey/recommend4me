@@ -24,7 +24,7 @@ class BilinearTest {
         val m = 4
         val names = randomRows(random, m, d)
         return SuggestionTask(
-            itemIds = List(n) { "i$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = listOf(block(random, "text:title", n, d, 5), block(random, "text:annotation", n, d, 3)),
             values = names,
             valueKeys = List(m) { "v$it" },
@@ -55,7 +55,7 @@ class BilinearTest {
         val d = 6
         val m = 40
         return SuggestionTask(
-            itemIds = List(n) { "i$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = listOf(block(random, "text:title", n, d, 5), block(random, "text:annotation", n, d, 3)),
             values = randomRows(random, m, d),
             valueKeys = List(m) { "v$it" },

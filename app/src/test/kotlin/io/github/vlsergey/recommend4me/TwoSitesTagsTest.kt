@@ -41,16 +41,16 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         alpha("h4|Another harbour|harbours|Boats in another harbour||")
         // The tags of two sites are two till the user merges them
         tags.relateTags(TagRelationRequest(tagOf("alpha", "harbours"), tagOf("beta", "harbours"), TagRelation.MERGED))
-        corrections.linkItem("alpha", "h1", ItemRef("alpha", "h2"))
-        corrections.linkItem("alpha", "h1", ItemRef("beta", "h3"))
-        gradesController.rateItem("beta", "h3", RatingRequest(5))
+        corrections.linkItem("alpha", idOf("alpha", "h1"), ItemRef("alpha", idOf("alpha", "h2")))
+        corrections.linkItem("alpha", idOf("alpha", "h1"), ItemRef("beta", idOf("beta", "h3")))
+        gradesController.rateItem("beta", idOf("beta", "h3"), RatingRequest(5))
         inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val tag = tags.getTag(tagOf("alpha", "harbours")).body!!
         assertEquals(Triple(2, 1, 1), Triple(tag.works, tag.graded, tag.liked))
         val bySite = tag.variants.associateBy { it.source }
         assertEquals(Triple(2, 1, 1), bySite.getValue("alpha").let { Triple(it.works, it.graded, it.liked) })
         assertEquals(Triple(1, 1, 1), bySite.getValue("beta").let { Triple(it.works, it.graded, it.liked) })
-        gradesController.unrateItem("beta", "h3", null)
+        gradesController.unrateItem("beta", idOf("beta", "h3"), null)
     }
 
     @Test
@@ -62,8 +62,16 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         val waves = tagOf("alpha", "waves")
         val breakers = tagOf("beta", "breakers")
         // The user's word on works of both sites: the one tag on one, the other on the other
-        corrections.correctFacet("alpha", "a3", FacetCorrection(facet = "tags", added = true, key = breakers))
-        corrections.correctFacet("beta", "b3", FacetCorrection(facet = "tags", added = false, key = waves))
+        corrections.correctFacet(
+            "alpha",
+            idOf("alpha", "a3"),
+            FacetCorrection(facet = "tags", added = true, key = breakers),
+        )
+        corrections.correctFacet(
+            "beta",
+            idOf("beta", "b3"),
+            FacetCorrection(facet = "tags", added = false, key = waves),
+        )
 
         tags.relateTags(TagRelationRequest(waves, breakers, TagRelation.MERGED))
         // The names and the counts worked out in the queue after the quiet — here at once
@@ -74,10 +82,10 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
             merged.variants.map { SiteTagRef(it.source, it.tag) }.toSet(),
         )
         assertEquals(404, tags.getTag(breakers).statusCode.value())
-        fun answers(source: String, item: String) =
+        fun answers(source: String, item: Long) =
             stores.source(source)!!.corrections.facetsOf(item).filter { it.facet == "tags" }.map { it.key to it.added }
-        assertEquals(listOf(waves to true), answers("alpha", "a3"))
-        assertEquals(listOf(waves to false), answers("beta", "b3"))
+        assertEquals(listOf(waves to true), answers("alpha", idOf("alpha", "a3")))
+        assertEquals(listOf(waves to false), answers("beta", idOf("beta", "b3")))
     }
 
     @Test
@@ -88,7 +96,7 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
                 assertThrows<Refused> {
                     corrections.correctFacet(
                         "alpha",
-                        "n1",
+                        idOf("alpha", "n1"),
                         FacetCorrection(facet = facet, added = true, name = "Saga Nobody Wrote"),
                     )
                 }
@@ -96,15 +104,24 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
             assertEquals(mapOf("value" to "Saga Nobody Wrote"), refused.params)
         }
         assertTrue(
-            stores.source("alpha")!!.corrections.facetsOf("n1").none {
+            stores.source("alpha")!!.corrections.facetsOf(idOf("alpha", "n1")).none {
                 it.facet == "universe" || it.facet == "pairings"
             }
         )
         // A character may be named as the work names it
-        corrections.correctFacet("alpha", "n1", FacetCorrection(facet = "characters", added = true, name = "Neville"))
+        corrections.correctFacet(
+            "alpha",
+            idOf("alpha", "n1"),
+            FacetCorrection(facet = "characters", added = true, name = "Neville"),
+        )
         assertEquals(
             listOf("neville"),
-            stores.source("alpha")!!.corrections.facetsOf("n1").filter { it.facet == "characters" }.map { it.key },
+            stores
+                .source("alpha")!!
+                .corrections
+                .facetsOf(idOf("alpha", "n1"))
+                .filter { it.facet == "characters" }
+                .map { it.key },
         )
     }
 
@@ -138,19 +155,33 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         beta("t5|Moorings|moorings|At the moorings")
         val anchors = tagOf("alpha", "anchors")
         val moorings = tagOf("beta", "moorings")
-        corrections.correctFacet("beta", "t5", FacetCorrection(facet = "tags", added = true, key = moorings))
+        corrections.correctFacet(
+            "beta",
+            idOf("beta", "t5"),
+            FacetCorrection(facet = "tags", added = true, key = moorings),
+        )
         // Merged, and stopped before the answers were moved
         val type = stores.type("books")!!
         type.tags.relations.merge(TagRepository.idOf(moorings)!!, TagRepository.idOf(anchors)!!, Instant.now())
         assertEquals(
             listOf(moorings to true),
-            stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
+            stores
+                .source("beta")!!
+                .corrections
+                .facetsOf(idOf("beta", "t5"))
+                .filter { it.facet == "tags" }
+                .map { it.key to it.added },
         )
 
         tagRenaming.start()
         assertEquals(
             listOf(anchors to true),
-            stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
+            stores
+                .source("beta")!!
+                .corrections
+                .facetsOf(idOf("beta", "t5"))
+                .filter { it.facet == "tags" }
+                .map { it.key to it.added },
         )
         assertEquals(emptyList(), type.tags.relations.pendingMerges())
     }

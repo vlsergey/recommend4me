@@ -204,19 +204,23 @@ abstract class SiteTestBase : BaseTest() {
         }
     }
 
-    /** The work [id] said by the user to have the [tags] and no other. */
-    private fun tagged(id: String, tags: List<String>) {
+    /** The work the site names [work] said by the user to have the [tags] and no other. */
+    private fun tagged(work: String, tags: List<String>) {
         tags.forEach {
-            corrections.correctFacet(site, id, FacetCorrection(facet = "tags", added = true, key = tag(it)))
+            corrections.correctFacet(
+                site,
+                idOf(site, work),
+                FacetCorrection(facet = "tags", added = true, key = tag(it)),
+            )
         }
-        corrections.completeFacet(site, id, "tags")
+        corrections.completeFacet(site, idOf(site, work), "tags")
     }
 
     /** The facets of the work [id]. */
-    protected fun facetsOf(id: String) = items.getItem(site, id).body!!.allFacets
+    protected fun facetsOf(id: Long) = items.getItem(site, id).body!!.allFacets
 
     /** The value [key] of the [facet] of the work [id]; none when the work has it not. */
-    protected fun valueOf(id: String, facet: String, key: String) =
+    protected fun valueOf(id: Long, facet: String, key: String) =
         facetsOf(id).find { it.facet == facet }?.propertyValues?.find { it.key == key }
 
     /** The key of the normalized tag the site's tag [site] is bound to. */

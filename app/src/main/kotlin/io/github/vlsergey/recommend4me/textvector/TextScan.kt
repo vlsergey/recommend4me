@@ -10,7 +10,7 @@ import io.github.vlsergey.recommend4me.vector.Vectors
  * vector is to be made, else of one whose vector is made and whose [pieces] or [fullText] are not.
  */
 class TextToEncode(
-    val itemId: String,
+    val itemId: Long,
     val key: String,
     val text: String,
     val hash: String,
@@ -29,7 +29,7 @@ class TextToEncode(
  */
 class TextScan(
     private val store: SourceStore,
-    private val only: Collection<String>?,
+    private val only: Collection<Long>?,
     encoder: String,
     pieces: String?,
     fullText: String?,
@@ -49,11 +49,11 @@ class TextScan(
     val todo = ArrayList<TextToEncode>()
 
     /** Every text there is now: item and key. */
-    private val present = HashSet<Pair<String, String>>()
+    private val present = HashSet<Pair<Long, String>>()
 
     init {
         if (only == null) {
-            val considered = HashSet<String>()
+            val considered = HashSet<Long>()
             if (keys.isNotEmpty())
                 store.items.forEachTexts(keys) { id, texts ->
                     considered += id
@@ -65,7 +65,7 @@ class TextScan(
     }
 
     /** The texts of the item [itemId], the site's [site] as the user corrected them, held against those kept. */
-    private fun consider(itemId: String, site: Map<String, String>) {
+    private fun consider(itemId: Long, site: Map<String, String>) {
         val own = fields[itemId].orEmpty()
         val texts =
             Corrected.texts(site, own) +
@@ -83,5 +83,5 @@ class TextScan(
     }
 
     /** The texts whose vectors are kept and that are no more: item and key — of the items read alone. */
-    fun gone(): List<Pair<String, String>> = stored.keys.filter { it !in present }
+    fun gone(): List<Pair<Long, String>> = stored.keys.filter { it !in present }
 }

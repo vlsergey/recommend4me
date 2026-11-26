@@ -19,12 +19,12 @@ internal class CastAsked(
     val reader: CastReader,
     val entries: String,
     val line: String?,
-    val characters: (String) -> Map<String, List<String>>?,
+    val characters: (Long) -> Map<String, List<String>>?,
     val paired: Boolean,
     val vectors: (Collection<String>) -> Map<String, FloatArray>,
 ) {
     /** What the line of each work of [ids] says, of the works' values on the site ([site]: facet to keys). */
-    fun casts(store: SourceStore, ids: List<String>, site: Map<String, Map<String, List<String>>>): List<SaidCast> {
+    fun casts(store: SourceStore, ids: List<Long>, site: Map<Long, Map<String, List<String>>>): List<SaidCast> {
         val said = WorkCasts.of(store, entries, ids.associateWith { site[it]?.get(entries).orEmpty() })
         return ids.map { said[it] ?: SaidCast.NONE }
     }

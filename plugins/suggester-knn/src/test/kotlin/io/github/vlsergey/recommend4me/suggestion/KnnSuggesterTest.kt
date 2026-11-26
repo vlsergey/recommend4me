@@ -73,7 +73,7 @@ class KnnSuggesterTest {
             texts.held.put(v, 0, texts.row(i), d)
         }
         return SuggestionTask(
-            itemIds = List(n) { "w$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true })),
             values = Matrix(2, 4),
             valueKeys = listOf("v0", "v1"),
@@ -100,7 +100,7 @@ class KnnSuggesterTest {
         val side = task.valueSide()
         val unpacked = assertNotNull(KnnSuggester().unpack(fitted.pack(), side))
         assertTrue(fitted.model(side).contentEquals(unpacked.model(side)))
-        assertNull(KnnSuggester().unpack(fitted.pack(), answeredTask(answeredTexts(), listOf(0), listOf("w0"))))
+        assertNull(KnnSuggester().unpack(fitted.pack(), answeredTask(answeredTexts(), listOf(0), longArrayOf(0))))
     }
 
     @Test
@@ -118,7 +118,7 @@ class KnnSuggesterTest {
         texts.held.put(row, 0, texts.row(1), block.dim)
         val alone =
             SuggestionTask(
-                itemIds = listOf("new", "w0"),
+                itemIds = longArrayOf(NEW_WORK, 0),
                 inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(2) { true })),
                 values = Matrix(2, 0),
                 valueKeys = listOf("v0", "v1"),
@@ -158,9 +158,9 @@ class KnnSuggesterTest {
         val again = small.gather(portionsOf(task, 7, walks)) { false }.reference
         val whole = small.gather(portionsOf(task, TaskPortions.MOST)) { false }.reference
         assertEquals(30, once.size)
-        assertEquals(listOf("w33", "w50"), once.ids.take(2).sorted())
-        assertEquals(once.ids, again.ids)
-        assertEquals(once.ids, whole.ids)
+        assertEquals(listOf(33L, 50L), once.ids.take(2).sorted())
+        assertEquals(once.ids.toList(), again.ids.toList())
+        assertEquals(once.ids.toList(), whole.ids.toList())
         val numbers = once.size * Neighbours.DIMENSIONS
         for (q in 0 until numbers) assertEquals(whole.vectors[q], once.vectors[q], 1e-5f)
         // Every work's share counted, not those kept alone
@@ -170,7 +170,7 @@ class KnnSuggesterTest {
         walks[0] = 0
         val fitted = assertNotNull(small.fit(portionsOf(task, 7, walks)))
         assertEquals(2, walks[0])
-        assertEquals(once.ids, assertNotNull(KnnModel.read(fitted.model(task.valueSide()))).ids)
+        assertEquals(once.ids.toList(), assertNotNull(KnnModel.read(fitted.model(task.valueSide()))).ids.toList())
     }
 
     @Test
@@ -178,7 +178,7 @@ class KnnSuggesterTest {
         val task = task(TaskPortions.MOST + 300, 4)
         val reference = KnnSuggester().gather(portionsOf(task, 1000)) { false }.reference
         assertEquals(TaskPortions.MOST, reference.size)
-        assertEquals(listOf("w33", "w50"), reference.ids.take(2).sorted())
+        assertEquals(listOf(33L, 50L), reference.ids.take(2).sorted())
     }
 
     /** The texts of 12 works, those of the even near one direction, of the odd near another. */
@@ -194,7 +194,7 @@ class KnnSuggesterTest {
      * the user confirmed its 0 and 2 and rejected its 1, rejected the 0 of the work 7 and confirmed the 1 of the
      * work 9. [ids]: of every work of [rows].
      */
-    private fun answeredTask(texts: List<FloatArray>, rows: List<Int>, ids: List<String>): SuggestionTask {
+    private fun answeredTask(texts: List<FloatArray>, rows: List<Int>, ids: LongArray): SuggestionTask {
         val d = texts.first().size
         val matrix = Matrix(rows.size, d)
         rows.forEachIndexed { r, i -> matrix.held.put(texts[i], 0, matrix.row(r), d) }
@@ -216,24 +216,23 @@ class KnnSuggesterTest {
      * the k [fitted] chose.
      */
     private fun asked(fitted: FittedSuggester, texts: List<FloatArray>, others: List<Int>, i: Int): FloatArray {
-        val rest = answeredTask(texts, others, others.map { "w$it" })
+        val rest = answeredTask(texts, others, others.map { it.toLong() }.toLongArray())
         val gathered = KnnSuggester().gather(portionsOf(rest, TaskPortions.MOST)) { false }
         val ref = gathered.reference
         val k = assertNotNull(fitted.report).chosen.getValue("k").toInt()
         val model = KnnModel(k, ref.layout, ref.ids, ref.vectors, ref.labels, gathered.total.share()).pack()
-        val alone = answeredTask(texts, listOf(i), listOf("asked"))
+        val alone = answeredTask(texts, listOf(i), longArrayOf(NEW_WORK))
         return assertNotNull(KnnSuggester().scoring(model, alone)).of(intArrayOf(0))[0]
     }
 
     /** The answers as the user gave them: of every work by its id, confirmed then rejected. */
-    private val answers =
-        listOf("w4" to 0, "w4" to 2, "w4" to 1, "w7" to 0, "w9" to 1).groupBy({ it.first }, { it.second })
+    private val answers = listOf(4L to 0, 4L to 2, 4L to 1, 7L to 0, 9L to 1).groupBy({ it.first }, { it.second })
 
     @Test
     fun `every value the user answered on is scored held out, by the nearest of the other works alone`() {
         val texts = answeredTexts()
         val all = texts.indices.toList()
-        val task = answeredTask(texts, all, all.map { "w$it" })
+        val task = answeredTask(texts, all, all.map { it.toLong() }.toLongArray())
         val fitted = fit(task)
         val held = assertNotNull(fitted.heldOut)
         // The answers by the works' ids, confirmed then rejected of each work, and no other pair
@@ -242,17 +241,17 @@ class KnnSuggesterTest {
         // Each as a model of every other work scores it — on the scale of the scoring, a chance — within the half
         // precision the model keeps the works in
         score.forEach { (pair, s) ->
-            val i = pair.first.removePrefix("w").toInt()
+            val i = pair.first.toInt()
             val expected = asked(fitted, texts, all.filter { it != i }, i)[pair.second]
             assertEquals(expected, s, 2e-3f, "work $i, value ${pair.second}")
         }
         // The value 2 no other work has: the work's own answer is no witness of it — lower than of a work of its text
         // never fitted on, whose neighbours and shares have the work 4 among them
         val seen = asked(fitted, texts, all, 4)
-        val own = score.getValue("w4" to 2)
+        val own = score.getValue(4L to 2)
         assertTrue(own < 0.05f && own < seen[2], "$own against ${seen[2]}")
         // Of a few works every one is a neighbour: the value of its direction likelier than the other's still
-        assertTrue(score.getValue("w4" to 0) > 0.5f && score.getValue("w4" to 1) < 0.5f, score.toString())
+        assertTrue(score.getValue(4L to 0) > 0.5f && score.getValue(4L to 1) < 0.5f, score.toString())
         // A state unpacked holds nothing out
         assertNull(assertNotNull(KnnSuggester().unpack(fitted.pack(), task.valueSide())).heldOut)
     }
@@ -261,7 +260,7 @@ class KnnSuggesterTest {
     fun `the works answered on left out of those kept are held out in a walk of their own`() {
         val texts = answeredTexts()
         val all = texts.indices.toList()
-        val task = answeredTask(texts, all, all.map { "w$it" })
+        val task = answeredTask(texts, all, all.map { it.toLong() }.toLongArray())
         val walks = IntArray(1)
         val fitted = assertNotNull(KnnSuggester(null, room = 2).fit(portionsOf(task, 5, walks)))
         assertEquals(3, walks[0])
@@ -295,7 +294,7 @@ class KnnSuggesterTest {
             return InputBlock.of(name, vectors, BooleanArray(n) { it in from until from + half })
         }
         return SuggestionTask(
-            itemIds = List(n) { "w$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = listOf(block("text:annotation", 16, 0), block("picture:cover", 8, half)),
             values = Matrix(2, 4),
             valueKeys = listOf("v0", "v1"),
@@ -354,3 +353,6 @@ class KnnSuggesterTest {
         assertEquals(0.5f, chances[1])
     }
 }
+
+/** A work no fitting saw: a number beyond those of the works fitted on. */
+private const val NEW_WORK = 1_000_000L

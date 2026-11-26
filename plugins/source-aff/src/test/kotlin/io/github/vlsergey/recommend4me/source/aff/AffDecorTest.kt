@@ -32,13 +32,14 @@ class AffDecorTest {
     fun `every card of an author's page links to its work`() {
         val html = page("profile.html")
         val url = "https://members.adult-fanfiction.org/profile.php?id=1296995621&tab=stories-written&a=games"
-        val captured = source.capture(CapturedPage(url, html, Instant.now()), database.of(MemorySourceContext()))
+        val context = MemorySourceContext()
+        val captured = context.sitesOf(source.capture(CapturedPage(url, html, Instant.now()), database.of(context)))
         val cards = decor.cards!!
         val linked =
             Jsoup.parse(html, url)
                 .select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertEquals(6, captured.size)
         assertEquals(captured, linked)
     }
@@ -47,13 +48,14 @@ class AffDecorTest {
     fun `every card of a list links to its work, and the list to its next page`() {
         val html = page("list.html")
         val url = "https://hp.adult-fanfiction.org/"
-        val captured = source.capture(CapturedPage(url, html, Instant.now()), database.of(MemorySourceContext()))
+        val context = MemorySourceContext()
+        val captured = context.sitesOf(source.capture(CapturedPage(url, html, Instant.now()), database.of(context)))
         val doc = Jsoup.parse(html, url)
         val cards = decor.cards!!
         val linked =
             doc.select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertEquals(captured, linked)
         assertEquals(
             listOf("https://hp.adult-fanfiction.org/index.php?&page=2"),

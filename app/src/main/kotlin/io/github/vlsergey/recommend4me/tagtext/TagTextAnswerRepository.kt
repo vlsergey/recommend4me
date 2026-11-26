@@ -23,7 +23,7 @@ enum class TagTextVerdict {
  * answered — with their closeness as it was then, and the [cutting] it was given on.
  */
 data class TagTextAnswer(
-    val itemId: String,
+    val itemId: Long,
     val tag: Long,
     val partId: String,
     val paragraph: Int,
@@ -41,7 +41,7 @@ data class TagTextAnswer(
 class TagTextAnswerRepository(private val db: DSLContext) {
 
     /** Every answer on the item's tags by its text, of any cutting: a paragraph answered on is known by its hash. */
-    fun ofItem(itemId: String): List<TagTextAnswer> =
+    fun ofItem(itemId: Long): List<TagTextAnswer> =
         db.selectFrom(TAG_TEXT_ANSWER).where(TAG_TEXT_ANSWER.ITEM_ID.eq(itemId)).fetch { it.toAnswer() }
 
     /**

@@ -24,7 +24,7 @@ class SetMembers(private val plugins: Plugins, private val phrases: PhraseVector
         }
 
     /** How many members every item's set of [kind] has now. */
-    fun sizes(s: SourceStore, kind: SetKind, encoder: String): Map<String, Int> =
+    fun sizes(s: SourceStore, kind: SetKind, encoder: String): Map<Long, Int> =
         when (kind) {
             SetKind.SCREENS -> s.pictures.analysed.screenshotCounts(encoder)
             SetKind.REVIEWS -> s.reviews.counts()
@@ -32,7 +32,7 @@ class SetMembers(private val plugins: Plugins, private val phrases: PhraseVector
         }
 
     /** The members of the sets of [kind] of the items [ids], as vectors by [encoder]. */
-    fun members(s: SourceStore, kind: SetKind, encoder: String, ids: List<String>): Map<String, List<FloatArray>> =
+    fun members(s: SourceStore, kind: SetKind, encoder: String, ids: List<Long>): Map<Long, List<FloatArray>> =
         when (kind) {
             SetKind.SCREENS -> s.pictures.analysed.screenshots(ids, encoder)
             SetKind.REVIEWS -> {

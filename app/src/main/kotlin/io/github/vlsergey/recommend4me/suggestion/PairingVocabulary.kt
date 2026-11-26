@@ -83,7 +83,7 @@ internal object PairingVocabulary {
     }
 
     /** Every work's characters: the confirmed ones and those the model gives it. */
-    private fun charactersOf(answers: Answers, made: WorkChances): Map<String, List<String>> {
+    private fun charactersOf(answers: Answers, made: WorkChances): Map<Long, List<String>> {
         val linkedCharacters = WorkUniverses.linked(answers, UniverseFacets.CHARACTERS).toMutableMap()
         made.forEach { (id, chances) ->
             val given = ModelValues.given(chances[UniverseFacets.CHARACTERS].orEmpty())
@@ -96,7 +96,7 @@ internal object PairingVocabulary {
      * Every pair of each work's [characters] but those the user rejected: the original characters pair with anyone — a
      * work need not list them among its main ones.
      */
-    private fun pairsOf(answers: Answers, characters: Map<String, List<String>>): Map<String, Set<String>> {
+    private fun pairsOf(answers: Answers, characters: Map<Long, List<String>>): Map<Long, Set<String>> {
         val rejected =
             answers.all.filter { it.facet == UniverseFacets.CHARACTERS && !it.added }.groupBy({ it.itemId }, { it.key })
         return characters.mapValues { (id, own) ->
@@ -171,8 +171,8 @@ internal object PairingVocabulary {
         answers: Answers,
         made: WorkChances,
         read: CharactersRead,
-        characters: Map<String, List<String>>,
-    ): (String) -> Named? {
+        characters: Map<Long, List<String>>,
+    ): (Long) -> Named? {
         val universes = WorkUniverses.universesOf(answers, made)
         val own = universes.values.flatten().toSet()
         val known = HashMap<String, List<String>>()

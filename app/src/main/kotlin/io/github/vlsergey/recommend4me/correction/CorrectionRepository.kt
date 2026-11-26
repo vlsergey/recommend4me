@@ -12,7 +12,7 @@ import org.jooq.impl.DSL
 
 /** A value of a facet the user added to an item or took from it. */
 data class FacetCorrection(
-    val itemId: String,
+    val itemId: Long,
     val facet: String,
     val key: String,
     val added: Boolean,
@@ -28,10 +28,10 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     FieldCorrections by WorkFieldCorrections(db, source, works),
     CompleteFacets by WorkCompleteFacets(db, source, works) {
 
-    private fun workOf(itemId: String, now: Instant = Instant.now()) = works.of(ItemKey(source, itemId), now)
+    private fun workOf(itemId: Long, now: Instant = Instant.now()) = works.of(ItemKey(source, itemId), now)
 
     /** The works of the source's items: what a word on a value of the source reaches. */
-    fun setFacet(itemId: String, facet: String, key: String, added: Boolean, name: String?, now: Instant) {
+    fun setFacet(itemId: Long, facet: String, key: String, added: Boolean, name: String?, now: Instant) {
         val f = WORK_FACET_CORRECTION
         db.insertInto(f)
             .set(f.WORK, workOf(itemId, now))
@@ -47,13 +47,13 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
             .execute()
     }
 
-    fun unsetFacet(itemId: String, facet: String, key: String) {
+    fun unsetFacet(itemId: Long, facet: String, key: String) {
         val f = WORK_FACET_CORRECTION
         db.deleteFrom(f).where(f.WORK.eq(workOf(itemId)), f.FACET.eq(facet), f.VALUE_KEY.eq(key)).execute()
     }
 
     /** Takes every correction of the value away, from every work of the source; returns the items that had one. */
-    fun removeFacetValue(facet: String, key: String): List<String> {
+    fun removeFacetValue(facet: String, key: String): List<Long> {
         val f = WORK_FACET_CORRECTION
         val value = f.FACET.eq(facet).and(f.VALUE_KEY.eq(key))
         val items = seenFacets(value.and(SITE_WORK.SOURCE.eq(source))).map { it.itemId }
@@ -72,7 +72,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
             .fetch { FacetCorrection(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!, it.value5()) }
     }
 
-    fun facetsOf(itemId: String): List<FacetCorrection> = facetsOf(listOf(itemId))[itemId].orEmpty()
+    fun facetsOf(itemId: Long): List<FacetCorrection> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
     /**
      * The corrections of the items [ids]: by their ids, a [BATCH] of them a query — the items found by the key of the
@@ -80,7 +80,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
      * for many: it walks every item of the source, 1.4 million of ficbook, 1.5 s, at every portion of ten thousand
      * (2026-11-17).
      */
-    fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> =
+    fun facetsOf(ids: Collection<Long>): Map<Long, List<FacetCorrection>> =
         ids.distinct()
             .chunked(BATCH)
             .flatMap { chunk -> seenFacets(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk)) }
@@ -90,7 +90,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
      * The user's answers on the values [from] of a facet made answers on [to] — the values merged into it: of a work
      * answered on more than one of them, the newest answer stands. Returns the items of the source whose answers moved.
      */
-    fun moveFacetValues(facet: String, from: Collection<String>, to: String): Set<String> {
+    fun moveFacetValues(facet: String, from: Collection<String>, to: String): Set<Long> {
         val moved = HashSet<Long>()
         db.transaction { c ->
             val tx = DSL.using(c)

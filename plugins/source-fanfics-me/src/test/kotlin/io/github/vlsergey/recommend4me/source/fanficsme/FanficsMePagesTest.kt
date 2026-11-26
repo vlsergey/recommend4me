@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.source.fanficsme
 
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import java.time.Instant
 import kotlin.test.Test
@@ -19,7 +20,7 @@ class FanficsMePagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, name: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, page(name), now), context)
+        return context.sitesOf(source.capture(CapturedPage(url, page(name), now), context))
     }
 
     @Test
@@ -160,7 +161,7 @@ class FanficsMePagesTest {
         assertEquals("https://fanfics.me/serie4423", series.url)
         assertEquals("in-progress", series.status)
         assertTrue(series.description!!.startsWith("— Джордж, вы не могли бы говорить"), series.description)
-        assertEquals(works, series.works.map { it.itemId })
+        assertEquals(works, series.works.map { context.siteOf(it.itemId) })
         assertTrue(series.whole)
         // A page listing fewer works than its header counts is not every work of the series
         val fewer = page("serie.html").replace(Regex("(Количество:</div>\\s*<div class=\"content\">)3 "), "$15 ")
@@ -171,13 +172,20 @@ class FanficsMePagesTest {
     @Test
     fun `a list of an author's series gives each with every work of it, a series of no title its placeholder`() {
         val context = MemorySourceContext()
+        // Of the works the list names, those written before: a work never seen is not of a series yet
+        listOf("251745", "252775", "252073", "252072", "252281").forEach {
+            context.items.upsert(ItemHead(it, "https://fanfics.me/fic$it", it), now)
+        }
         capture(context, "https://fanfics.me/user52961/series", "user-series.html")
         assertEquals(listOf("4940", "4897", "4874"), context.series.keys.take(3))
         val first = context.series.getValue("4940")
         assertEquals("Только не с полукровкой", first.title)
         assertEquals("finished", first.status)
         assertEquals("", first.description)
-        assertEquals(listOf("251745", "252775", "252073", "252072", "252281"), first.works.map { it.itemId })
+        assertEquals(
+            listOf("251745", "252775", "252073", "252072", "252281"),
+            first.works.map { context.siteOf(it.itemId) },
+        )
         assertEquals(
             "Цикл историй об отряде разумных, которые совсем не собирались становиться героями",
             context.series.getValue("4874").description,
@@ -267,11 +275,11 @@ class FanficsMePagesTest {
 
     @Test
     fun `the addresses of a work's pages name the work, a cover's original comes first`() {
-        assertEquals("252474", source.itemIdOf("https://fanfics.me/fic252474"))
-        assertEquals("252474", source.itemIdOf("https://fanfics.me/fic252474/comments"))
-        assertEquals("252474", source.itemIdOf("https://fanfics.me/read.php?id=252474&chapter=3#start_read"))
-        assertEquals("252474", source.itemIdOf("https://fanfics.me/read.php?chapter=3&id=252474"))
-        assertNull(source.itemIdOf("https://fanfics.me/fandom2"))
+        assertEquals("252474", source.siteIdOf("https://fanfics.me/fic252474"))
+        assertEquals("252474", source.siteIdOf("https://fanfics.me/fic252474/comments"))
+        assertEquals("252474", source.siteIdOf("https://fanfics.me/read.php?id=252474&chapter=3#start_read"))
+        assertEquals("252474", source.siteIdOf("https://fanfics.me/read.php?chapter=3&id=252474"))
+        assertNull(source.siteIdOf("https://fanfics.me/fandom2"))
         assertEquals(
             listOf(
                 "https://fanfics.me/images/fanart/2026/10/25/1792907630596.jpg",

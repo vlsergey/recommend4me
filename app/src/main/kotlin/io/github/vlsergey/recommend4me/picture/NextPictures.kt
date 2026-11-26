@@ -13,7 +13,7 @@ import io.github.vlsergey.recommend4me.worklist.ListPredictions
 internal class NextPictures(private val stores: Stores, private val indexes: ListIndexes) {
 
     /** The next pictures, [limit] at most, but those of [skip] (source, item, position): those in flight. */
-    fun of(encoder: ImageEncoder, limit: Int, skip: Set<Pair<String, Pair<String, Int>>>): List<PictureJob> {
+    fun of(encoder: ImageEncoder, limit: Int, skip: Set<Pair<String, Pair<Long, Int>>>): List<PictureJob> {
         val perSource = stores.sources.map { s -> ofSource(s, encoder, limit, skip) }.filter { it.isNotEmpty() }
         if (perSource.isEmpty()) return emptyList()
         val share = (limit / perSource.size).coerceAtLeast(1)
@@ -28,7 +28,7 @@ internal class NextPictures(private val stores: Stores, private val indexes: Lis
         s: SourceStore,
         encoder: ImageEncoder,
         limit: Int,
-        skip: Set<Pair<String, Pair<String, Int>>>,
+        skip: Set<Pair<String, Pair<Long, Int>>>,
     ): List<PictureJob> {
         val best = s.ratings.all().groupBy { it.itemId }.mapValues { (_, list) -> list.maxOf { it.grade } }
         val keep = best.filterValues { it >= PictureService.KEEP_FROM }.keys

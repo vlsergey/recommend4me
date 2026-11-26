@@ -274,9 +274,9 @@ class SitePlugins {
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("${Regex.escape(homepage)}/(work|tags|synonyms|series|words)/.*"))
 
-        override fun itemUrl(itemId: String) = "$homepage/work/$itemId"
+        override fun itemUrl(siteId: String) = "$homepage/work/$siteId"
 
-        override fun itemIdOf(url: String) =
+        override fun siteIdOf(url: String) =
             Regex("^${Regex.escape(homepage)}/work/([^/?#]+)").find(url)?.groupValues?.get(1)
 
         override val pageDecor =
@@ -290,7 +290,7 @@ class SitePlugins {
         override fun describing(facet: String, tags: List<String>): List<WantedPage> =
             if (facet != "tag") emptyList() else tags.map { WantedPage("$describes$it", mapOf("tag" to it)) }
 
-        override fun capture(page: CapturedPage, context: SourceContext): List<String> =
+        override fun capture(page: CapturedPage, context: SourceContext): List<Long> =
             when {
                 page.url.startsWith(synonymsOf) -> {
                     synonyms(page, context)
@@ -308,10 +308,12 @@ class SitePlugins {
                 else -> listOf(work(page, context))
             }
 
-        /** A series' page: the series and its every work in order; the works. */
-        private fun series(page: CapturedPage, context: SourceContext): List<String> {
-            val (title, description, ids) = page.html.split('|')
-            val works = ids.split(',').filter { it.isNotBlank() }
+        /** A series' page: the series and its every work written in order; the works. */
+        private fun series(page: CapturedPage, context: SourceContext): List<Long> {
+            val (title, description, sites) = page.html.split('|')
+            val named = sites.split(',').filter { it.isNotBlank() }
+            val ids = context.items.idsOf(named)
+            val works = named.mapNotNull { ids[it] }
             context.items.keepSeries(
                 SeriesData(
                     page.url.removePrefix(seriesOf),
@@ -360,16 +362,19 @@ class SitePlugins {
                 }
         }
 
-        /** A work's page, written; its id. */
-        private fun work(page: CapturedPage, context: SourceContext): String {
+        /** A work's page, written; its number. */
+        private fun work(page: CapturedPage, context: SourceContext): Long {
             val parts = page.html.split('|')
-            val (id, title, tags) = parts
+            val (site, title, tags) = parts
             val annotation = parts[3]
             val pairings = parts[4]
-            context.items.upsert(
-                ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
-                page.capturedAt,
-            )
+            val id =
+                context.items
+                    .upsert(
+                        ItemHead(site, itemUrl(site), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
+                        page.capturedAt,
+                    )
+                    .id
             context.items.setFacet(
                 id,
                 "tag",

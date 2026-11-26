@@ -58,7 +58,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
      * the site; of the [whole] table of contents, a part kept and not named is taken off it ([StoredPart.takenOffAt]).
      * Whether some part was taken off or came back: what the work is made of changed.
      */
-    fun save(itemId: String, parts: List<PartData>, whole: Boolean = false, now: Instant = Instant.now()): Boolean {
+    fun save(itemId: Long, parts: List<PartData>, whole: Boolean = false, now: Instant = Instant.now()): Boolean {
         parts.forEach { p ->
             val id = p.id.take(ID_WIDTH)
             val known =
@@ -68,19 +68,9 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
             // A text's characters and words counted as it is written, kept with its part
             val words = content?.let(WordCount::of)
             val changed = hash != null && hash != known?.value1()
-            if (content != null && changed) store.putText(itemId, id, content)
+            if (content != null && changed) store.putText(itemId.toString(), id, content)
             if (known == null) {
-                db.insertInto(PART)
-                    .set(PART.ITEM_ID, itemId)
-                    .set(PART.PART_ID, id)
-                    // A part whose place the page does not tell goes after the known ones
-                    .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION)
-                    .set(PART.TITLE, p.title?.take(TITLE_WIDTH))
-                    .set(PART.CONTENT_HASH, hash)
-                    .set(PART.PUBLISHED_AT, p.publishedAt)
-                    .set(PART.CHARS, content?.length)
-                    .set(PART.WORDS, words)
-                    .execute()
+                insert(itemId, id, p, hash, words)
                 return@forEach
             }
             var update = db.update(PART).set(PART.ITEM_ID, itemId)
@@ -120,8 +110,23 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
         return back + off > 0
     }
 
+    /** The part [p] of the item [itemId], new, kept as [id], its text of the [hash] and of [words] words. */
+    private fun insert(itemId: Long, id: String, p: PartData, hash: String?, words: Int?) {
+        db.insertInto(PART)
+            .set(PART.ITEM_ID, itemId)
+            .set(PART.PART_ID, id)
+            // A part whose place the page does not tell goes after the known ones
+            .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION)
+            .set(PART.TITLE, p.title?.take(TITLE_WIDTH))
+            .set(PART.CONTENT_HASH, hash)
+            .set(PART.PUBLISHED_AT, p.publishedAt)
+            .set(PART.CHARS, p.content?.length)
+            .set(PART.WORDS, words)
+            .execute()
+    }
+
     /** Every part of the item, those taken off the site too, in their order. */
-    fun ofItem(itemId: String): List<StoredPart> =
+    fun ofItem(itemId: Long): List<StoredPart> =
         db.select(
                 PART.PART_ID,
                 PART.POSITION,
@@ -137,33 +142,37 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                 StoredPart(it.value1()!!, it.value2()!!, it.value3(), it.value4() == true, it.value5(), it.value6())
             }
 
-    fun text(itemId: String, partId: String): Pair<StoredPart, String>? =
+    fun text(itemId: Long, partId: String): Pair<StoredPart, String>? =
         db.selectFrom(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).fetchOne()?.let {
             if (it.contentHash == null) return null
-            val content = store.text(itemId, partId) ?: return null
+            val content = store.text(itemId.toString(), partId) ?: return null
             StoredPart(it.partId!!, it.position!!, it.title, true, it.publishedAt, it.takenOffAt) to content
         }
 
     /** The texts of the parts [partIds] of the item, by part, read of the store alone; a part of none left out. */
-    fun textsOf(itemId: String, partIds: Collection<String>): Map<String, String> = store.texts(itemId, partIds)
+    fun textsOf(itemId: Long, partIds: Collection<String>): Map<String, String> =
+        store.texts(itemId.toString(), partIds)
 
     /** The texts of the [parts] of many items — item and part —, read of the store at once ([PartStore.texts]). */
-    fun textsOf(parts: Collection<Pair<String, String>>): Map<Pair<String, String>, String> = store.texts(parts)
+    fun textsOf(parts: Collection<Pair<Long, String>>): Map<Pair<Long, String>, String> =
+        store.texts(parts.map { (item, part) -> item.toString() to part }).mapKeys { (key, _) ->
+            key.first.toLong() to key.second
+        }
 
     /**
      * The texts of every part of the item that has one, in their order, each with its title: one text read at a time.
      */
-    fun forEachContent(itemId: String, action: (title: String?, content: String) -> Unit) {
+    fun forEachContent(itemId: Long, action: (title: String?, content: String) -> Unit) {
         titlesOf(listOf(itemId))[itemId].orEmpty().forEach { (part, title) ->
-            store.text(itemId, part)?.let { action(title, it) }
+            store.text(itemId.toString(), part)?.let { action(title, it) }
         }
     }
 
     /** The texts of every part of the items [ids] that has one, in their order: item to (part, title, text). */
-    fun contentsOf(ids: Collection<String>): Map<String, List<Triple<String, String?, String>>> =
+    fun contentsOf(ids: Collection<Long>): Map<Long, List<Triple<String, String?, String>>> =
         titlesOf(ids)
             .mapValues { (item, parts) ->
-                val texts = store.texts(item, parts.map { it.first })
+                val texts = store.texts(item.toString(), parts.map { it.first })
                 parts.mapNotNull { (part, title) -> texts[part]?.let { Triple(part, title, it) } }
             }
             .filterValues { it.isNotEmpty() }
@@ -172,8 +181,8 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
      * The titles of every part of the items [ids] on the site that has a text, in their order — the texts not read:
      * item to (part, title).
      */
-    fun titlesOf(ids: Collection<String>): Map<String, List<Pair<String, String?>>> {
-        val out = HashMap<String, MutableList<Pair<String, String?>>>()
+    fun titlesOf(ids: Collection<Long>): Map<Long, List<Pair<String, String?>>> {
+        val out = HashMap<Long, MutableList<Pair<String, String?>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE)
                 .from(PART)
@@ -188,8 +197,8 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
      * When the first part of each of the items [ids] was published, as its site says: the earliest date of its parts;
      * an item none of whose parts is dated has none.
      */
-    fun firstPublished(ids: Collection<String>): Map<String, Instant> {
-        val out = HashMap<String, Instant>()
+    fun firstPublished(ids: Collection<Long>): Map<Long, Instant> {
+        val out = HashMap<Long, Instant>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, DSL.min(PART.PUBLISHED_AT))
                 .from(PART)
@@ -201,7 +210,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
     }
 
     /** Everything of the item's parts the store keeps gone, as the work is removed: its rows go with the item's. */
-    fun forget(itemId: String) = store.forget(itemId)
+    fun forget(itemId: Long) = store.forget(itemId.toString())
 
     private companion object {
         /** The items read by one statement: the length of a query's list, not a meaning. */

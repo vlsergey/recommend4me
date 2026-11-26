@@ -17,7 +17,7 @@ internal object WorkCasts {
      * The cast of every work of [entries] (work to the keys of its entries, in the source's [facet]), their names read
      * once for all of them.
      */
-    fun of(store: SourceStore, facet: String, entries: Map<String, List<String>>): Map<String, SaidCast> {
+    fun of(store: SourceStore, facet: String, entries: Map<Long, List<String>>): Map<Long, SaidCast> {
         val names = store.items.facetNames(facet, entries.values.flatMapTo(HashSet()) { it })
         return entries.mapValues { (_, keys) ->
             if (keys.isEmpty()) SaidCast.NONE else store.source.castHabit.cast(keys.map { FacetValue(it, names[it]) })

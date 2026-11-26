@@ -37,8 +37,8 @@ internal class ReferenceSet(private val room: Int, private val m: Int) {
      * The work [id] of the row [i] of a portion, its values [asked] of the user and its [pairs], kept when it is among
      * the best [room] of those offered so far — the worst kept falling out.
      */
-    private fun admit(id: String, i: Int, asked: IntArray, pairs: SuggestionPairs) {
-        val rank = Rank(asked.isNotEmpty(), mixed(id.hashCode()), id)
+    private fun admit(id: Long, i: Int, asked: IntArray, pairs: SuggestionPairs) {
+        val rank = Rank(asked.isNotEmpty(), mixed(id), id)
         val worst = kept.peek()
         if (kept.size >= room && (worst == null || BETTER.compare(rank, worst.rank) >= 0)) return
         kept += Entry(rank, i, pairs.foldOf[i], asked, pairs.lack[i], pairs.may[i]?.let(mays::take), pairs)
@@ -62,7 +62,7 @@ internal class ReferenceSet(private val room: Int, private val m: Int) {
                 Array(entries.size) { entries[it].ownLabel },
             )
         return Reference(
-            entries.map { it.rank.id },
+            LongArray(entries.size) { entries[it].rank.id },
             layout,
             labels,
             IntArray(entries.size) { entries[it].fold },
@@ -72,7 +72,7 @@ internal class ReferenceSet(private val room: Int, private val m: Int) {
     }
 
     /** Where a work stands among the works offered: answered on first, then by its mixed hash, then by its id. */
-    private class Rank(val answered: Boolean, val hash: Long, val id: String)
+    private class Rank(val answered: Boolean, val hash: Long, val id: Long)
 
     /** A work kept: of the row [row] of the portion it came in, its pairs copied out of [pairs]. */
     private class Entry(
@@ -129,8 +129,8 @@ internal class ReferenceSet(private val room: Int, private val m: Int) {
         const val SHIFT = 33
 
         /** The hash of an id spread over every bit, the same at every walk and every run. */
-        fun mixed(hash: Int): Long {
-            var h = hash.toLong()
+        fun mixed(id: Long): Long {
+            var h = id
             h = (h xor (h ushr SHIFT)) * MIX1
             h = (h xor (h ushr SHIFT)) * MIX2
             return h xor (h ushr SHIFT)
@@ -145,7 +145,7 @@ internal class ReferenceSet(private val room: Int, private val m: Int) {
  * placed a portion at a time ([place]), every work projected of the [layout] of every block some portion has.
  */
 internal class Reference(
-    val ids: List<String>,
+    val ids: LongArray,
     val layout: List<Pair<String, Int>>,
     val labels: Labels,
     val folds: IntArray,

@@ -72,7 +72,7 @@ class PictureVectors(
         if (taken.isEmpty()) return
         var room = PORTION
         val done = ArrayList<String>()
-        taken.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) }).forEach { (source, ids) ->
+        taken.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP).toLong() }).forEach { (source, ids) ->
             val s = stores.source(source)
             val pictures = s?.pictures?.queue?.downloadedOf(ids, encoder.id).orEmpty()
             val now = pictures.take(room)

@@ -28,12 +28,12 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
     fun vocabularyOf(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
         light: Boolean = false,
-        site: Map<String, Map<String, List<String>>>? = null,
+        site: Map<Long, Map<String, List<String>>>? = null,
     ): Vocabulary? =
         universes.of(store, facet, ids, made, characters, answers, light, site)
             ?: AgeRatingVocabulary.of(store, facet, ids, site)
@@ -76,10 +76,10 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
     private fun worksExamples(
         store: SourceStore,
         from: FacetDef,
-        ids: Collection<String>,
-        site: Map<String, Map<String, List<String>>>?,
+        ids: Collection<Long>,
+        site: Map<Long, Map<String, List<String>>>?,
     ): Vocabulary {
-        val own = HashMap<String, List<String>>()
+        val own = HashMap<Long, List<String>>()
         val values = site ?: store.items.facetsOf(ids)
         val bound = store.tags.bindingsOf(store.id, ids.flatMap { values[it]?.get(from.key).orEmpty() })
         ids.forEach { id ->

@@ -12,7 +12,7 @@ import org.jooq.impl.DSL
 class AnalysedPictures(private val db: DSLContext) {
 
     /** Every analysed picture of the item with its position, not combined. */
-    fun positioned(itemId: String, encoder: String): List<Pair<Int, FloatArray>> =
+    fun positioned(itemId: Long, encoder: String): List<Pair<Int, FloatArray>> =
         db.select(PICTURE.POSITION, PICTURE.VEC)
             .from(PICTURE)
             .where(PICTURE.ITEM_ID.eq(itemId), analyzedBy(encoder))
@@ -21,10 +21,10 @@ class AnalysedPictures(private val db: DSLContext) {
 
     /** The vectors of the pictures [refs] (item, position) analysed by [encoder], at their current address. */
     fun vectorsOf(
-        refs: Collection<Pair<String, Int>>,
+        refs: Collection<Pair<Long, Int>>,
         encoder: String,
-    ): Map<Pair<String, Int>, Pair<String, FloatArray>> {
-        val out = HashMap<Pair<String, Int>, Pair<String, FloatArray>>()
+    ): Map<Pair<Long, Int>, Pair<String, FloatArray>> {
+        val out = HashMap<Pair<Long, Int>, Pair<String, FloatArray>>()
         refs
             .map { it.first }
             .distinct()
@@ -43,7 +43,7 @@ class AnalysedPictures(private val db: DSLContext) {
     }
 
     /** How many screenshots (not the cover) of every item are analysed. */
-    fun screenshotCounts(encoder: String): Map<String, Int> =
+    fun screenshotCounts(encoder: String): Map<Long, Int> =
         db.select(PICTURE.ITEM_ID, DSL.count())
             .from(PICTURE)
             .where(PICTURE.POSITION.gt(0), analyzedBy(encoder))
@@ -52,12 +52,16 @@ class AnalysedPictures(private val db: DSLContext) {
             .associate { it.value1()!! to it.value2()!! }
 
     /** Every analysed screenshot (not the cover) of the items, one vector each. */
-    fun screenshots(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> {
-        val out = HashMap<String, MutableList<FloatArray>>()
+    fun screenshots(itemIds: List<Long>, encoder: String): Map<Long, List<FloatArray>> {
+        val out = HashMap<Long, MutableList<FloatArray>>()
         itemIds.chunked(PICTURES_BATCH).forEach { ids ->
             db.select(PICTURE.ITEM_ID, PICTURE.VEC)
                 .from(PICTURE)
-                .where(PICTURE.ITEM_ID.`in`(ids), PICTURE.POSITION.gt(0), analyzedBy(encoder))
+                .where(
+                    PICTURE.ITEM_ID.`in`(ids),
+                    PICTURE.POSITION.gt(0),
+                    analyzedBy(encoder),
+                )
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
         }
         return out
@@ -70,8 +74,8 @@ class AnalysedPictures(private val db: DSLContext) {
         }
 
     /** Every analysed picture of the catalogue, streamed item by item: (item, its pictures by position). */
-    fun forEachItem(encoder: String, action: (itemId: String, pictures: List<Pair<Int, FloatArray>>) -> Unit) {
-        var current: String? = null
+    fun forEachItem(encoder: String, action: (itemId: Long, pictures: List<Pair<Int, FloatArray>>) -> Unit) {
+        var current: Long? = null
         val list = ArrayList<Pair<Int, FloatArray>>()
         db.select(PICTURE.ITEM_ID, PICTURE.POSITION, PICTURE.VEC)
             .from(PICTURE)

@@ -38,7 +38,7 @@ internal class ValueSide(
     /** The value side as a task of no item ([TaskPortions.values]). */
     fun task(): SuggestionTask =
         SuggestionTask(
-            itemIds = emptyList(),
+            itemIds = LongArray(0),
             inputs = emptyList(),
             values = names,
             valueKeys = values,

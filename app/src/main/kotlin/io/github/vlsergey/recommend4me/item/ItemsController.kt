@@ -42,7 +42,7 @@ private val log = LoggerFactory.getLogger(ItemsController::class.java)
  */
 internal inline fun <T : Any> Stores.answerOn(
     source: String,
-    item: String,
+    item: Long,
     found: (SourceStore, StoredItem) -> ResponseEntity<T>,
 ): ResponseEntity<T> {
     val store = source(source)
@@ -63,7 +63,7 @@ class ItemsController(
     private val json: JsonMapper,
 ) : ItemsApi {
 
-    override fun removeItem(source: String, item: String): ResponseEntity<Unit> =
+    override fun removeItem(source: String, item: Long): ResponseEntity<Unit> =
         if (removal.remove(ItemKey(source, item))) ResponseEntity.noContent().build()
         else ResponseEntity.notFound().build()
 
@@ -140,10 +140,10 @@ class ItemsController(
         )
     }
 
-    override fun getItem(source: String, item: String): ResponseEntity<ItemDetails> =
+    override fun getItem(source: String, item: Long): ResponseEntity<ItemDetails> =
         details.read(ItemKey(source, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
-    override fun refreshItem(source: String, item: String): ResponseEntity<ItemDetails> =
+    override fun refreshItem(source: String, item: Long): ResponseEntity<ItemDetails> =
         stores.answerOn(source, item) { store, _ ->
             refresh(store, item)
             // Its texts encoded in the queue of the computations, as every written work's: not waited for here; its
@@ -155,7 +155,7 @@ class ItemsController(
      * The page of the [item] downloaded again by its source; refused when the source downloads no pages by itself or
      * could not download this one.
      */
-    private fun refresh(store: SourceStore, item: String) {
+    private fun refresh(store: SourceStore, item: Long) {
         if (!store.source.downloadsPages)
             throw Refusal.NO_DOWNLOADS.refuse(
                 HttpStatus.CONFLICT,
@@ -170,7 +170,7 @@ class ItemsController(
 
     /** Whether the source of the [store] downloaded the page of the [item]; refused when the site did not answer. */
     @Suppress("TooGenericExceptionCaught")
-    private fun download(store: SourceStore, item: String): Boolean =
+    private fun download(store: SourceStore, item: Long): Boolean =
         try {
             store.source.refresh(item, contexts.of(store.id))
         } catch (e: Exception) {
@@ -185,7 +185,7 @@ class ItemsController(
                 .apply { initCause(e) }
         }
 
-    override fun getPicture(source: String, item: String, position: Int, full: Boolean): ResponseEntity<Resource> =
+    override fun getPicture(source: String, item: Long, position: Int, full: Boolean): ResponseEntity<Resource> =
         when (val served = pictures.serve(ItemKey(source, item), position, full)) {
             null -> ResponseEntity.notFound().build()
             // A picture changes only together with its address, and then the file is replaced
@@ -197,7 +197,7 @@ class ItemsController(
             is Served.Redirect -> ResponseEntity.status(HttpStatus.FOUND).location(URI.create(served.url)).build()
         }
 
-    override fun getPart(source: String, item: String, partId: String): ResponseEntity<PartText> =
+    override fun getPart(source: String, item: Long, partId: String): ResponseEntity<PartText> =
         stores.source(source)?.parts?.text(item, partId)?.let { (part, content) ->
             ResponseEntity.ok(PartText(part.partId, part.position, content, part.title))
         } ?: ResponseEntity.notFound().build()

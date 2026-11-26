@@ -36,12 +36,15 @@ class TextVectorRepository(private val db: DSLContext) {
     val phrases = PhraseVectorRepository(db, writing)
 
     /** The hashes of the stored vectors of [encoder] of the items [ids], a batch a query: item to its texts' hashes. */
-    fun hashesOf(ids: Collection<String>, encoder: String): Map<String, List<String>> {
-        val out = HashMap<String, MutableList<String>>()
+    fun hashesOf(ids: Collection<Long>, encoder: String): Map<Long, List<String>> {
+        val out = HashMap<Long, MutableList<String>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_HASH)
                 .from(TEXT_VECTOR)
-                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.ITEM_ID.`in`(chunk))
+                .where(
+                    TEXT_VECTOR.ENCODER.eq(encoder),
+                    TEXT_VECTOR.ITEM_ID.`in`(chunk),
+                )
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! }
         }
         return out
@@ -54,12 +57,12 @@ class TextVectorRepository(private val db: DSLContext) {
      */
     fun kept(
         encoder: String,
-        ids: Collection<String>? = null,
+        ids: Collection<Long>? = null,
         pieces: String? = null,
         fullText: String? = null,
-    ): Map<Pair<String, String>, KeptText> {
-        val out = HashMap<Pair<String, String>, KeptText>()
-        fun read(only: Collection<String>?) =
+    ): Map<Pair<Long, String>, KeptText> {
+        val out = HashMap<Pair<Long, String>, KeptText>()
+        fun read(only: Collection<Long>?) =
             db.select(
                     TEXT_VECTOR.ITEM_ID,
                     TEXT_VECTOR.TEXT_KEY,
@@ -83,20 +86,18 @@ class TextVectorRepository(private val db: DSLContext) {
     }
 
     /** The items with a stored vector of the text [key], of any encoder, in the order of their ids. */
-    fun itemsWith(key: String): List<String> =
+    fun itemsWith(key: String): List<Long> =
         db.selectDistinct(TEXT_VECTOR.ITEM_ID)
             .from(TEXT_VECTOR)
             .where(TEXT_VECTOR.TEXT_KEY.eq(key))
-            .fetch {
-                it.value1()!!
-            }
+            .fetch { it.value1()!! }
             .sorted()
 
     /**
      * The text's vector; the windows of the text it had before are of another text, and go
      * ([TextWindowRepository.saveWindows] makes them anew).
      */
-    fun save(itemId: String, textKey: String, encoder: String, hash: String, vector: FloatArray) {
+    fun save(itemId: Long, textKey: String, encoder: String, hash: String, vector: FloatArray) {
         val packed = Vectors.half(vector)
         writing.withLock {
             db.transaction { c ->
@@ -123,17 +124,17 @@ class TextVectorRepository(private val db: DSLContext) {
         }
     }
 
-    fun delete(itemId: String, textKey: String) {
+    fun delete(itemId: Long, textKey: String) {
         db.deleteFrom(TEXT_WINDOW).where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey)).execute()
         db.deleteFrom(TEXT_VECTOR).where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(textKey)).execute()
     }
 
     /** Vectors of the items [ids] by [encoder]: item to text key to vector. */
     fun ofMany(
-        ids: Collection<String>,
+        ids: Collection<Long>,
         encoder: String,
         keys: Collection<String>? = null,
-    ): Map<String, Map<String, FloatArray>> =
+    ): Map<Long, Map<String, FloatArray>> =
         halvesOf(ids, encoder, keys).mapValues { (_, own) -> own.mapValues { Vectors.fromHalf(it.value) } }
 
     /**
@@ -141,15 +142,18 @@ class TextVectorRepository(private val db: DSLContext) {
      * texts alone, of every text when null.
      */
     fun halvesOf(
-        ids: Collection<String>,
+        ids: Collection<Long>,
         encoder: String,
         keys: Collection<String>? = null,
-    ): Map<String, Map<String, ByteArray>> {
-        val out = HashMap<String, MutableMap<String, ByteArray>>()
+    ): Map<Long, Map<String, ByteArray>> {
+        val out = HashMap<Long, MutableMap<String, ByteArray>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.VEC)
                 .from(TEXT_VECTOR)
-                .where(TEXT_VECTOR.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder))
+                .where(
+                    TEXT_VECTOR.ITEM_ID.`in`(chunk),
+                    TEXT_VECTOR.ENCODER.eq(encoder),
+                )
                 .and(keys?.let { TEXT_VECTOR.TEXT_KEY.`in`(it) } ?: DSL.noCondition())
                 .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
         }
@@ -160,14 +164,14 @@ class TextVectorRepository(private val db: DSLContext) {
     fun forEach(
         encoder: String,
         keys: Collection<String>,
-        action: (itemId: String, key: String, vector: FloatArray) -> Unit,
+        action: (itemId: Long, key: String, vector: FloatArray) -> Unit,
     ) = forEachHalves(encoder, keys) { id, key, bytes -> action(id, key, Vectors.fromHalf(bytes)) }
 
     /** [forEach] as stored: every vector its half-precision numbers, little-endian. */
     fun forEachHalves(
         encoder: String,
         keys: Collection<String>,
-        action: (itemId: String, key: String, halves: ByteArray) -> Unit,
+        action: (itemId: Long, key: String, halves: ByteArray) -> Unit,
     ) {
         if (keys.isEmpty()) return
         val marks = keys.joinToString(",") { "?" }
@@ -175,7 +179,7 @@ class TextVectorRepository(private val db: DSLContext) {
             "SELECT item_id, text_key, vec FROM text_vector WHERE encoder = ? AND text_key IN ($marks)",
             listOf(encoder) + keys,
         ) { r ->
-            action(r.getString(ITEM_COLUMN), r.getString(KEY_COLUMN), r.getBytes(VECTOR_COLUMN))
+            action(r.getLong(ITEM_COLUMN), r.getString(KEY_COLUMN), r.getBytes(VECTOR_COLUMN))
         }
     }
 

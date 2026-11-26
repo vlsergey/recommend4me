@@ -22,7 +22,7 @@ class ExplanationController(
     private val explanations: Explanations,
 ) : ExplanationApi {
 
-    override fun getExplanation(source: String, item: String): ResponseEntity<List<ApiContributionGroup>> =
+    override fun getExplanation(source: String, item: Long): ResponseEntity<List<ApiContributionGroup>> =
         stores.answerOn(source, item) { _, _ ->
             val key = ItemKey(source, item)
             // Of a graded work, the model's that had not seen it, once worked out
@@ -37,7 +37,7 @@ class ExplanationController(
     private fun explained(groups: List<ContributionGroup>): ResponseEntity<List<ApiContributionGroup>> =
         ResponseEntity.ok(groups.map { it.toApi(withFeatures = false) })
 
-    override fun getHeldOut(source: String, item: String): ResponseEntity<ApiHeldOut> =
+    override fun getHeldOut(source: String, item: Long): ResponseEntity<ApiHeldOut> =
         stores.answerOn(source, item) { _, _ ->
             when (val h = heldOuts.heldOut(ItemKey(source, item))) {
                 is HeldOutRead.Ready ->

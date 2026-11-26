@@ -13,13 +13,13 @@ import org.jooq.impl.SQLDataType
  */
 interface ItemMeasures {
     /** The characters of all the texts of each of the items [ids]: item to characters. */
-    fun lengthsOf(ids: Collection<String>): Map<String, Long>
+    fun lengthsOf(ids: Collection<Long>): Map<Long, Long>
 
     /** How many values of every facet together the site gives each of the items [ids]: item to values. */
-    fun valueCountsOf(ids: Collection<String>): Map<String, Int>
+    fun valueCountsOf(ids: Collection<Long>): Map<Long, Int>
 
     /** Those of the items [ids] the site gives any of the [keys] of the [facet]. */
-    fun withAnyOf(ids: Collection<String>, facet: String, keys: Collection<String>): Set<String>
+    fun withAnyOf(ids: Collection<Long>, facet: String, keys: Collection<String>): Set<Long>
 }
 
 /** The [ItemMeasures] of the source database [db], whose works have the texts of the keys [texts] ([SiteTexts]). */
@@ -31,19 +31,19 @@ internal class ItemMeasureRepository(private val db: DSLContext, texts: Collecti
             .map { DSL.coalesce(DSL.charLength(DSL.field(DSL.name(SiteTexts.columnOf(it)), SQLDataType.VARCHAR)), 0) }
             .reduceOrNull { a, b -> a.plus(b) }
 
-    override fun lengthsOf(ids: Collection<String>): Map<String, Long> {
+    override fun lengthsOf(ids: Collection<Long>): Map<Long, Long> {
         val sum = length ?: return emptyMap()
         return ids.distinct()
             .chunked(ITEM_BATCH)
             .flatMap { chunk ->
-                db.select(ITEM.SITE_ID, sum).from(ITEM).where(ITEM.SITE_ID.`in`(chunk)).and(sum.gt(0)).fetch {
+                db.select(ITEM.INTERNAL_ID, sum).from(ITEM).where(ITEM.INTERNAL_ID.`in`(chunk)).and(sum.gt(0)).fetch {
                     it.value1()!! to (it.value2()?.toLong() ?: 0L)
                 }
             }
             .toMap()
     }
 
-    override fun valueCountsOf(ids: Collection<String>): Map<String, Int> =
+    override fun valueCountsOf(ids: Collection<Long>): Map<Long, Int> =
         ids.distinct()
             .chunked(ITEM_BATCH)
             .flatMap { chunk ->
@@ -61,7 +61,7 @@ internal class ItemMeasureRepository(private val db: DSLContext, texts: Collecti
      * a value — every finished work of the site — against the list of the items, the work of minutes a batch of a
      * dump's import, more with every work it added (user, 2026-11-17).
      */
-    override fun withAnyOf(ids: Collection<String>, facet: String, keys: Collection<String>): Set<String> {
+    override fun withAnyOf(ids: Collection<Long>, facet: String, keys: Collection<String>): Set<Long> {
         if (keys.isEmpty()) return emptySet()
         val wanted = keys.toHashSet()
         return ids.distinct().chunked(ITEM_BATCH).flatMapTo(HashSet()) { chunk ->

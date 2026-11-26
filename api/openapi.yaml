@@ -917,7 +917,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '204':
           description: Taken out, or the user had not put it in a series
@@ -1041,7 +1042,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
         - name: otherSource
           in: query
           required: true
@@ -1051,7 +1053,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '204':
           description: Taken back
@@ -1072,7 +1075,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
         - name: otherSource
           in: query
           required: true
@@ -1082,7 +1086,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '200':
           description: The pair, the smaller key first
@@ -1242,7 +1247,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
         - name: facet
           in: query
           required: true
@@ -1676,7 +1682,8 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '200':
           description: The item after the link is taken back
@@ -2683,7 +2690,8 @@ paths:
         - name: item
           in: query
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '200':
           description: The work
@@ -3268,8 +3276,12 @@ components:
       name: item
       in: path
       required: true
+      description: |
+        The application's own number of the work's item in its source, never the site's id of it: a site that
+        changes the ids of its works changes nothing of the application's links
       schema:
-        type: string
+        type: integer
+        format: int64
     Catalogue:
       name: catalogue
       in: path
@@ -3662,7 +3674,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         url:
           type: string
         read:
@@ -3757,7 +3770,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         kind:
@@ -3780,7 +3794,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
 
     LinkedItem:
       type: object
@@ -3789,7 +3804,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         url:
@@ -3808,7 +3824,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         version:
@@ -3958,7 +3975,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         field:
           type: string
           description: The field of the snippet shown (SearchMatch.field)
@@ -4436,7 +4454,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         url:
@@ -4455,7 +4474,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         titleCorrected:
@@ -4524,7 +4544,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
           description: The title as the user corrected it
@@ -4544,14 +4565,16 @@ components:
         markSource:
           type: string
         markItem:
-          type: string
+          type: integer
+          format: int64
         markRef:
           type: string
           description: The marked picture's position or the marked review's id
         matchSource:
           type: string
         matchItem:
-          type: string
+          type: integer
+          format: int64
         matchRef:
           type: string
         verdict:
@@ -4569,7 +4592,8 @@ components:
         markSource:
           type: string
         markItem:
-          type: string
+          type: integer
+          format: int64
         markTitle:
           type: string
         markPosition:
@@ -4596,7 +4620,8 @@ components:
         markSource:
           type: string
         markItem:
-          type: string
+          type: integer
+          format: int64
         markReviewId:
           type: string
         markTitle:
@@ -4670,7 +4695,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
           description: The item of the work graded - this one or one linked to it
         current:
           type: boolean
@@ -5046,7 +5072,8 @@ components:
           type: string
           description: The key of the facet's label, when it is a facet of the source
         item:
-          type: string
+          type: integer
+          format: int64
           description: The work it is of, within the source
         since:
           type: string
@@ -5785,7 +5812,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         itemTitle:
           type: string
         title:
@@ -5804,7 +5832,8 @@ components:
         url:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         capturedAt:
@@ -5990,7 +6019,8 @@ components:
         decor:
           $ref: '#/components/schemas/PageDecorInfo'
         itemId:
-          type: string
+          type: integer
+          format: int64
           description: The work the page is of, when it is a work's page - known to the application or not yet
         item:
           $ref: '#/components/schemas/PageItem'
@@ -6017,7 +6047,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         grade:
@@ -6546,7 +6577,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         url:
@@ -6628,7 +6660,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         work:
           type: integer
           format: int64
@@ -6827,7 +6860,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         title:
           type: string
         url:
@@ -6865,7 +6899,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         line:
           type: string
           description: The site's line of the work's pairings and characters, as the site writes it and the user corrected it
@@ -6898,7 +6933,8 @@ components:
         source:
           type: string
         item:
-          type: string
+          type: integer
+          format: int64
         facet:
           type: string
         value:

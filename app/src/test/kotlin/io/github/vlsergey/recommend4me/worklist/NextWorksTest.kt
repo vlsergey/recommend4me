@@ -13,7 +13,7 @@ import org.jooq.impl.DSL
  * cursor on, a portion at a time.
  */
 class NextWorksTest {
-    private fun row(id: String, prediction: Double?) =
+    private fun row(id: Long, prediction: Double?) =
         ListRow(
             key = ItemKey("site", id),
             work = ItemKey("site", id),
@@ -24,7 +24,7 @@ class NextWorksTest {
             values = RowValues(false, prediction, null, null),
             facets = emptyMap(),
             numbers = emptyMap(),
-            title = id,
+            title = "$id",
         )
 
     private fun ListIndex.next(cursor: TaskCursor = TaskCursor.FIRST, n: Int = 10) =
@@ -33,12 +33,12 @@ class NextWorksTest {
     @Test
     fun `the works taken the highest expected first, from the cursor on`() {
         temporaryIndex { index ->
-            index.replace(listOf(row("a", 4.0), row("b", 9.0), row("c", 6.0), row("d", null), row("e", 7.0)))
+            index.replace(listOf(row(1L, 4.0), row(2L, 9.0), row(3L, 6.0), row(4L, null), row(5L, 7.0)))
             index.commit()
-            assertEquals(listOf("b", "e", "c", "a", "d"), index.next())
+            assertEquals(listOf(2L, 5L, 3L, 1L, 4L), index.next())
             // From the cursor on, a portion at a time
-            assertEquals(listOf("b", "e"), index.next(n = 2))
-            assertEquals(listOf("a", "d"), index.next(TaskCursor(6.0, "site:c"), n = 2))
+            assertEquals(listOf(2L, 5L), index.next(n = 2))
+            assertEquals(listOf(1L, 4L), index.next(TaskCursor(6.0, "site:c"), n = 2))
         }
     }
 }

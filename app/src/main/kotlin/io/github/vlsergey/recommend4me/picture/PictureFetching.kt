@@ -10,7 +10,7 @@ private val log = LoggerFactory.getLogger(PictureFetching::class.java)
 /** A picture of the queue to download: of which source, and whether its original is kept. */
 internal class PictureJob(val store: SourceStore, val picture: Picture, val keep: Boolean) {
     /** The picture among those of every source: the source, the item, the position. */
-    val key: Pair<String, Pair<String, Int>>
+    val key: Pair<String, Pair<Long, Int>>
         get() = store.id to (picture.itemId to picture.position)
 }
 

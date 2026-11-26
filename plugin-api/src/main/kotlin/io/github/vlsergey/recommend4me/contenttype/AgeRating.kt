@@ -46,7 +46,7 @@ object AgeRating {
      * The site's word on the work's age rating written: the ratings it lets the work have — and the work's own, when it
      * lets one alone. Nothing of a site that tells nothing (an empty list).
      */
-    fun write(items: ItemStore, itemId: String, allowed: List<StandardValue>) {
+    fun write(items: ItemStore, itemId: Long, allowed: List<StandardValue>) {
         items.setFacet(itemId, SITE_KEY, allowed.map { FacetValue(it.key, it.modelName) })
         items.setFacet(itemId, KEY, allowed.singleOrNull()?.let { listOf(FacetValue(it.key, it.modelName)) }.orEmpty())
     }

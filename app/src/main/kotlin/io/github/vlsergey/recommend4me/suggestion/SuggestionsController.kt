@@ -42,17 +42,17 @@ class SuggestionsController(
 ) : SuggestionsApi {
 
     /** The source of the [source] id when it has the [item]; null when either is unknown. */
-    private fun storeWith(source: String, item: String): SourceStore? =
+    private fun storeWith(source: String, item: Long): SourceStore? =
         stores.source(source)?.takeIf { it.items.find(item) != null }
 
-    override fun getSuggestions(source: String, item: String): ResponseEntity<List<ApiFacetSuggestions>> {
+    override fun getSuggestions(source: String, item: Long): ResponseEntity<List<ApiFacetSuggestions>> {
         val store = storeWith(source, item) ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(suggestions.ofItem(store, item).map { it.toApi(store) })
     }
 
     override fun getCandidates(
         source: String,
-        item: String,
+        item: Long,
         facet: String,
         limit: Int?,
         named: Int?,
@@ -95,7 +95,7 @@ class SuggestionsController(
 
     override fun getMentions(
         source: String,
-        item: String,
+        item: Long,
         facet: String,
         value: String,
     ): ResponseEntity<List<MentionQuote>> {
@@ -105,7 +105,7 @@ class SuggestionsController(
     }
 
     /** The passages of the item that name a value, found by its [quoting], as the interface shows them. */
-    private fun quotesOf(store: SourceStore, item: String, quoting: Quoting): List<MentionQuote> {
+    private fun quotesOf(store: SourceStore, item: Long, quoting: Quoting): List<MentionQuote> {
         val quotes =
             when (quoting) {
                 is Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)

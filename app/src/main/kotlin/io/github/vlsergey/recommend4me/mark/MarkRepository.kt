@@ -17,9 +17,9 @@ enum class MarkKind {
 data class ThingRef(val item: ItemKey, val ref: String)
 
 /** A picture the user marked: +1 "pick this work", −1 "drop it"; [url] the address it was marked at. */
-data class PictureMark(val itemId: String, val position: Int, val url: String, val mark: Int)
+data class PictureMark(val itemId: Long, val position: Int, val url: String, val mark: Int)
 
-data class ReviewMark(val itemId: String, val reviewId: String, val mark: Int)
+data class ReviewMark(val itemId: Long, val reviewId: String, val mark: Int)
 
 /** The user's word on a match: the [match] is alike the [mark] in the sense meant (+1), or in another one (−1). */
 data class MatchFeedback(val kind: MarkKind, val mark: ThingRef, val match: ThingRef, val verdict: Int)
@@ -27,7 +27,7 @@ data class MatchFeedback(val kind: MarkKind, val mark: ThingRef, val match: Thin
 /** The user's marks on the pictures and reviews of one source's items, and words on their matches. */
 class MarkRepository(private val sourceId: String, private val db: DSLContext) {
 
-    fun markPicture(itemId: String, position: Int, url: String, mark: Int?, now: Instant) {
+    fun markPicture(itemId: Long, position: Int, url: String, mark: Int?, now: Instant) {
         require(mark == null || mark == 1 || mark == -1) { "A mark is +1 or -1, not $mark" }
         if (mark == null) {
             db.deleteFrom(PICTURE_MARK)
@@ -53,12 +53,12 @@ class MarkRepository(private val sourceId: String, private val db: DSLContext) {
             PictureMark(it.itemId!!, it.position!!, it.url!!, it.mark!!.toInt())
         }
 
-    fun pictureMarksOf(itemId: String): List<PictureMark> =
+    fun pictureMarksOf(itemId: Long): List<PictureMark> =
         db.selectFrom(PICTURE_MARK).where(PICTURE_MARK.ITEM_ID.eq(itemId)).fetch {
             PictureMark(it.itemId!!, it.position!!, it.url!!, it.mark!!.toInt())
         }
 
-    fun markReview(itemId: String, reviewId: String, mark: Int?, now: Instant) {
+    fun markReview(itemId: Long, reviewId: String, mark: Int?, now: Instant) {
         require(mark == null || mark == 1 || mark == -1) { "A mark is +1 or -1, not $mark" }
         if (mark == null) {
             db.deleteFrom(REVIEW_MARK)
@@ -82,7 +82,7 @@ class MarkRepository(private val sourceId: String, private val db: DSLContext) {
             ReviewMark(it.itemId!!, it.reviewId!!, it.mark!!.toInt())
         }
 
-    fun reviewMarksOf(itemId: String): Map<String, Int> =
+    fun reviewMarksOf(itemId: Long): Map<String, Int> =
         db.select(REVIEW_MARK.REVIEW_ID, REVIEW_MARK.MARK)
             .from(REVIEW_MARK)
             .where(REVIEW_MARK.ITEM_ID.eq(itemId))

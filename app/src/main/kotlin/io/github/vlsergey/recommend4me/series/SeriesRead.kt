@@ -16,7 +16,7 @@ internal class SeriesRead(private val type: TypeStore) {
     fun everySite() {
         type.sources.forEach { s ->
             val facet = seriesFacetOf(s) ?: return@forEach
-            val ids = ArrayList<String>()
+            val ids = ArrayList<Long>()
             s.items.forEachFacet(facet) { id, keys ->
                 keys.firstOrNull()?.let {
                     siteOf[ItemKey(s.id, id)] = it

@@ -37,11 +37,15 @@ class ItemTextSizeFilledTest {
                         "INSERT INTO part (item_id, part_id, position, content_hash, chars, words) " +
                             "VALUES ('w1', 'p2', 1, 'h2', 100, 20)"
                     )
+                    // The other stores named by the works' numbers, as the tool of that move marks it (V41)
+                    s.execute("CREATE TABLE works_numbered_elsewhere(at TIMESTAMP WITH TIME ZONE)")
                 }
             }
             Database("test/source", file, "source", code = listOf(V26__item_text_size_filled(store))).use { db ->
                 val counts = PartCounts(db.dsl, store)
-                assertEquals(mapOf("w1" to (23.0 to 111.0)), counts.counted())
+                // The works kept by their numbers since (V37-V42)
+                val w1 = db.dsl.fetchValue("SELECT internal_id FROM item WHERE site_id = 'w1'") as Long
+                assertEquals(mapOf(w1 to (23.0 to 111.0)), counts.counted())
             }
         }
     }

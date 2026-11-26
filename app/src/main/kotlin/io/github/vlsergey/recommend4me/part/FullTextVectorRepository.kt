@@ -14,14 +14,14 @@ import org.jooq.DSLContext
 class FullTextVectorRepository(private val db: DSLContext, private val store: PartStore) {
 
     /** The full-text vectors of the chapter [partId] of the item, made by the centre [key]. */
-    fun save(itemId: String, partId: String, key: String, vectors: ByteArray) {
-        store.fullText.put(itemId, partId, vectors)
+    fun save(itemId: Long, partId: String, key: String, vectors: ByteArray) {
+        store.fullText.put(itemId.toString(), partId, vectors)
         db.update(PART).set(PART.FULL_TEXT, key).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
     }
 
     /** The full-text vectors of the text field [field] of the item, made by the centre [key]. */
-    fun saveText(itemId: String, field: String, key: String, vectors: ByteArray) {
-        store.fullText.put(itemId, PieceRepository.textKey(field), vectors)
+    fun saveText(itemId: Long, field: String, key: String, vectors: ByteArray) {
+        store.fullText.put(itemId.toString(), PieceRepository.textKey(field), vectors)
         db.update(TEXT_VECTOR)
             .set(TEXT_VECTOR.FULL_TEXT, key)
             .where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(field))
@@ -29,14 +29,15 @@ class FullTextVectorRepository(private val db: DSLContext, private val store: Pa
     }
 
     /** The full-text vectors and the pieces of the text field [field] of the item gone with its vector. */
-    fun forgetText(itemId: String, field: String) {
-        store.fullText.delete(itemId, PieceRepository.textKey(field))
-        store.pieces.delete(itemId, PieceRepository.textKey(field))
+    fun forgetText(itemId: Long, field: String) {
+        store.fullText.delete(itemId.toString(), PieceRepository.textKey(field))
+        store.pieces.delete(itemId.toString(), PieceRepository.textKey(field))
     }
 
     /**
      * Every text's full-text vectors kept, in the order of the keys, as one pass of the store: its item, its text, its
      * full-text vectors.
      */
-    fun forEach(action: (itemId: String, text: String, vectors: ByteArray) -> Unit) = store.fullText.forEach(action)
+    fun forEach(action: (itemId: Long, text: String, vectors: ByteArray) -> Unit) =
+        store.fullText.forEach { item, text, vectors -> action(item.toLong(), text, vectors) }
 }

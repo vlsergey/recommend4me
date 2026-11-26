@@ -67,6 +67,7 @@ class SearchPiecesTest : SiteTestBase() {
         val store = stores.source(site)!!
         // No annotation: the works found by meaning by their chapters alone
         ids.forEach { capture("$it|The voyage $it|space|||") }
+        val ids = ids.map { idOf(site, it) } // the works by the application's numbers of them, in the same order
         ids.forEachIndexed { k, id ->
             store.parts.save(
                 id,
@@ -75,14 +76,14 @@ class SearchPiecesTest : SiteTestBase() {
                         when {
                             // The line's words together, four times: a chapter near the line beyond what a toy
                             // encoder's full-text vectors blur, whatever rotation the centre is drawn with
-                            id == "spc1" && n == 3 ->
+                            id == ids[0] && n == 3 ->
                                 List(4) { listOf("маяки", "рифов", "бухта") }
                                     .flatten()
                                     .withIndex()
                                     .associate { (k, w) ->
                                         100 + k to w
                                     }
-                            id == "spc2" && n == 3 -> mapOf(20 to "маяки", 120 to "рифов", 200 to "бухта")
+                            id == ids[1] && n == 3 -> mapOf(20 to "маяки", 120 to "рифов", 200 to "бухта")
                             else -> emptyMap()
                         }
                     PartData("c$n", n, "Chapter $n", chapter(k * 100 + n, words), null)
@@ -103,12 +104,12 @@ class SearchPiecesTest : SiteTestBase() {
                 .isEmpty(),
             "every chapter's pieces made",
         )
-        val codes = store.parts.pieces.of("spc1", listOf("c3"))["c3"]
+        val codes = store.parts.pieces.of(ids[0], listOf("c3"))["c3"]
         assertEquals(210 * fitted.codebook.bytes, codes?.size, "a code of every word")
 
         val found = search.search(TYPE, "маяки рифов бухта", "ru", rerank = false, learnt = false)!!
-        val together = ItemKey(site, "spc1")
-        val apart = ItemKey(site, "spc2")
+        val together = ItemKey(site, ids[0])
+        val apart = ItemKey(site, ids[1])
         // Found by meaning by the full-text vectors of the windows: of the work saying the words together, its chapter
         // of them
         assertEquals("part:c3", found.nearest[together]?.field)

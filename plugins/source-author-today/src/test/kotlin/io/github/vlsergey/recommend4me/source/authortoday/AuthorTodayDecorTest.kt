@@ -21,12 +21,12 @@ class AuthorTodayDecorTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals("216859", source.itemIdOf("https://author.today/work/216859"))
-        assertEquals("216859", source.itemIdOf("https://author.today/work/216859/reviews"))
-        assertEquals("216859", source.itemIdOf("https://author.today/reader/216859/1960452"))
-        assertEquals("216859", source.itemIdOf("https://author.today/work/216859?utm=x"))
-        assertNull(source.itemIdOf("https://author.today/work/genre/fantasy"))
-        assertNull(source.itemIdOf("https://author.today/review/913603"))
+        assertEquals("216859", source.siteIdOf("https://author.today/work/216859"))
+        assertEquals("216859", source.siteIdOf("https://author.today/work/216859/reviews"))
+        assertEquals("216859", source.siteIdOf("https://author.today/reader/216859/1960452"))
+        assertEquals("216859", source.siteIdOf("https://author.today/work/216859?utm=x"))
+        assertNull(source.siteIdOf("https://author.today/work/genre/fantasy"))
+        assertNull(source.siteIdOf("https://author.today/review/913603"))
     }
 
     /** The block of comments the browser waits for is on a work's page, empty till the site loads it. */
@@ -80,13 +80,14 @@ class AuthorTodayDecorTest {
     fun `every card of a list links to its work`() {
         val html = page("genre-fantasy.html")
         val context = MemorySourceContext()
-        val captured = source.capture(CapturedPage("https://author.today/work/genre/fantasy", html, now), context)
+        val captured =
+            context.sitesOf(source.capture(CapturedPage("https://author.today/work/genre/fantasy", html, now), context))
         val doc = Jsoup.parse(html, "https://author.today/work/genre/fantasy")
         val cards = decor.cards!!
         val linked =
             doc.select(cards.selector)
                 .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-                .mapNotNull(source::itemIdOf)
+                .mapNotNull(source::siteIdOf)
         assertEquals(captured, linked)
     }
 

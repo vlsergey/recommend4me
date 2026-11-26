@@ -163,8 +163,8 @@ class WorkFields(
         index: ListIndex,
         scope: WorkScope,
         clusters: WorkClusters,
-        fresh: Map<String, Map<String, List<String>>>,
-        ids: List<String>,
+        fresh: Map<Long, Map<String, List<String>>>,
+        ids: List<Long>,
     ): Int {
         val kept = index.written { ListModelValues.of(it, s.id, ids) }
         val other = ids.filter { id -> asSets(fresh[id]) != asSets(kept[id]) }

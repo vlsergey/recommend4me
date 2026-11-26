@@ -17,14 +17,14 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
      * with the hash of its own text ([hashes]): kept, then told.
      */
     fun saveParagraphVectors(
-        itemId: String,
+        itemId: Long,
         partId: String,
         encoder: String,
         hash: String,
         paragraphs: List<FloatArray?>,
         hashes: List<String>,
     ) {
-        store.putParagraphs(itemId, partId, paragraphs, hashes)
+        store.putParagraphs(itemId.toString(), partId, paragraphs, hashes)
         db.update(PART)
             .set(PART.PARAGRAPHS_ENCODER, encoder)
             .set(PART.PARAGRAPHS_HASH, hash)
@@ -33,21 +33,21 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
     }
 
     /** Every paragraph's vector by [encoder] of the item's parts, in the parts' order. */
-    fun paragraphVectors(itemId: String, encoder: String): List<Paragraph> {
+    fun paragraphVectors(itemId: Long, encoder: String): List<Paragraph> {
         val parts =
             db.select(PART.PART_ID)
                 .from(PART)
                 .where(PART.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder), onSite)
                 .orderBy(PART.POSITION)
                 .fetch { it.value1()!! }
-        val kept = store.paragraphs(itemId, parts)
+        val kept = store.paragraphs(itemId.toString(), parts)
         return parts.flatMap { part ->
             kept[part].orEmpty().mapIndexedNotNull { i, p -> p?.let { Paragraph(part, i, it.vector, it.hash) } }
         }
     }
 
     /** One paragraph by [encoder], its vector and hash; null when it has none. */
-    fun paragraph(itemId: String, partId: String, number: Int, encoder: String): Paragraph? {
+    fun paragraph(itemId: Long, partId: String, number: Int, encoder: String): Paragraph? {
         val encoded =
             db.fetchExists(
                 PART,
@@ -57,13 +57,13 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
                 onSite,
             )
         if (!encoded) return null
-        return store.paragraphs(itemId, listOf(partId))[partId]?.getOrNull(number)?.let {
+        return store.paragraphs(itemId.toString(), listOf(partId))[partId]?.getOrNull(number)?.let {
             Paragraph(partId, number, it.vector, it.hash)
         }
     }
 
     /** Whether some part of the item has a text whose paragraphs have no vectors by [encoder] yet. */
-    fun paragraphsPending(itemId: String, encoder: String): Boolean =
+    fun paragraphsPending(itemId: Long, encoder: String): Boolean =
         db.fetchExists(
             PART,
             PART.ITEM_ID.eq(itemId),

@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.ints
 import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.lists
+import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.longs
 import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.matrix
 import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.strings
 import java.io.DataInputStream
@@ -21,12 +22,15 @@ import java.util.zip.GZIPOutputStream
  */
 object SuggestionTaskFile {
     /**
-     * 7: an input block of the items that have it alone, with the item of every row; 6: no counts of the values' names
-     * in the items' texts; 5: the arrays of the allowed once each, the barred at the end; 4: the drafts and their
-     * weight at the end; 3: the names' texts a matrix, their arrays of values once each; 2 and 1 read too, their counts
-     * passed over.
+     * 8: the items by the application's numbers of them; 7: an input block of the items that have it alone, with the
+     * item of every row; 6: no counts of the values' names in the items' texts; 5: the arrays of the allowed once each,
+     * the barred at the end; 4: the drafts and their weight at the end; 3: the names' texts a matrix, their arrays of
+     * values once each; 2 and 1 read too, their counts passed over.
      */
-    private const val FORMAT = 7
+    private const val FORMAT = 8
+
+    /** The format since which the items are the application's numbers of them; before it, the sites' ids. */
+    private const val NUMBERED_ITEMS = 8
 
     /** The format since which an input block holds the items that have it alone, with the item of every row. */
     private const val ROWS_OF_ITEMS = 7
@@ -50,7 +54,7 @@ object SuggestionTaskFile {
         Files.createDirectories(file.parent)
         DataOutputStream(GZIPOutputStream(Files.newOutputStream(file)).buffered()).use { out ->
             out.writeInt(FORMAT)
-            strings(out, task.itemIds)
+            longs(out, task.itemIds)
             out.writeInt(task.inputs.size)
             task.inputs.forEach { b ->
                 out.writeUTF(b.name)
@@ -97,7 +101,10 @@ object SuggestionTaskFile {
         DataInputStream(GZIPInputStream(Files.newInputStream(file)).buffered()).use { input ->
             val format = input.readInt()
             check(format in 1..FORMAT) { "$file: not a task of format $FORMAT or before it" }
-            val itemIds = strings(input)
+            // A task of the sites' ids: its items numbered by their rows, held out alike
+            val itemIds =
+                if (format >= NUMBERED_ITEMS) longs(input)
+                else strings(input).let { s -> LongArray(s.size) { it.toLong() } }
             val inputs = inputs(input, format)
             val values = matrix(input)
             val valueKeys = strings(input)

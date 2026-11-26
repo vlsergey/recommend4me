@@ -149,8 +149,8 @@ class SetVectorMaking(
         s: SourceStore,
         kind: SetKind,
         embedding: StoredEmbedding,
-        all: Map<String, Int>,
-        ids: List<String>,
+        all: Map<Long, Int>,
+        ids: List<Long>,
     ): List<ItemKey> {
         val have = ids.mapNotNull { id -> all[id]?.takeIf { it > 0 }?.let { id to it } }.toMap()
         have.keys.chunked(CHUNK).forEach { chunk -> save(s, kind, embedding, have, chunk) }
@@ -162,8 +162,8 @@ class SetVectorMaking(
         s: SourceStore,
         kind: SetKind,
         embedding: StoredEmbedding,
-        have: Map<String, Int>,
-        ids: List<String>,
+        have: Map<Long, Int>,
+        ids: List<Long>,
     ) {
         val made = sets.members(s, kind, embedding.encoder, ids)
         ids.forEach { id ->

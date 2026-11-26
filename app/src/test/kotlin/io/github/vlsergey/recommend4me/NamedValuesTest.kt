@@ -14,7 +14,7 @@ class NamedValuesTest : TwoSitesTestBase() {
 
     private val author = Books.AUTHOR.key
 
-    private fun authorsOf(id: String) = stores.source("alpha")!!.items.facets(id)[author]
+    private fun authorsOf(id: Long) = stores.source("alpha")!!.items.facets(id)[author]
 
     @Test
     fun `a value given by its name is given the key a page gives the name, on every work of it`() {
@@ -23,18 +23,22 @@ class NamedValuesTest : TwoSitesTestBase() {
         alpha("nv3|Dolor|hay|Adipiscing elit||")
         val items = stores.source("alpha")!!.items
         // A dump gave the works their authors by the names: Nova of all three, the third written by Vera and Nova
-        items.setFacet("nv1", author, listOf(FacetValue("name:Nova", "Nova")))
-        items.setFacet("nv2", author, listOf(FacetValue("name:Nova", "Nova")))
-        items.setFacet("nv3", author, listOf(FacetValue("name:Vera", "Vera"), FacetValue("name:Nova", "Nova")))
+        items.setFacet(idOf("alpha", "nv1"), author, listOf(FacetValue("name:Nova", "Nova")))
+        items.setFacet(idOf("alpha", "nv2"), author, listOf(FacetValue("name:Nova", "Nova")))
+        items.setFacet(
+            idOf("alpha", "nv3"),
+            author,
+            listOf(FacetValue("name:Vera", "Vera"), FacetValue("name:Nova", "Nova")),
+        )
 
         // The site's page of the first work gives Nova her key; the other works keyed so in the background
-        items.setFacet("nv1", author, listOf(FacetValue("nv-nova", "Nova")))
-        assertEquals(listOf("name:Nova"), authorsOf("nv2"))
+        items.setFacet(idOf("alpha", "nv1"), author, listOf(FacetValue("nv-nova", "Nova")))
+        assertEquals(listOf("name:Nova"), authorsOf(idOf("alpha", "nv2")))
         background.run()
 
-        assertEquals(listOf("nv-nova"), authorsOf("nv1"))
-        assertEquals(listOf("nv-nova"), authorsOf("nv2"))
-        assertEquals(listOf("name:Vera", "nv-nova"), authorsOf("nv3"))
+        assertEquals(listOf("nv-nova"), authorsOf(idOf("alpha", "nv1")))
+        assertEquals(listOf("nv-nova"), authorsOf(idOf("alpha", "nv2")))
+        assertEquals(listOf("name:Vera", "nv-nova"), authorsOf(idOf("alpha", "nv3")))
         // One account of the site: the one by the name, its works keyed, gone of the dictionary of the authors
         val bound = stores.source("alpha")!!.authors.bindingsOf("alpha", listOf("name:Nova", "nv-nova"))
         assertEquals(setOf("nv-nova"), bound.keys)
@@ -44,10 +48,14 @@ class NamedValuesTest : TwoSitesTestBase() {
     fun `a work that has the key already keeps it once`() {
         alpha("nw1|Lorem|hay|Lorem ipsum dolor||")
         val items = stores.source("alpha")!!.items
-        items.setFacet("nw1", author, listOf(FacetValue("name:Wren", "Wren"), FacetValue("nw-wren", "Wren")))
+        items.setFacet(
+            idOf("alpha", "nw1"),
+            author,
+            listOf(FacetValue("name:Wren", "Wren"), FacetValue("nw-wren", "Wren")),
+        )
         background.run()
 
-        assertEquals(listOf("nw-wren"), authorsOf("nw1"))
+        assertEquals(listOf("nw-wren"), authorsOf(idOf("alpha", "nw1")))
     }
 
     @Test
@@ -57,14 +65,18 @@ class NamedValuesTest : TwoSitesTestBase() {
         alpha("nx3|Dolor|hay|Adipiscing elit||")
         val items = stores.source("alpha")!!.items
         // Two accounts of the site named Twin, and a work the dump gave by the name
-        items.setFacet("nx2", author, listOf(FacetValue("nx-twin-1", "Twin")))
-        items.setFacet("nx3", author, listOf(FacetValue("nx-twin-2", "Twin")))
-        items.setFacet("nx1", author, listOf(FacetValue("name:Twin", "Twin")))
+        items.setFacet(idOf("alpha", "nx2"), author, listOf(FacetValue("nx-twin-1", "Twin")))
+        items.setFacet(idOf("alpha", "nx3"), author, listOf(FacetValue("nx-twin-2", "Twin")))
+        items.setFacet(idOf("alpha", "nx1"), author, listOf(FacetValue("name:Twin", "Twin")))
 
         // A page of the first account's work read again: its co-author added
-        items.setFacet("nx2", author, listOf(FacetValue("nx-twin-1", "Twin"), FacetValue("nx-ally", "Ally")))
+        items.setFacet(
+            idOf("alpha", "nx2"),
+            author,
+            listOf(FacetValue("nx-twin-1", "Twin"), FacetValue("nx-ally", "Ally")),
+        )
         background.run()
 
-        assertEquals(listOf("name:Twin"), authorsOf("nx1"))
+        assertEquals(listOf("name:Twin"), authorsOf(idOf("alpha", "nx1")))
     }
 }

@@ -18,15 +18,15 @@ internal class SourceItemSeries(private val store: SourceStore) : ItemSeriesStor
         store.writing.withLock {
             store.series.keep(series, Instant.now())
             series.title?.let { store.items.nameFacetValues(facet, mapOf(series.key to it)) }
-            val listed = series.works.map { it.itemId }.toSet()
+            val listed = series.works.mapTo(HashSet()) { it.itemId }
             val own = store.items.facetsOf(listed)
             series.works.forEachIndexed { k, w ->
-                if (!store.items.exists(w.itemId)) return@forEachIndexed
-                val named = own[w.itemId]?.get(facet).orEmpty()
+                val id = w.itemId
+                val named = own[id]?.get(facet).orEmpty()
                 // A work naming another series of the site is of that one: its own page's word
                 if (named.isNotEmpty() && series.key !in named) return@forEachIndexed
-                if (named.isEmpty()) store.items.setFacet(w.itemId, facet, listOf(FacetValue(series.key)))
-                (w.position ?: if (series.whole) k + 1 else null)?.let { store.series.place(series.key, w.itemId, it) }
+                if (named.isEmpty()) store.items.setFacet(id, facet, listOf(FacetValue(series.key)))
+                (w.position ?: if (series.whole) k + 1 else null)?.let { store.series.place(series.key, id, it) }
             }
             if (series.whole)
                 store.items
@@ -40,7 +40,7 @@ internal class SourceItemSeries(private val store: SourceStore) : ItemSeriesStor
         }
     }
 
-    override fun placeInSeries(itemId: String, key: String, position: Int) {
+    override fun placeInSeries(itemId: Long, key: String, position: Int) {
         if (facet == null) return
         store.writing.withLock { store.series.place(key, itemId, position) }
     }

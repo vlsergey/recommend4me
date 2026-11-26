@@ -24,7 +24,7 @@ erDiagram
         VARCHAR type_id "null"
         VARCHAR source_id "null"
         VARCHAR facet "null"
-        VARCHAR item "null"
+        BIGINT item "null"
         BIGINT plan_no
         TIMESTAMPTZ due
         TIMESTAMPTZ since
@@ -45,7 +45,7 @@ erDiagram
         VARCHAR type_id "null"
         VARCHAR source_id "null"
         VARCHAR facet "null"
-        VARCHAR item "null"
+        BIGINT item "null"
         TIMESTAMPTZ began
         TIMESTAMPTZ ended
         VARCHAR reasons

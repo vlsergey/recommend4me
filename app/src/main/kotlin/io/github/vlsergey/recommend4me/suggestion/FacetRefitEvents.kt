@@ -57,13 +57,13 @@ internal class FacetRefitEvents(private val refits: FacetRefits, private val sto
      * The items [ids] of the [source] changed by no word of the user's, for the [reason]: those of works the user
      * answered on or rated counted.
      */
-    private fun ofLearnt(source: String, ids: Collection<String>, reason: String) =
+    private fun ofLearnt(source: String, ids: Collection<Long>, reason: String) =
         refits.counted(source, reason, learnt(source, ids))
 
     /**
      * How many of the items [ids] of the [source] are of works the user answered on or rated: what the models learn.
      */
-    private fun learnt(source: String, ids: Collection<String>): Int {
+    private fun learnt(source: String, ids: Collection<Long>): Int {
         val s = stores.source(source) ?: return 0
         val learnt =
             s.corrections.facetsOf(ids).filterValues { it.isNotEmpty() }.keys +

@@ -174,11 +174,11 @@ export function ensureOk(result: { error?: unknown; response: Response }): void 
 }
 
 /** The key of an item across sources: one card, one cache entry. */
-export function refKey(ref: { source: string; item: string }): string {
+export function refKey(ref: { source: string; item: number }): string {
   return `${ref.source}/${ref.item}`;
 }
 
-export function sameItem(a: { source: string; item: string }, b: { source: string; item: string }): boolean {
+export function sameItem(a: { source: string; item: number }, b: { source: string; item: number }): boolean {
   return a.source === b.source && a.item === b.item;
 }
 
@@ -186,6 +186,6 @@ export function sameItem(a: { source: string; item: string }, b: { source: strin
  * A picture of the item: 0 the cover, 1.. the screenshots. The preview is kept locally; the
  * original may not be — the backend then sends the browser to the site for it.
  */
-export function pictureSrc(ref: { source: string; item: string }, position: number, full = false): string {
-  return `/api/items/${encodeURIComponent(ref.source)}/${encodeURIComponent(ref.item)}/pictures/${position}${full ? "?full=true" : ""}`;
+export function pictureSrc(ref: { source: string; item: number }, position: number, full = false): string {
+  return `/api/items/${encodeURIComponent(ref.source)}/${ref.item}/pictures/${position}${full ? "?full=true" : ""}`;
 }

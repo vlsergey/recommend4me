@@ -171,7 +171,7 @@ class Ao3 : Source {
     /** An author of the site by their own page, "https://archiveofourown.org/users/Login". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
-    override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
+    override fun siteIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor =
         PageDecor(
@@ -191,7 +191,7 @@ class Ao3 : Source {
             cards = CardDecor("li.blurb", "h4.heading a[href^='/works/']"),
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = Ao3Pages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<Long> = Ao3Pages(context).read(page)
 
     /**
      * The site's habit: a relationship "A/B" a pairing; a platonic one "A & B" no pairing, its names each alone; a
@@ -204,8 +204,14 @@ class Ao3 : Source {
     }
 
     /** The work's whole page — every chapter, the adult works' warning passed — read as if the browser had sent it. */
-    override fun refresh(itemId: String, context: SourceContext): Boolean {
-        val url = "$BASE/works/$itemId?view_adult=true&view_full_work=true"
+    override fun refresh(itemId: Long, context: SourceContext): Boolean {
+        val url = context.items.find(itemId)?.siteId?.let { "$BASE/works/$it?view_adult=true&view_full_work=true" }
+        val page = url?.let(::fullPage)
+        return url != null && page != null && itemId in capture(CapturedPage(url, page, Instant.now()), context)
+    }
+
+    /** The page [url] of a work whole; null of a work the site has not. */
+    private fun fullPage(url: String): String? {
         val response = paced {
             http.send(
                 HttpRequest.newBuilder(URI(url)).timeout(TIMEOUT).header("User-Agent", USER_AGENT).GET().build(),
@@ -214,11 +220,11 @@ class Ao3 : Source {
         }
         when (response.statusCode()) {
             HttpURLConnection.HTTP_OK -> Unit
-            HttpURLConnection.HTTP_NOT_FOUND -> return false
+            HttpURLConnection.HTTP_NOT_FOUND -> return null
             TOO_MANY_REQUESTS -> error("the site asks to wait before the next request (429)")
             else -> error("the site answered ${response.statusCode()}")
         }
-        return itemId in capture(CapturedPage(url, response.body(), Instant.now()), context)
+        return response.body()
     }
 
     /** When the last request to the site was sent: the next waits out [PAUSE] after it. */

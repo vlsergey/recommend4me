@@ -38,7 +38,7 @@ class TaskCastTest {
             reader,
             entries = "pairing",
             line = "text:pairingsLine",
-            characters = { id -> if (id == "w3") null else mapOf("u:a" to listOf("A")) },
+            characters = { id -> if (id == 3L) null else mapOf("u:a" to listOf("A")) },
             paired = false,
             vectors = { texts -> texts.filter { it == "A" }.associateWith { floatArrayOf(1f, 0f) } },
         )
@@ -57,7 +57,7 @@ class TaskCastTest {
                 listOf("tag\u0001x", "pairing\u0001a", "pairing\u0001c"),
                 listOf("tag\u0001y"),
             )
-        val cast = TaskCast.of(asked.said(casts), listOf("w1", "w2", "w3"), listOf(annotation, line), context)
+        val cast = TaskCast.of(asked.said(casts), listOf(1L, 2L, 3L), listOf(annotation, line), context)
         val given = reader.given!!
         // The way is given the line, the site's entries, the vectors asked for that are kept, the characters
         assertSame(line, given.line)

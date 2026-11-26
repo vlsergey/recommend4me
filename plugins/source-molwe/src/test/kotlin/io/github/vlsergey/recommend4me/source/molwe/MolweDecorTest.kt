@@ -35,7 +35,8 @@ class MolweDecorTest {
     fun `every card of a list links to its work, in either view, and the list to its next page`() {
         listOf("list-tiles.html", "list-rows.html").forEach { name ->
             val url = "https://molwe.ru/fanfics?page=2"
-            val captured = source.capture(CapturedPage(url, page(name), Instant.now()), MemorySourceContext())
+            val context = MemorySourceContext()
+            val captured = context.sitesOf(source.capture(CapturedPage(url, page(name), Instant.now()), context))
             val doc = Jsoup.parse(page(name), url)
             assertEquals(captured, linked(doc), name)
             assertEquals(
@@ -58,7 +59,7 @@ class MolweDecorTest {
         val cards = decor.cards!!
         return doc.select(cards.selector)
             .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
-            .mapNotNull(source::itemIdOf)
+            .mapNotNull(source::siteIdOf)
     }
 
     @Test

@@ -44,8 +44,8 @@ class SiteWorkPredictionsTest : SiteTestBase() {
     fun `a training reads the average work kept, the expectations score every work in turns`() {
         catalogue()
         (3..8).forEach { k ->
-            gradesController.rateItem("site", "s$k", RatingRequest(5))
-            gradesController.rateItem("site", "d$k", RatingRequest(1))
+            gradesController.rateItem("site", idOf("site", "s$k"), RatingRequest(5))
+            gradesController.rateItem("site", idOf("site", "d$k"), RatingRequest(1))
         }
         // What the background makes of them made now: nothing changes them while the average work is compared
         background.run()
@@ -94,7 +94,7 @@ class SiteWorkPredictionsTest : SiteTestBase() {
      * predictions and the average work as in one go. A model trained between two turns begins a pass anew. The turns
      * inside a task of the queue of their own: none planned by them, nor any other task, runs between.
      */
-    private fun inTurns(items: Set<String>, full: AverageWork) {
+    private fun inTurns(items: Set<Long>, full: AverageWork) {
         val scoredSoFar = ArrayList<Int>()
         var restarted: SweepState? = null
         var before: SweepState? = null
@@ -151,7 +151,7 @@ class SiteWorkPredictionsTest : SiteTestBase() {
     private fun predicted() = lists.of("books").written { ListPredictions.ofEvery(it, "site") }
 
     /** The predictions of the site's works [ids] gone from the index of the list, as of works never predicted. */
-    private fun forget(ids: Collection<String>) {
+    private fun forget(ids: Collection<Long>) {
         lists.of("books").written { db ->
             db.update(ITEM)
                 .setNull(ITEM.PREDICTION)

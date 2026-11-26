@@ -67,16 +67,22 @@ internal class FanficsMeSeries(private val items: ItemStore) {
     }
 
     /** The number of the work [id] in its series [key], as its header's line of the series ends ("#3"). */
-    fun place(id: String, key: String, line: Element) {
+    fun place(id: Long, key: String, line: Element) {
         NUMBER.find(line.text())?.groupValues?.get(1)?.toIntOrNull()?.let { items.placeInSeries(id, key, it) }
     }
 
-    /** The works of a list, in its order: each by the id of its block ("fic_123"). */
-    private fun works(blocks: List<Element>): List<SeriesWork> =
-        blocks
-            .mapNotNull { b -> b.id().removePrefix("fic_").takeIf { it.isNotEmpty() && it.all(Char::isDigit) } }
-            .distinct()
-            .map { SeriesWork(it) }
+    /**
+     * The works of a list, in its order: each by the id of its block ("fic_123"), of those written — a work never seen
+     * is not of a series yet.
+     */
+    private fun works(blocks: List<Element>): List<SeriesWork> {
+        val sites =
+            blocks
+                .mapNotNull { b -> b.id().removePrefix("fic_").takeIf { it.isNotEmpty() && it.all(Char::isDigit) } }
+                .distinct()
+        val ids = items.idsOf(sites)
+        return sites.mapNotNull { ids[it] }.map { SeriesWork(it) }
+    }
 
     companion object {
         /** The number after a series' name on a work's header: "Только не с полукровкой #1". */

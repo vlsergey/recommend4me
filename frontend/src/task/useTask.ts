@@ -4,7 +4,7 @@ import { api } from "@/api/client";
 import type { components } from "@/api/schema";
 
 /** A work of the queue by its name, as the queue names it: what it does, and what it is of. */
-export type TaskName = { what: components["schemas"]["TaskKind"]; type?: string; source?: string; facet?: string; item?: string };
+export type TaskName = { what: components["schemas"]["TaskKind"]; type?: string; source?: string; facet?: string; item?: number };
 
 /** How often the state of a work not done is asked for again: a few bytes. */
 const EVERY_MS = 3000;

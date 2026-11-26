@@ -27,30 +27,32 @@ class PartTakenOffTest {
                     "INSERT INTO item (site_id, url, title, version, updated_at, first_seen_at) " +
                         "VALUES ('w1', 'u', 't', '', NOW(), NOW())"
                 )
+                // The application's number of the work: what every store names it by
+                val w1 = db.dsl.fetchValue("SELECT internal_id FROM item WHERE site_id = 'w1'") as Long
                 val parts = PartRepository(db.dsl, store)
-                parts.save("w1", listOf(PartData("c1", 0, "One", "раз два"), PartData("c2", 1, "Two", "три")))
-                parts.windows.saveVectors("w1", "c2", "enc", "h", listOf(floatArrayOf(1f, 2f)))
+                parts.save(w1, listOf(PartData("c1", 0, "One", "раз два"), PartData("c2", 1, "Two", "три")))
+                parts.windows.saveVectors(w1, "c2", "enc", "h", listOf(floatArrayOf(1f, 2f)))
                 // A page that names one chapter and is no table of contents takes nothing off
-                assertFalse(parts.save("w1", listOf(PartData("c1", -1, null, null))))
-                assertEquals(3.0, parts.counts.counted().getValue("w1").first)
+                assertFalse(parts.save(w1, listOf(PartData("c1", -1, null, null))))
+                assertEquals(3.0, parts.counts.counted().getValue(w1).first)
 
                 val at = Instant.parse("2026-11-20T12:00:00Z")
-                assertTrue(parts.save("w1", listOf(PartData("c1", 0, "One", null)), whole = true, now = at))
-                val two = parts.ofItem("w1").single { it.partId == "c2" }
+                assertTrue(parts.save(w1, listOf(PartData("c1", 0, "One", null)), whole = true, now = at))
+                val two = parts.ofItem(w1).single { it.partId == "c2" }
                 assertEquals(at, two.takenOffAt)
                 assertTrue(two.hasText)
-                assertEquals("три", parts.text("w1", "c2")!!.second)
-                assertEquals(2.0, parts.counts.counted().getValue("w1").first)
-                assertEquals(listOf("c1"), parts.titlesOf(listOf("w1")).getValue("w1").map { it.first })
-                assertNull(parts.windows.windowCountsOf(listOf("w1"), "enc")["w1"])
-                assertEquals(listOf("c1"), parts.marks.of(listOf("w1")).getValue("w1").map { it.partId })
+                assertEquals("три", parts.text(w1, "c2")!!.second)
+                assertEquals(2.0, parts.counts.counted().getValue(w1).first)
+                assertEquals(listOf("c1"), parts.titlesOf(listOf(w1)).getValue(w1).map { it.first })
+                assertNull(parts.windows.windowCountsOf(listOf(w1), "enc")[w1])
+                assertEquals(listOf("c1"), parts.marks.of(listOf(w1)).getValue(w1).map { it.partId })
                 // The same table read again changes nothing
-                assertFalse(parts.save("w1", listOf(PartData("c1", 0, "One", null)), whole = true))
+                assertFalse(parts.save(w1, listOf(PartData("c1", 0, "One", null)), whole = true))
 
-                assertTrue(parts.save("w1", listOf(PartData("c1", 0, null, null), PartData("c2", 1, null, null))))
-                assertNull(parts.ofItem("w1").single { it.partId == "c2" }.takenOffAt)
-                assertEquals(3.0, parts.counts.counted().getValue("w1").first)
-                assertNotNull(parts.windows.windowCountsOf(listOf("w1"), "enc")["w1"])
+                assertTrue(parts.save(w1, listOf(PartData("c1", 0, null, null), PartData("c2", 1, null, null))))
+                assertNull(parts.ofItem(w1).single { it.partId == "c2" }.takenOffAt)
+                assertEquals(3.0, parts.counts.counted().getValue(w1).first)
+                assertNotNull(parts.windows.windowCountsOf(listOf(w1), "enc")[w1])
             }
         }
     }

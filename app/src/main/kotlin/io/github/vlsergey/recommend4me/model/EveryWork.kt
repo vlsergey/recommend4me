@@ -148,7 +148,7 @@ class EveryWork(
                 // The items of the works of several of other sites, or further in this one, read by their ids
                 val heads = ids.mapNotNull { if (source == s.id) own[it] else null }.takeIf { it.size == ids.size }
                 val read = values[source]
-                val told = HashMap<String, Map<String, List<String>>>()
+                val told = HashMap<Long, Map<String, List<String>>>()
                 reader
                     .readItems(
                         of,

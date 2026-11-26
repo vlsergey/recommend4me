@@ -75,7 +75,7 @@ class Manners(
      * The words fitted on every text of the type — [count] items with a text, of the hashes [texts] — and the manner of
      * every one made by them; how many were made.
      */
-    private fun fitted(type: TypeStore, texts: Map<SourceStore, Map<String, String>>, count: Int): Int {
+    private fun fitted(type: TypeStore, texts: Map<SourceStore, Map<Long, String>>, count: Int): Int {
         val tally = WordTally()
         type.sources.forEach { s -> s.parts.texts.forEach { _, own -> tally.add(own) } }
         val chosen = tally.chosen(MannerWords.SIZE)
@@ -83,7 +83,7 @@ class Manners(
         val draft = MannerWords(0, chosen, FloatArray(chosen.size), FloatArray(chosen.size) { 1f }, 0)
         val shares =
             type.sources.associateWith { s ->
-                HashMap<String, FloatArray>().apply {
+                HashMap<Long, FloatArray>().apply {
                     s.parts.texts.forEach { id, own -> draft.shares(own)?.let { put(id, it) } }
                 }
             }
@@ -104,7 +104,7 @@ class Manners(
     }
 
     /** The manner of every item whose [texts] are not those its manner was made of made by the [words]; how many. */
-    private fun caughtUp(words: MannerWords, texts: Map<SourceStore, Map<String, String>>): Int =
+    private fun caughtUp(words: MannerWords, texts: Map<SourceStore, Map<Long, String>>): Int =
         texts.entries.sumOf { (s, own) ->
             val made = s.manner.made()
             val todo = own.filter { (id, hash) -> made[id] != MannerMade(words.id, hash) }

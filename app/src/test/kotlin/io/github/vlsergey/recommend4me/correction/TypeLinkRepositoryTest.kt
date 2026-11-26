@@ -32,27 +32,27 @@ class TypeLinkRepositoryTest {
                     regrouped = { regroupings++ },
                 )
             val now = Instant.now()
-            links.link(ItemKey("a", "3"), ItemKey("a", "1"), now)
-            links.link(ItemKey("a", "1"), ItemKey("b", "2"), now)
+            links.link(ItemKey("a", 3), ItemKey("a", 1), now)
+            links.link(ItemKey("a", 1), ItemKey("b", 2), now)
             // Every two works merged told: what is made of the groups of the works is made again
             assertEquals(2, regroupings)
-            links.distinct(ItemKey("a", "1"), ItemKey("b", "7"), now)
-            links.relate(ItemKey("a", "1"), ItemKey("b", "8"), "TRANSLATION", now)
+            links.distinct(ItemKey("a", 1), ItemKey("b", 7), now)
+            links.relate(ItemKey("a", 1), ItemKey("b", 8), "TRANSLATION", now)
             assertEquals(
-                setOf(ItemKey("a", "1"), ItemKey("a", "3"), ItemKey("b", "2")),
+                setOf(ItemKey("a", 1), ItemKey("a", 3), ItemKey("b", 2)),
                 links.groups().single().toSet(),
             )
-            assertTrue(links.ordered(ItemKey("a", "3"), ItemKey("b", "7")) in links.distincts())
-            assertEquals("TRANSLATION", links.relations()[links.ordered(ItemKey("b", "2"), ItemKey("b", "8"))])
+            assertTrue(links.ordered(ItemKey("a", 3), ItemKey("b", 7)) in links.distincts())
+            assertEquals("TRANSLATION", links.relations()[links.ordered(ItemKey("b", 2), ItemKey("b", 8))])
 
             // Taken out of a work of several, an item goes on its own; gone from the library, with its work
-            links.unlink(ItemKey("a", "1"), ItemKey("a", "3"), now)
-            assertEquals(setOf(ItemKey("a", "1"), ItemKey("b", "2")), links.groups().single().toSet())
+            links.unlink(ItemKey("a", 1), ItemKey("a", 3), now)
+            assertEquals(setOf(ItemKey("a", 1), ItemKey("b", 2)), links.groups().single().toSet())
 
             // Every word in the journal, the newest first, with the word the pair had before
-            links.distinct(ItemKey("b", "2"), ItemKey("b", "7"), now)
-            links.takeBack(ItemKey("a", "1"), ItemKey("b", "7"), now)
-            links.unlink(ItemKey("a", "3"), ItemKey("b", "7"), now)
+            links.distinct(ItemKey("b", 2), ItemKey("b", 7), now)
+            links.takeBack(ItemKey("a", 1), ItemKey("b", 7), now)
+            links.unlink(ItemKey("a", 3), ItemKey("b", 7), now)
             assertEquals(
                 listOf(
                     null to "DIFFERENT",
@@ -67,21 +67,21 @@ class TypeLinkRepositoryTest {
             )
             assertEquals(
                 mapOf(
-                    links.ordered(ItemKey("a", "1"), ItemKey("b", "2")) to "SAME",
-                    links.ordered(ItemKey("a", "1"), ItemKey("b", "8")) to "TRANSLATION",
-                    (ItemKey("a", "1") to ItemKey("b", "9")) to null,
+                    links.ordered(ItemKey("a", 1), ItemKey("b", 2)) to "SAME",
+                    links.ordered(ItemKey("a", 1), ItemKey("b", 8)) to "TRANSLATION",
+                    (ItemKey("a", 1) to ItemKey("b", 9)) to null,
                 ),
                 links.words(
                     listOf(
-                        links.ordered(ItemKey("a", "1"), ItemKey("b", "2")),
-                        links.ordered(ItemKey("a", "1"), ItemKey("b", "8")),
-                        ItemKey("a", "1") to ItemKey("b", "9"),
+                        links.ordered(ItemKey("a", 1), ItemKey("b", 2)),
+                        links.ordered(ItemKey("a", 1), ItemKey("b", 8)),
+                        ItemKey("a", 1) to ItemKey("b", 9),
                     )
                 ),
             )
-            links.forget(ItemKey("b", "2"))
+            links.forget(ItemKey("b", 2))
             assertEquals(emptyList(), links.groups())
-            links.forget(ItemKey("a", "1"))
+            links.forget(ItemKey("a", 1))
             assertEquals(emptySet(), links.distincts())
         }
     }
@@ -101,10 +101,10 @@ class TypeLinkRepositoryTest {
             fun said(x: ItemKey, y: ItemKey) =
                 links.relations()[links.ordered(x, y)]
                     ?: "DIFFERENT".takeIf { links.ordered(x, y) in links.distincts() }
-            val a1 = ItemKey("a", "1")
-            val b1 = ItemKey("b", "1")
-            val c1 = ItemKey("c", "1")
-            val c2 = ItemKey("c", "2")
+            val a1 = ItemKey("a", 1)
+            val b1 = ItemKey("b", 1)
+            val c1 = ItemKey("c", 1)
+            val c2 = ItemKey("c", 2)
             links.link(a1, b1, now)
             links.relate(a1, c1, "SERIES", now)
             links.distinct(b1, c2, now)
@@ -112,7 +112,7 @@ class TypeLinkRepositoryTest {
             assertEquals("DIFFERENT", said(a1, c2))
 
             // An item linked to a work after the word: the word is on it too, of either side
-            val b2 = ItemKey("b", "2")
+            val b2 = ItemKey("b", 2)
             links.link(b2, c1, now)
             assertEquals("SERIES", said(a1, b2))
             assertEquals("SERIES", said(b1, b2))
@@ -137,10 +137,10 @@ class TypeLinkRepositoryTest {
                     regrouped = { regroupings++ },
                 )
             val now = Instant.now()
-            val a = ItemKey("a", "1")
-            val b = ItemKey("b", "1")
-            val c = ItemKey("c", "1")
-            val d = ItemKey("d", "1")
+            val a = ItemKey("a", 1)
+            val b = ItemKey("b", 1)
+            val c = ItemKey("c", 1)
+            val d = ItemKey("d", 1)
             fun series(x: ItemKey, y: ItemKey) = links.relations()[links.ordered(x, y)] == "SERIES"
             links.relate(a, b, "SERIES", now)
             links.relate(b, c, "SERIES", now)

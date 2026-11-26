@@ -50,7 +50,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         // A work its site says is an original, no word of the user's on it
         // — of words of neither the universe's works nor the others': the universe is the user's word, not the model's
         capture("o1|The courier|letters|A courier carries letters across the desert|||originals:Originals")
-        val before = items.getItem(site, "o1").body!!.allFacets
+        val before = items.getItem(site, idOf(site, "o1")).body!!.allFacets
         assertTrue(before.all { f -> f.propertyValues.all { it.corrected == null } }, "unmarked $before")
         val guessed = before.single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
         assertTrue(guessed.none { it.key == universe && it.likely == true }, "the model's universe $guessed")
@@ -59,7 +59,11 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         assertEquals(listOf(UniverseFacets.ORIGINAL), kind.filter { it.inferred != true }.map { it.key }, "kind $kind")
 
         // The user gives it the universe: the answer kept, the work read anew at once
-        corrections.correctFacet(site, "o1", FacetCorrection(facet = "universe", added = true, key = universe))
+        corrections.correctFacet(
+            site,
+            idOf(site, "o1"),
+            FacetCorrection(facet = "universe", added = true, key = universe),
+        )
         charactersToChoose(universe, "as the answer is kept")
         // And after the background did what the answer planned
         background.run()
@@ -72,7 +76,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         // A universe of a site's fandom, its characters never read, the universe whose characters are read merged into
         // it (2026-11-23, of Harry Potter: the universe of the site's fandoms kept, the one of the entry merged)
         capture("f1|The harbour|ships|Boats rest in the harbour|||fleet:Fleet")
-        val drafted = facetsOf("f1").single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
+        val drafted = facetsOf(idOf(site, "f1")).single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
         val universe = drafted.single { it.draftedFrom != null }.key
         assertTrue(!universes.getUniverse(universe).body!!.characters, "the site's universe reads no characters")
         universes.relateUniverses(UniverseRelationRequest(universe, read, UniverseRelation.MERGED))
@@ -80,7 +84,11 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         assertTrue(universes.getUniverse(universe).body!!.characters, "the characters are read after the merge")
 
         capture("o2|The courier|letters|A courier carries letters across the desert|||originals:Originals")
-        corrections.correctFacet(site, "o2", FacetCorrection(facet = "universe", added = true, key = universe))
+        corrections.correctFacet(
+            site,
+            idOf(site, "o2"),
+            FacetCorrection(facet = "universe", added = true, key = universe),
+        )
         background.run()
         charactersToChoose(universe, "after the merge", "o2")
     }
@@ -95,14 +103,22 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
         repeat(WORKS) { k ->
             capture("p$k|Pilots $k|space|Pilots fly starships in orbit near planets $k|")
             capture("q$k|Knights $k|dragons|A knight guards the princess in the castle $k|")
-            corrections.correctFacet(site, "p$k", FacetCorrection(facet = "universe", added = true, key = universe))
+            corrections.correctFacet(
+                site,
+                idOf(site, "p$k"),
+                FacetCorrection(facet = "universe", added = true, key = universe),
+            )
         }
         repeat(WORKS / 2) { k ->
             CHARACTERS.forEach {
-                corrections.correctFacet(site, "p$k", FacetCorrection(facet = "characters", added = true, key = it))
+                corrections.correctFacet(
+                    site,
+                    idOf(site, "p$k"),
+                    FacetCorrection(facet = "characters", added = true, key = it),
+                )
             }
-            corrections.completeFacet(site, "p$k", "characters")
-            corrections.completeFacet(site, "q$k", "characters")
+            corrections.completeFacet(site, idOf(site, "p$k"), "characters")
+            corrections.completeFacet(site, idOf(site, "q$k"), "characters")
         }
         val store = stores.source(site)!!
         refresh(store)
@@ -112,7 +128,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
 
     /** On the work's screen and on the site's page, the characters of the [universe] to choose ([when] it is so). */
     private fun charactersToChoose(universe: String, `when`: String, id: String = "o1") {
-        val screen = items.getItem(site, id).body!!.allFacets
+        val screen = items.getItem(site, idOf(site, id)).body!!.allFacets
         val page = pages.getPage("https://$site.example/work/$id").body!!.item!!.facets
         listOf("the screen" to screen, "the page" to page).forEach { (where, facets) ->
             val given = facets.single { it.facet == UniverseFacets.UNIVERSE }.propertyValues
@@ -141,7 +157,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
                 .map { it.key }
         val offered =
             suggestionsApi
-                .getCandidates(site, id, UniverseFacets.CHARACTERS, null, null)
+                .getCandidates(site, idOf(site, id), UniverseFacets.CHARACTERS, null, null)
                 .body!!
                 .filter { it.key in CHARACTERS && it.chance != null }
                 .map { it.key }
@@ -169,7 +185,7 @@ class SiteOriginalToUniverseTest : SiteTestBase() {
      * any of its names.
      */
     private fun foundOnThePage(`when`: String, id: String) {
-        val hints = suggestionsApi.getCandidates(site, id, UniverseFacets.CHARACTERS, null, null).body!!
+        val hints = suggestionsApi.getCandidates(site, idOf(site, id), UniverseFacets.CHARACTERS, null, null).body!!
         val given =
             pages
                 .getPage("https://$site.example/work/$id")

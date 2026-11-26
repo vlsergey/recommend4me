@@ -6,10 +6,26 @@ import java.time.Instant
 import org.jooq.DSLContext
 
 /**
- * A [SourceContext] for the tests of a source: everything it writes is kept in maps the test can look at. No database;
- * [database] is not to be used.
+ * A [SourceContext] for the tests of a source: everything it writes is kept in maps the test can look at, by the site's
+ * id of the work — what a test of a page asks of: what it wrote of the site's work "123". The source writes by the
+ * numbers it is given ([ItemStore.upsert]): 1, 2, 3 in the order the works are first written. No database; [database]
+ * is not to be used.
  */
 class MemorySourceContext(override val sourceId: String = "test") : SourceContext {
+
+    /** The number of every work written, by the site's id of it. */
+    val ids = LinkedHashMap<String, Long>()
+
+    /** The site's id of every work written, by its number. */
+    private val sites = HashMap<Long, String>()
+
+    /** The site's id of the work numbered [id]: a number never given fails the test. */
+    fun siteOf(id: Long): String = sites[id] ?: error("No work numbered $id")
+
+    /**
+     * The sites' ids of the works numbered [ids], in their order: what a source answers it touched, as a test reads it.
+     */
+    fun sitesOf(ids: List<Long>): List<String> = ids.map(::siteOf)
 
     val heads = LinkedHashMap<String, StoredItem>()
     val facets = HashMap<String, MutableMap<String, List<String>>>()
@@ -39,36 +55,48 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     override val items: ItemStore =
         object : ItemStore {
 
-            override fun upsert(item: ItemHead, now: Instant): Boolean {
-                val known = heads[item.id]
-                heads[item.id] =
+            override fun upsert(item: ItemHead, now: Instant): Upserted {
+                val id = ids.getOrPut(item.siteId) { ids.size + 1L }
+                sites[id] = item.siteId
+                val known = heads[item.siteId]
+                heads[item.siteId] =
                     StoredItem(
-                        item.id,
+                        id,
+                        item.siteId,
                         item.url,
                         item.title,
                         item.version,
                         item.updatedAt ?: known?.updatedAt ?: now,
                         known?.firstSeenAt ?: now,
                     )
-                return known?.version != item.version
+                return Upserted(id, known?.version != item.version)
             }
 
-            override fun find(itemId: String) = heads[itemId]
+            override fun idOf(siteId: String): Long? = ids[siteId]
 
-            override fun remove(itemId: String) {
+            override fun idsOf(siteIds: Collection<String>): Map<String, Long> =
+                siteIds.mapNotNull { s -> this@MemorySourceContext.ids[s]?.let { s to it } }.toMap()
+
+            override fun siteIdsOf(ids: Collection<Long>): Map<Long, String> =
+                ids.mapNotNull { id -> sites[id]?.let { id to it } }.toMap()
+
+            override fun find(itemId: Long) = sites[itemId]?.let(heads::get)
+
+            override fun remove(itemId: Long) {
+                val site = sites[itemId] ?: return
                 listOf(heads, facets, numbers, texts, pictures, reviews, parts, partsTakenOff).forEach {
-                    it.remove(itemId)
+                    it.remove(site)
                 }
-                seriesPlaces.values.forEach { it.remove(itemId) }
-                signalValues.keys.removeIf { it.first == itemId }
+                seriesPlaces.values.forEach { it.remove(site) }
+                signalValues.keys.removeIf { it.first == site }
             }
 
             override fun count() = heads.size
 
             override fun latestUpdate() = heads.values.maxOfOrNull { it.updatedAt }
 
-            override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) {
-                facets.getOrPut(itemId) { HashMap() }[facet] = values.map { it.key }.distinct()
+            override fun setFacet(itemId: Long, facet: String, values: List<FacetValue>) {
+                facets.getOrPut(siteOf(itemId)) { HashMap() }[facet] = values.map { it.key }.distinct()
                 nameFacetValues(facet, values.filter { it.name != null }.associate { it.key to it.name!! })
             }
 
@@ -105,41 +133,43 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
                 }
             }
 
-            override fun facets(itemId: String): Map<String, List<String>> = facets[itemId].orEmpty()
+            override fun facets(itemId: Long): Map<String, List<String>> = facets[siteOf(itemId)].orEmpty()
 
-            override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) =
-                facets.forEach { (id, f) ->
-                    f[facet]?.let { action(id, it) }
+            override fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit) =
+                facets.forEach { (site, f) ->
+                    f[facet]?.let { action(ids.getValue(site), it) }
                 }
 
-            override fun setNumbers(itemId: String, numbers: Map<String, Double?>) {
-                val own = this@MemorySourceContext.numbers.getOrPut(itemId) { HashMap() }
+            override fun setNumbers(itemId: Long, numbers: Map<String, Double?>) {
+                val own = this@MemorySourceContext.numbers.getOrPut(siteOf(itemId)) { HashMap() }
                 numbers.forEach { (k, v) -> if (v == null) own.remove(k) else own[k] = v }
             }
 
-            override fun setTexts(itemId: String, texts: Map<String, String?>) {
-                val own = this@MemorySourceContext.texts.getOrPut(itemId) { HashMap() }
+            override fun setTexts(itemId: Long, texts: Map<String, String?>) {
+                val own = this@MemorySourceContext.texts.getOrPut(siteOf(itemId)) { HashMap() }
                 texts.forEach { (k, v) -> if (v.isNullOrBlank()) own.remove(k) else own[k] = v.trim() }
             }
 
-            override fun texts(itemId: String): Map<String, String> = texts[itemId].orEmpty()
+            override fun texts(itemId: Long): Map<String, String> = texts[siteOf(itemId)].orEmpty()
 
-            override fun setPictures(itemId: String, urls: List<String?>) {
-                pictures[itemId] = urls
+            override fun setPictures(itemId: Long, urls: List<String?>) {
+                pictures[siteOf(itemId)] = urls
             }
 
-            override fun saveReviews(itemId: String, reviews: List<ReviewData>) {
-                this@MemorySourceContext.reviews.getOrPut(itemId) { LinkedHashMap() } += reviews.associateBy { it.id }
+            override fun saveReviews(itemId: Long, reviews: List<ReviewData>) {
+                this@MemorySourceContext.reviews.getOrPut(siteOf(itemId)) { LinkedHashMap() } += reviews.associateBy {
+                    it.id
+                }
             }
 
-            override fun reviewIds(itemId: String): Set<String> = reviews[itemId].orEmpty().keys
+            override fun reviewIds(itemId: Long): Set<String> = reviews[siteOf(itemId)].orEmpty().keys
 
-            override fun reviewContents(itemId: String): Map<String, String> =
-                reviews[itemId].orEmpty().mapValues { it.value.content }
+            override fun reviewContents(itemId: Long): Map<String, String> =
+                reviews[siteOf(itemId)].orEmpty().mapValues { it.value.content }
 
-            override fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean) {
-                val own = this@MemorySourceContext.parts.getOrPut(itemId) { LinkedHashMap() }
-                val off = partsTakenOff.getOrPut(itemId) { HashSet() }
+            override fun saveParts(itemId: Long, parts: List<PartData>, whole: Boolean) {
+                val own = this@MemorySourceContext.parts.getOrPut(siteOf(itemId)) { LinkedHashMap() }
+                val off = partsTakenOff.getOrPut(siteOf(itemId)) { HashSet() }
                 off -= parts.map { it.id }.toSet()
                 if (whole) off += own.keys - parts.map { it.id }.toSet()
                 parts.forEach { p ->
@@ -153,15 +183,15 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
                 }
             }
 
-            override fun parts(itemId: String): Map<String, Boolean> =
-                parts[itemId].orEmpty().mapValues { it.value.content != null }
+            override fun parts(itemId: Long): Map<String, Boolean> =
+                parts[siteOf(itemId)].orEmpty().mapValues { it.value.content != null }
 
             override fun keepSeries(series: SeriesData) {
                 this@MemorySourceContext.series[series.key] = series
             }
 
-            override fun placeInSeries(itemId: String, key: String, position: Int) {
-                seriesPlaces.getOrPut(key) { HashMap() }[itemId] = position
+            override fun placeInSeries(itemId: Long, key: String, position: Int) {
+                seriesPlaces.getOrPut(key) { HashMap() }[siteOf(itemId)] = position
             }
         }
 
@@ -179,17 +209,18 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
 
     override val signals: SiteSignals =
         object : SiteSignals {
-            override fun set(itemId: String, signal: String, value: String?) {
-                if (value == null) signalValues.remove(itemId to signal) else signalValues[itemId to signal] = value
+            override fun setSignal(itemId: Long, signal: String, value: String?) {
+                val key = siteOf(itemId) to signal
+                if (value == null) signalValues.remove(key) else signalValues[key] = value
             }
 
-            override fun withSignal(signal: String): Map<String, String> =
-                signalValues.filterKeys { it.second == signal }.mapKeys { it.key.first }
+            override fun withSignal(signal: String): Map<Long, String> =
+                signalValues.filterKeys { it.second == signal }.mapKeys { ids.getValue(it.key.first) }
         }
 
     override val folder: Path by lazy { Files.createTempDirectory("source-$sourceId") }
 
-    override fun keepPage(url: String, html: String, itemId: String?) {
+    override fun keepPage(url: String, html: String, itemId: Long?) {
         pages[url] = html
     }
 
@@ -197,9 +228,9 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
         authorPlaces[author] = urls
     }
 
-    override fun gradedItems(): Set<String> = emptySet()
+    override fun gradedItems(): Set<Long> = emptySet()
 
-    override fun itemsInOrder(): List<String> = heads.keys.toList()
+    override fun itemsInOrder(): LongArray = heads.values.map { it.id }.toLongArray()
 
     val jobStates = HashMap<String, String>()
 

@@ -7,9 +7,9 @@
 -- pass of the columns of its filter and its sort, a pair found by the blocks of rows of its first work
 CREATE TABLE duplicate_candidate (
     source VARCHAR(100) NOT NULL,
-    item_id VARCHAR(200) NOT NULL,
+    item_id BIGINT NOT NULL,
     other_source VARCHAR(100) NOT NULL,
-    other_item_id VARCHAR(200) NOT NULL,
+    other_item_id BIGINT NOT NULL,
     title REAL NOT NULL,
     description REAL,
     facets VARCHAR(4000),

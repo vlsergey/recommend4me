@@ -23,7 +23,7 @@ import java.nio.ByteOrder
 internal class KnnModel(
     val k: Int,
     val layout: List<Pair<String, Int>>,
-    val ids: List<String>,
+    val ids: LongArray,
     val vectors: Floats,
     val labels: Labels,
     val share: DoubleArray,
@@ -58,7 +58,7 @@ internal class KnnModel(
                 out.writeInt(cols)
             }
             out.writeInt(ids.size)
-            ids.forEach(out::writeUTF)
+            ids.forEach(out::writeLong)
             val count = ids.size * Neighbours.DIMENSIONS
             val halves = ByteBuffer.allocate(count * HALF).order(ByteOrder.LITTLE_ENDIAN)
             for (q in 0 until count) halves.putShort(java.lang.Float.floatToFloat16(vectors[q]))
@@ -70,8 +70,8 @@ internal class KnnModel(
     }
 
     companion object {
-        /** The mark of a model of the nearest works, and of its format. */
-        private const val MAGIC = 0x4B4E4E31
+        /** The mark of a model of the nearest works, and of its format: 2, the works by their numbers. */
+        private const val MAGIC = 0x4B4E4E32
 
         /** The bytes of a number in half precision. */
         private const val HALF = 2
@@ -85,7 +85,7 @@ internal class KnnModel(
                     if (input.readInt() != MAGIC) return null
                     val k = input.readInt()
                     val layout = List(input.readInt()) { input.readUTF() to input.readInt() }
-                    val ids = List(input.readInt()) { input.readUTF() }
+                    val ids = LongArray(input.readInt()) { input.readLong() }
                     val count = ids.size * Neighbours.DIMENSIONS
                     val raw = ByteArray(count * HALF).also(input::readFully)
                     val halves = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)

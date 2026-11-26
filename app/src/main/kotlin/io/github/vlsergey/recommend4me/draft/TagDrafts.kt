@@ -15,10 +15,10 @@ import io.github.vlsergey.recommend4me.universe.LayerDraft
  */
 internal object TagDrafts {
     /** Of the works whose site's values are [site], by their ids, the tags drafted of their site's tags. */
-    fun of(store: SourceStore, site: Map<String, Map<String, List<String>>>): Map<String, List<LayerDraft>> {
+    fun of(store: SourceStore, site: Map<Long, Map<String, List<String>>>): Map<Long, List<LayerDraft>> {
         val drafted = store.schema.facets.mapNotNull { f -> f.examplesFrom?.let { from -> f.key to from } }
         if (drafted.isEmpty() || site.isEmpty()) return emptyMap()
-        val out = HashMap<String, MutableList<LayerDraft>>()
+        val out = HashMap<Long, MutableList<LayerDraft>>()
         drafted.forEach { (facet, from) ->
             val keys = HashSet<String>()
             site.values.forEach { keys += it[from].orEmpty() }
@@ -46,18 +46,18 @@ internal object WorkDrafts {
     /** Of the works [ids] of the [store], whose site's values are [site], every draft. */
     fun of(
         store: SourceStore,
-        ids: Collection<String>,
-        site: Map<String, Map<String, List<String>>> = store.items.facetsOf(ids),
-    ): Map<String, List<LayerDraft>> {
+        ids: Collection<Long>,
+        site: Map<Long, Map<String, List<String>>> = store.items.facetsOf(ids),
+    ): Map<Long, List<LayerDraft>> {
         val wanted = ids as? Set<String> ?: ids.toHashSet()
         val own = site.filterKeys { it in wanted }
         return merged(LayerDrafting.of(store, own), TagDrafts.of(store, own))
     }
 
     private fun merged(
-        layer: Map<String, List<LayerDraft>>,
-        tags: Map<String, List<LayerDraft>>,
-    ): Map<String, List<LayerDraft>> =
+        layer: Map<Long, List<LayerDraft>>,
+        tags: Map<Long, List<LayerDraft>>,
+    ): Map<Long, List<LayerDraft>> =
         if (tags.isEmpty()) layer
         else HashMap(layer).apply { tags.forEach { (id, list) -> merge(id, list) { a, b -> (a + b).distinct() } } }
 }

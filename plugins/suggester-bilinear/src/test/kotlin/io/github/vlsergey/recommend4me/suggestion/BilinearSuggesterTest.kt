@@ -44,7 +44,7 @@ class BilinearSuggesterTest {
         val names = Matrix(directions.size, d)
         directions.forEachIndexed { k, v -> names.held.put(v, 0, names.row(k), d) }
         return SuggestionTask(
-            itemIds = List(n) { "item$it" },
+            itemIds = LongArray(n) { it.toLong() },
             inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true })),
             values = names,
             valueKeys = directions.indices.map { "v$it" },
@@ -117,7 +117,7 @@ class BilinearSuggesterTest {
         val values = shares.size + 1
         val task =
             SuggestionTask(
-                itemIds = List(n) { "item$it" },
+                itemIds = LongArray(n) { it.toLong() },
                 inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true })),
                 values =
                     Matrix(values, d).also { names ->
@@ -160,7 +160,7 @@ class BilinearSuggesterTest {
         val texts = task.inputs.single().vectors.gather(rows)
         val alone =
             SuggestionTask(
-                itemIds = rows.map { task.itemIds[it] },
+                itemIds = LongArray(rows.size) { task.itemIds[rows[it]] },
                 inputs = listOf(InputBlock("text:annotation", texts, IntArray(rows.size) { it })),
                 values = Matrix(task.valueCount, 0),
                 valueKeys = task.valueKeys,
@@ -227,7 +227,7 @@ class BilinearSuggesterTest {
         val names = Matrix(4, d)
         val task =
             SuggestionTask(
-                itemIds = List(n) { "w$it" },
+                itemIds = LongArray(n) { it.toLong() },
                 inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true })),
                 values = names,
                 valueKeys = listOf("space", "ships", "dragons", "magic"),
@@ -289,7 +289,7 @@ class BilinearSuggesterTest {
             }
         val task =
             SuggestionTask(
-                itemIds = List(n) { "w$it" },
+                itemIds = LongArray(n) { it.toLong() },
                 inputs =
                     listOf(
                         InputBlock.of("text:annotation", texts, BooleanArray(n) { true }),

@@ -24,26 +24,33 @@ internal class MolweWork(private val items: ItemStore) {
 
     private val fields = MolweFields(items)
 
-    /** The work of a work's page or of a chapter's, written; its id, none of another page. */
-    fun read(doc: Document, url: String, now: Instant): List<String> {
-        val id = Molwe.workIdOf(url) ?: return emptyList()
+    /** The work of a work's page or of a chapter's, written; its number, none of another page. */
+    fun read(doc: Document, url: String, now: Instant): List<Long> {
+        val site = Molwe.workIdOf(url) ?: return emptyList()
         val chapter = CHAPTER_ADDRESS.find(url)?.groupValues?.get(1)
-        val read = if (chapter == null) work(doc, id, now) else chapter(doc, id, chapter)
-        return if (read) listOf(id) else emptyList()
+        return listOfNotNull(if (chapter == null) work(doc, site, now) else chapter(doc, site, chapter))
     }
 
     // --- A work's page ---
 
-    /** A work's page whole. False of a page without its header. */
-    private fun work(doc: Document, id: String, now: Instant): Boolean {
+    /** A work's page whole, of the work the site names [site]: its number. None of a page without its header. */
+    private fun work(doc: Document, site: String, now: Instant): Long? {
         val hero = doc.selectFirst(Molwe.HERO)
         val title = hero?.selectFirst("h1")?.text()?.trim()?.ifEmpty { null }
-        if (hero == null || title == null) return false
+        if (hero == null || title == null) return null
         val chapters = chapters(doc)
-        items.upsert(
-            ItemHead(id, Molwe.workUrl(id), title, updatedAt = chapters.mapNotNull { it.publishedAt }.maxOrNull()),
-            now,
-        )
+        val id =
+            items
+                .upsert(
+                    ItemHead(
+                        site,
+                        Molwe.workUrl(site),
+                        title,
+                        updatedAt = chapters.mapNotNull { it.publishedAt }.maxOrNull(),
+                    ),
+                    now,
+                )
+                .id
         hero
             .select("div")
             .firstOrNull { MolweCards.isBadges(it) }
@@ -59,11 +66,11 @@ internal class MolweWork(private val items: ItemStore) {
         count?.let { items.setNumbers(id, mapOf(PARTS to it.toDouble())) }
         words(doc)?.let { items.setNumbers(id, mapOf(WORDS to it.toDouble())) }
         reviews(doc, id)
-        return true
+        return id
     }
 
     /** The header's lines: the fandoms, the authors, the readers and the reviews. */
-    private fun header(id: String, hero: Element, doc: Document) {
+    private fun header(id: Long, hero: Element, doc: Document) {
         val lines = hero.selectFirst("ul")?.children().orEmpty()
         val original =
             when {
@@ -102,7 +109,7 @@ internal class MolweWork(private val items: ItemStore) {
      * The work's description and the blocks under it, each by its label: the line of pairings and characters, the tags,
      * the notes.
      */
-    private fun description(id: String, doc: Document) {
+    private fun description(id: Long, doc: Document) {
         val blocks = doc.select("#work-description > div")
         val labelled =
             blocks
@@ -146,7 +153,7 @@ internal class MolweWork(private val items: ItemStore) {
      * The reviews the page has loaded — none written before they are: its script loads them after the page — each by
      * the site's own id.
      */
-    private fun reviews(doc: Document, id: String) {
+    private fun reviews(doc: Document, id: Long) {
         val shown = doc.select("#work-reviews $REVIEW")
         if (shown.isEmpty()) return
         items.saveReviews(
@@ -164,15 +171,16 @@ internal class MolweWork(private val items: ItemStore) {
 
     /**
      * A chapter's page: its title, the reader's heading, and its text, of a work known; its place in the work is told
-     * by the work's page alone. False of a page without its text.
+     * by the work's page alone. The number of the work the site names [site]; none of a page without its text.
      */
-    private fun chapter(doc: Document, id: String, part: String): Boolean {
+    private fun chapter(doc: Document, site: String, part: String): Long? {
         val title = doc.selectFirst("[data-no-chrome-toggle] > div > p")?.text()?.trim()?.ifEmpty { null }
         val text =
             doc.select("p[id^=paragraph-]").map { PageText.of(it) }.filter { it.isNotBlank() }.joinToString("\n\n")
-        if (items.find(id) == null || text.isBlank()) return false
+        val id = items.idOf(site)
+        if (id == null || text.isBlank()) return null
         items.saveParts(id, listOf(PartData(part, UNKNOWN_PLACE, title, text)))
-        return true
+        return id
     }
 
     companion object {

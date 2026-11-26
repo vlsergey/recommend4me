@@ -3,7 +3,6 @@ package io.github.vlsergey.recommend4me.worklist
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_NUMBER
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM_VALUE
-import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.DSLContext
 import org.jooq.Field
 import org.jooq.Table
@@ -20,7 +19,7 @@ import org.jooq.impl.DSL
  * 2026-11-20).
  */
 class ItemRows(
-    val ids: List<String>,
+    val ids: List<Long>,
     val values: Array<IntArray>,
     val titles: List<String?>,
     val numbers: Map<String, DoubleArray>,
@@ -51,8 +50,8 @@ internal class EveryItem(
     private val predicted: Boolean = false,
 ) {
     fun read(db: DSLContext): ItemRows {
-        val prefix = ItemKey(source, "").toString()
-        val keys = ArrayList<String>()
+        val prefix = "$source/"
+        val keys = ArrayList<Long>()
         val titles = ArrayList<String?>()
         val predictions = Numbers()
         val interests = Numbers()
@@ -64,7 +63,7 @@ internal class EveryItem(
             .fetchResultSet()
             .use { rs ->
                 while (rs.next()) {
-                    keys += rs.getString(1).substring(prefix.length)
+                    keys += rs.getString(1).substring(prefix.length).toLong()
                     if (titled) titles += rs.getString(2)
                     if (predicted) {
                         predictions.add(rs.getDouble(PREDICTION_COLUMN).takeUnlessNull(rs.wasNull()))
@@ -223,14 +222,13 @@ internal class EveryItem(
     }
 
     /**
-     * The ids as the database ordered them, and their places as Kotlin's strings compare ([ids], what is searched in by
-     * halves): the same but of an id of a letter beyond the 16 bits — the database orders by the code points, the
-     * strings by their 16-bit units.
+     * The ids as the database ordered them, and their places as numbers compare ([ids], what is searched in by halves):
+     * the database orders the keys of the items as text, "site/10" before "site/9".
      */
-    private class Placed(ordered: List<String>, private val order: IntArray?) {
+    private class Placed(ordered: List<Long>, private val order: IntArray?) {
         val size = ordered.size
 
-        val ids: List<String> = if (order == null) ordered else inOrder(ordered).map { it!! }
+        val ids: List<Long> = if (order == null) ordered else inOrder(ordered).map { it!! }
 
         /** The place of the item the database placed at [place]. */
         fun of(place: Int): Int = order?.get(place) ?: place
@@ -253,7 +251,7 @@ internal class EveryItem(
         }
 
         companion object {
-            fun of(ordered: List<String>): Placed {
+            fun of(ordered: List<Long>): Placed {
                 if ((1 until ordered.size).all { ordered[it - 1] < ordered[it] }) return Placed(ordered, null)
                 val sorted = ordered.indices.sortedWith(compareBy { ordered[it] })
                 return Placed(ordered, IntArray(ordered.size).also { o -> sorted.forEachIndexed { j, i -> o[i] = j } })

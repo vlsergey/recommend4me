@@ -23,7 +23,7 @@ class PairFieldsTest {
         compared: Boolean = true,
     ) =
         Described(
-            DuplicateWork(source = source, item = "1", title = "Title", url = ""),
+            DuplicateWork(source = source, item = 1, title = "Title", url = ""),
             emptySet(),
             ShownFields(
                 authors = listOf("Author"),
@@ -44,7 +44,7 @@ class PairFieldsTest {
     private val b = work("beta", "Sauron/Thranduil Oropherion", listOf("angst", "drama"), listOf("Drama"))
 
     private fun layers(letters: Map<LetteredText, Float>) =
-        DuplicateCandidate(ItemKey("alpha", "1"), ItemKey("beta", "1"), 1f, 0.9f, null, emptyMap(), letters = letters)
+        DuplicateCandidate(ItemKey("alpha", 1), ItemKey("beta", 1), 1f, 0.9f, null, emptyMap(), letters = letters)
 
     private fun rows(layers: DuplicateCandidate?) =
         PairFields(a, b, layers, sameAuthor = false, kin = null).rows().associateBy { it.key }

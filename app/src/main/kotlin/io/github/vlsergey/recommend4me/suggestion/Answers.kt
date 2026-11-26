@@ -9,13 +9,13 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * ([WorksRead.answers]) — a dictionary of every facet read them of the file again, some of them twice and three times a
  * facet.
  */
-internal class Answers(val byItem: Map<String, List<FacetCorrection>>, val complete: Map<String, Set<String>>) {
+internal class Answers(val byItem: Map<Long, List<FacetCorrection>>, val complete: Map<Long, Set<String>>) {
     /** Every answer, one work after another: made once, the dictionaries of several facets reading it. */
     val all: List<FacetCorrection> by lazy { byItem.values.flatten() }
 
     companion object {
         /** Of the works [ids] — of every work when null — read now. */
-        fun of(store: SourceStore, ids: Collection<String>?): Answers =
+        fun of(store: SourceStore, ids: Collection<Long>?): Answers =
             Answers(
                 if (ids == null) store.corrections.allFacets().groupBy { it.itemId }
                 else store.corrections.facetsOf(ids),

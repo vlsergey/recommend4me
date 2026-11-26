@@ -40,14 +40,15 @@ class FicbookPages(private val context: SourceContext) {
     private val series = FicbookSeries(items)
     private val fandoms = FicbookFandoms(items)
 
-    fun read(page: CapturedPage): List<String> {
+    /** The works the page wrote, by their numbers. */
+    fun read(page: CapturedPage): List<Long> {
         val path = runCatching { URI(page.url).path }.getOrDefault("")
         if (path == TAG_SEARCH) {
             meanings.tagSearch(page)
             return emptyList()
         }
         val doc = Jsoup.parse(page.html, page.url)
-        val touched = LinkedHashSet<String>()
+        val touched = LinkedHashSet<Long>()
         touched += cards(doc, page.capturedAt)
         TAG_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { meanings.tagPage(doc, it) }
         FANDOM_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.page(doc, it) }
@@ -55,25 +56,34 @@ class FicbookPages(private val context: SourceContext) {
         // A series' own page, and an author's list of series: after the cards, whose works they list
         FicbookSeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (AUTHOR_SERIES.matches(path)) series.list(doc)
-        READFIC.matchEntire(path)?.let { m ->
-            val id = m.groupValues[1]
-            val rest = m.groupValues[2]
-            when {
-                rest.isEmpty() -> work(doc, id, page.capturedAt)?.let { touched += it }
-                rest == "comments" -> Unit
-                rest.all { it.isDigit() } -> part(doc, id, rest, page.capturedAt)?.let { touched += it }
-            }
-            if (comments(doc, id)) touched += id
-        }
+        READFIC.matchEntire(path)?.let { m -> touched += workPage(doc, m, page.capturedAt) }
         return touched.toList()
+    }
+
+    /**
+     * A work's own page [m] — the work's, a part's, its comments — written: the work's number; none of a page that told
+     * nothing.
+     */
+    private fun workPage(doc: Document, m: MatchResult, now: Instant): List<Long> {
+        val site = m.groupValues[1]
+        val rest = m.groupValues[2]
+        val read =
+            when {
+                rest.isEmpty() -> work(doc, site, now)
+                rest.all { it.isDigit() } -> part(doc, site, rest, now)
+                else -> null
+            }
+        // The comments of a work known
+        val commented = items.idOf(site)?.takeIf { comments(doc, it) }
+        return listOfNotNull(read, commented).distinct()
     }
 
     // --- Cards of a list ---
 
-    private fun cards(doc: Document, now: Instant): List<String> =
+    private fun cards(doc: Document, now: Instant): List<Long> =
         doc.select("article.fanfic-inline").mapNotNull { card ->
             val link = card.selectFirst(".fanfic-inline-title a[href^=/readfic/]") ?: return@mapNotNull null
-            val id = workId(link.attr("href")) ?: return@mapNotNull null
+            val site = workId(link.attr("href")) ?: return@mapNotNull null
             val title =
                 link.text().trim().ifEmpty {
                     return@mapNotNull null
@@ -84,7 +94,7 @@ class FicbookPages(private val context: SourceContext) {
                 }
             val updated =
                 info.entries.firstOrNull { it.key.startsWith("Дата") }?.value?.text()?.let { PageText.russianDate(it) }
-            items.upsert(ItemHead(id, "$BASE/readfic/$id", title, updatedAt = updated), now)
+            val id = items.upsert(ItemHead(site, "$BASE/readfic/$site", title, updatedAt = updated), now).id
             fields.badges(id, card.selectFirst(".fanfic-badges"))
             card.selectFirst(".js-like-count")?.text()?.let(PageText::number)?.let {
                 items.setNumbers(id, mapOf(LIKES to it.toDouble()))
@@ -103,9 +113,10 @@ class FicbookPages(private val context: SourceContext) {
     /**
      * A work's own page: its header ("hat") and the blocks of it, the table of contents. A page without the header — an
      * error page, a changed markup — says nothing of the work, and nothing is written: what it does not show is not
-     * known to be gone. Of the header, a block it has not is a thing the work has not.
+     * known to be gone. Of the header, a block it has not is a thing the work has not. Of the work the site names
+     * [site]: its number.
      */
-    private fun work(doc: Document, id: String, now: Instant): String? {
+    private fun work(doc: Document, site: String, now: Instant): Long? {
         val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null }
         val hat = doc.selectFirst(".fanfic-hat")
         if (title == null || hat == null) return null
@@ -115,10 +126,8 @@ class FicbookPages(private val context: SourceContext) {
                     block.selectFirst("strong + div")
             }
         val parts = contents(doc)
-        items.upsert(
-            ItemHead(id, "$BASE/readfic/$id", title, updatedAt = parts.mapNotNull { it.publishedAt }.maxOrNull()),
-            now,
-        )
+        val updated = parts.mapNotNull { it.publishedAt }.maxOrNull()
+        val id = items.upsert(ItemHead(site, "$BASE/readfic/$site", title, updatedAt = updated), now).id
         fields.badges(id, doc.selectFirst("section.fanfic-badges"))
         cover(hat)?.let { items.setPictures(id, listOf(it)) }
         doc.selectFirst("section.fanfic-badges button span")?.text()?.let(PageText::number)?.let {
@@ -138,7 +147,7 @@ class FicbookPages(private val context: SourceContext) {
                 DEDICATION to blocks["Посвящение"]?.let(PageText::of),
             ),
         )
-        doc.select("a[href=/readfic/$id/comments#comments-list]")
+        doc.select("a[href=/readfic/$site/comments#comments-list]")
             .firstNotNullOfOrNull { PageText.number(it.text()) }
             ?.let { items.setNumbers(id, mapOf(COMMENTS to it.toDouble())) }
         marks(doc, id)
@@ -156,7 +165,7 @@ class FicbookPages(private val context: SourceContext) {
      * The people of a work's header by the site's mark of each: the author and the co-authors — who have no itemprop —
      * are the work's authors; the betas and the gammas are not, kept apart, a work of none of them having none.
      */
-    private fun people(id: String, hat: Element) {
+    private fun people(id: Long, hat: Element) {
         val people =
             hat.select("a.word-break[href^=/authors/]")
                 .groupBy(
@@ -196,31 +205,37 @@ class FicbookPages(private val context: SourceContext) {
      * coloured "success". Read only of a page of a user logged in, the one that has the menu of their liked works: to
      * anyone else the page tells nothing of them.
      */
-    private fun marks(doc: Document, id: String) {
+    private fun marks(doc: Document, id: Long) {
         if (doc.selectFirst("a[href=/home/liked_fanfics]") == null) return
         fun pressed(icon: String): Boolean? =
             doc.select(".hat-actions-container button:has(svg.$icon)").firstOrNull()?.let { b ->
                 b.classNames().any { it.startsWith("ds-btn-success") }
             }
-        pressed("ic_thumbs-up")?.let { context.signals.set(id, Books.LIKED.key, Books.YES.key.takeIf { _ -> it }) }
+        pressed("ic_thumbs-up")?.let {
+            context.signals.setSignal(id, Books.LIKED.key, Books.YES.key.takeIf { _ -> it })
+        }
         pressed("ic_star-empty")?.let {
-            context.signals.set(id, Ficbook.SIGNAL_FOLLOWED, Books.YES.key.takeIf { _ -> it })
+            context.signals.setSignal(id, Ficbook.SIGNAL_FOLLOWED, Books.YES.key.takeIf { _ -> it })
         }
         // The box "read" of the work, ticked or not
         when {
             doc.selectFirst("button:has(svg.ic_checkbox-checked2)") != null ->
-                context.signals.set(id, Books.READ.key, Books.YES.key)
+                context.signals.setSignal(id, Books.READ.key, Books.YES.key)
             doc.selectFirst("button:has(svg.ic_checkbox-unchecked2)") != null ->
-                context.signals.set(id, Books.READ.key, null)
+                context.signals.setSignal(id, Books.READ.key, null)
         }
     }
 
     // --- A part ---
 
-    /** The text of a part, of a work known — or made known by the part's own page ([known]). */
-    private fun part(doc: Document, id: String, partId: String, now: Instant): String? {
+    /**
+     * The text of a part, of a work the site names [site] known — or made known by the part's own page ([known]): the
+     * work's number.
+     */
+    private fun part(doc: Document, site: String, partId: String, now: Instant): Long? {
         val text = doc.selectFirst("#content")?.let { PageText.of(it, NOT_THE_TEXT) }
-        if (text.isNullOrBlank() || !known(doc, id, now)) return null
+        val id = if (text.isNullOrBlank()) null else known(doc, site, now)
+        if (text.isNullOrBlank() || id == null) return null
         marks(doc, id)
         val area = doc.selectFirst(".title-area")
         items.saveParts(
@@ -239,14 +254,15 @@ class FicbookPages(private val context: SourceContext) {
     }
 
     /**
-     * Whether the work [id] is known — or made known by the page of its part, opened before the work's: its title is
-     * the page's heading. No title, no work.
+     * The number of the work the site names [site] if it is known — or made known by the page of its part, opened
+     * before the work's: its title is the page's heading. No title, no work.
      */
-    private fun known(doc: Document, id: String, now: Instant): Boolean {
-        if (items.find(id) != null) return true
+    private fun known(doc: Document, site: String, now: Instant): Long? {
+        items.idOf(site)?.let {
+            return it
+        }
         val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null }
-        if (title != null) items.upsert(ItemHead(id, "$BASE/readfic/$id", title), now)
-        return title != null
+        return title?.let { items.upsert(ItemHead(site, "$BASE/readfic/$site", it), now).id }
     }
 
     // --- Comments ---
@@ -255,9 +271,9 @@ class FicbookPages(private val context: SourceContext) {
      * The comments the page shows, on the work's own page of comments or under a part; quotes of other comments left
      * out.
      */
-    private fun comments(doc: Document, id: String): Boolean {
+    private fun comments(doc: Document, id: Long): Boolean {
         val list = doc.select("article.comment-container[id^=com]")
-        if (list.isEmpty() || items.find(id) == null) return false
+        if (list.isEmpty()) return false
         items.saveReviews(
             id,
             list.mapNotNull { c ->

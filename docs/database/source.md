@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `item` | a work of the site, kept by a number of the application's own (`internal_id`: the key H2 keeps the rows by, a row read by it one tree of the file) beside the site's id (`site_id`, unique, what every other table binds a work by): its address, title, version and dates; the texts the site gives it, a column each the source's own migrations make (`site_text_<key>`, `SiteTexts.columnOf`: the description, the notes…), read with its row; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index; when every outer kind of its data last changed — what the site says of it (`data_at`), its chapters' texts (`chapters_at`), its reviews (`reviews_at`), its pictures analysed (`pictures_at`) —: what the stages of the tasks over the works take it by, each by the kinds it reads |
+| `item` | a work of the site, kept by a number of the application's own (`internal_id`: the key H2 keeps the rows by, a row read by it one tree of the file) beside the site's id (`site_id`, unique: a site that changes its works' ids changes it alone — every other table binds a work by its number, `item_id`): its address, title, version and dates; the texts the site gives it, a column each the source's own migrations make (`site_text_<key>`, `SiteTexts.columnOf`: the description, the notes…), read with its row; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of; when what the index of the list holds of it last changed (`changed_at`): its document written anew by the next writing of the index; when every outer kind of its data last changed — what the site says of it (`data_at`), its chapters' texts (`chapters_at`), its reviews (`reviews_at`), its pictures analysed (`pictures_at`) —: what the stages of the tasks over the works take it by, each by the kinds it reads |
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
@@ -33,7 +33,7 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 erDiagram
     captured_page {
         VARCHAR url PK
-        VARCHAR item_id "null"
+        BIGINT item_id "null"
         TIMESTAMPTZ captured_at
         INTEGER parser_version
         BLOB html
@@ -90,37 +90,37 @@ erDiagram
         TIMESTAMPTZ pictures_at "null"
     }
     item_facet {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR facet PK
         VARCHAR value_key PK
         INTEGER position
         VARCHAR name "null"
     }
     item_manner {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         BIGINT words_id
         VARCHAR text_hash
         VARBINARY vec
     }
     item_number {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR number_key PK
         DOUBLE content
     }
     item_picture_vector {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR block PK
         VARCHAR encoder
         VARBINARY vec
     }
     item_version {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR version PK
         TIMESTAMPTZ updated_at
         TIMESTAMPTZ seen_at
     }
     part {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR part_id PK
         INTEGER position
         VARCHAR title "null"
@@ -143,7 +143,7 @@ erDiagram
         VARBINARY vec
     }
     picture {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         INTEGER position PK
         VARCHAR url
         VARCHAR preview_file "null"
@@ -156,7 +156,7 @@ erDiagram
         TIMESTAMPTZ retry_at "null"
     }
     review {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR review_id PK
         VARCHAR author "null"
         DOUBLE stars "null"
@@ -177,18 +177,18 @@ erDiagram
     }
     series_place {
         VARCHAR series_key PK
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         INTEGER position
     }
     set_vector {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR kind PK
         BIGINT embedding_id
         INTEGER source
         VARBINARY vec
     }
     text_vector {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR text_key PK
         VARCHAR encoder
         VARCHAR text_hash
@@ -199,7 +199,7 @@ erDiagram
         VARCHAR full_text "null"
     }
     text_window {
-        VARCHAR item_id PK, FK
+        BIGINT item_id PK, FK
         VARCHAR text_key PK
         INTEGER window_no PK
         VARBINARY vec

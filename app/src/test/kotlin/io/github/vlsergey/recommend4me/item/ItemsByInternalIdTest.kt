@@ -13,7 +13,8 @@ import org.junit.jupiter.api.Test
 /**
  * A source's file of the time the texts of the works were rows of item_text, migrated: every work kept by a number of
  * the application's own, the one H2 kept its row by, its texts in columns of its row (V37-V39) — of every key the file
- * held, and of those the source's own migrations name; the tables of a work's data bound to it by the site's id still.
+ * held, and of those the source's own migrations name; the tables of a work's data bound to it by that number
+ * (V40-V42).
  */
 class ItemsByInternalIdTest {
 
@@ -35,16 +36,22 @@ class ItemsByInternalIdTest {
                         "('w2', 'annotation', 'A knight')"
                 )
                 s.execute("INSERT INTO item_facet (item_id, facet, value_key, position) VALUES ('w1', 'tag', 'x', 0)")
+                // The other stores named by the works' numbers, as the tool of the move marks it
+                s.execute("CREATE TABLE works_numbered_elsewhere(at TIMESTAMP WITH TIME ZONE)")
             }
         }
 
         // The source of the tests names "annotation" and "pairings": the second a column no work had a text of
         Database("test/source", file, "source", listOf("classpath:db/test-sites")).use { db ->
             val items = ItemRepository(db.dsl, listOf("annotation", "pairingsLine", "pairings")) {}
-            assertEquals(mapOf("annotation" to "A dragon", "pairingsLine" to "A/B"), items.texts("w1"))
-            assertEquals(mapOf("annotation" to "A knight"), items.texts("w2"))
-            items.setTexts("w2", mapOf("pairings" to "C/D"))
-            assertEquals(mapOf("annotation" to "A knight", "pairings" to "C/D"), items.texts("w2"))
+            val w1 = items.idOf("w1")!!
+            val w2 = items.idOf("w2")!!
+            assertEquals(mapOf("annotation" to "A dragon", "pairingsLine" to "A/B"), items.texts(w1))
+            assertEquals(mapOf("annotation" to "A knight"), items.texts(w2))
+            items.setTexts(w2, mapOf("pairings" to "C/D"))
+            assertEquals(mapOf("annotation" to "A knight", "pairings" to "C/D"), items.texts(w2))
+            // A work's values bound to it by its number
+            assertEquals(listOf("x"), items.facets(w1)["tag"])
 
             // A new work numbered after those moved
             db.dsl
@@ -61,9 +68,9 @@ class ItemsByInternalIdTest {
             assertEquals(3, numbers.values.toSet().size, "numbers $numbers")
             assertTrue(numbers.getValue("w3")!! > maxOf(numbers.getValue("w1")!!, numbers.getValue("w2")!!))
 
-            // A work's values go with it, bound to it by the site's id
-            items.remove("w1")
-            assertEquals(0, db.dsl.fetchCount(ITEM_FACET, ITEM_FACET.ITEM_ID.eq("w1")))
+            // A work's values go with it
+            items.remove(w1)
+            assertEquals(0, db.dsl.fetchCount(ITEM_FACET, ITEM_FACET.ITEM_ID.eq(w1.toLong())))
             assertEquals(false, db.dsl.meta().tables.any { it.name.equals("item_text", true) })
         }
     }

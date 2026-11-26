@@ -34,25 +34,25 @@ class SiteUniverseDraftsTest : SiteTestBase() {
             }
         }
         capture("g1|Wingmen|space|Two friends fly a starship|Space Pilot & Captain")
-        assertNull(valueOf("g1", "characters", "fake:C1"))
+        assertNull(valueOf(idOf(site, "g1"), "characters", "fake:C1"))
 
         // The universe added: its pilot is stated to be the site's "Space Pilot" — drafted a main character
         // of the work captured before, and of one captured now; the universe with it, the pilot's alone
         u2 = universes.addUniverse(UniverseRef("fake", "U2")).body!!.value
         // The works drafted of the dictionary as it is, as they are read: the work captured before and the one now
         capture("g2|Wingmen again|space|The friends fly once more|Space Pilot & Captain")
-        listOf("g1", "g2").forEach { id ->
+        listOf(idOf(site, "g1"), idOf(site, "g2")).forEach { id ->
             val pilot = assertNotNull(valueOf(id, "characters", "fake:C1"), "characters of $id: ${facetsOf(id)}")
             assertEquals("Space Pilot", pilot.draftedFrom)
             assertNull(pilot.inferred)
             assertEquals("Space Pilot", valueOf(id, "universe", u2)?.draftedFrom, "universe of $id")
         }
         // The captain has no tag of the site in the catalogue: not drafted
-        assertNull(valueOf("g1", "characters", "fake:C2")?.draftedFrom)
+        assertNull(valueOf(idOf(site, "g1"), "characters", "fake:C2")?.draftedFrom)
         // Drafted of the layer, not of the site: made of the dictionary as the work is read, kept nowhere
         assertEquals(
             setOf(UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.UNIVERSE to u2),
-            drafted("g1").getValue("g1").map { it.facet to it.key }.toSet(),
+            drafted(idOf(site, "g1")).getValue(idOf(site, "g1")).map { it.facet to it.key }.toSet(),
         )
         val pairing = pairingOfTheDictionary()
         pairingAnswered(pairing)
@@ -77,10 +77,13 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         // The universes drafted of the works kept for the marking in the queue, after the quiet
         background.run()
         assertTrue(
-            toMark(made.key).map { it.item }.containsAll(listOf("g1", "g2")),
+            toMark(made.key).map { it.item }.containsAll(listOf(idOf(site, "g1"), idOf(site, "g2"))),
             "to mark: ${toMark(made.key).map { it.item }}",
         )
-        assertEquals(listOf("Space Pilot & Captain"), toMark(made.key).first { it.item == "g1" }.lines.map { it.line })
+        assertEquals(
+            listOf("Space Pilot & Captain"),
+            toMark(made.key).first { it.item == idOf(site, "g1") }.lines.map { it.line },
+        )
         return made.key
     }
 
@@ -92,10 +95,18 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         // Yes: the pairing the work's, its two characters its main ones; not clear: nothing written, asked no more
         fun counted() = pairingsApi.getPairing(pairing).body!!.let { Triple(it.yes, it.no, it.unknown) }
         val before = counted()
-        marking.answerMarking(MarkAnswer("site", "g1", UniverseFacets.PAIRINGS, pairing, MarkVerdict.YES))
-        marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, pairing, MarkVerdict.UNKNOWN))
+        marking.answerMarking(MarkAnswer("site", idOf(site, "g1"), UniverseFacets.PAIRINGS, pairing, MarkVerdict.YES))
+        marking.answerMarking(
+            MarkAnswer("site", idOf(site, "g2"), UniverseFacets.PAIRINGS, pairing, MarkVerdict.UNKNOWN)
+        )
         val g1 =
-            stores.source("site")!!.corrections.facetsOf("g1").filter { it.added }.map { it.facet to it.key }.toSet()
+            stores
+                .source("site")!!
+                .corrections
+                .facetsOf(idOf(site, "g1"))
+                .filter { it.added }
+                .map { it.facet to it.key }
+                .toSet()
         assertTrue(
             g1.containsAll(
                 setOf(
@@ -106,25 +117,33 @@ class SiteUniverseDraftsTest : SiteTestBase() {
             ),
             "g1: $g1",
         )
-        assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.PAIRINGS })
-        assertTrue(toMark(pairing).none { it.item in setOf("g1", "g2") })
+        assertTrue(
+            stores.source("site")!!.corrections.facetsOf(idOf(site, "g2")).none { it.facet == UniverseFacets.PAIRINGS }
+        )
+        assertTrue(toMark(pairing).none { it.item in setOf(idOf(site, "g1"), idOf(site, "g2")) })
         assertEquals(
-            mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.UNKNOWN),
-            toMark(pairing, answered = true).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer },
+            mapOf(idOf(site, "g1") to MarkVerdict.YES, idOf(site, "g2") to MarkVerdict.UNKNOWN),
+            toMark(pairing, answered = true)
+                .filter { it.item in setOf(idOf(site, "g1"), idOf(site, "g2")) }
+                .associate { it.item to it.answer },
         )
         assertEquals(Triple(before.first + 1, before.second, before.third + 1), counted())
         // No: answered so, the characters as they were
-        marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, pairing, MarkVerdict.NO))
+        marking.answerMarking(MarkAnswer("site", idOf(site, "g2"), UniverseFacets.PAIRINGS, pairing, MarkVerdict.NO))
         assertEquals(
             listOf(false),
             stores
                 .source("site")!!
                 .corrections
-                .facetsOf("g2")
+                .facetsOf(idOf(site, "g2"))
                 .filter { it.facet == UniverseFacets.PAIRINGS }
                 .map { it.added },
         )
-        assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.CHARACTERS })
+        assertTrue(
+            stores.source("site")!!.corrections.facetsOf(idOf(site, "g2")).none {
+                it.facet == UniverseFacets.CHARACTERS
+            }
+        )
     }
 
     /** Every order of the works of the [pairing] shows the same works, each as it was answered on; taken back. */
@@ -137,15 +156,21 @@ class SiteUniverseDraftsTest : SiteTestBase() {
                 "open, $order",
             )
             assertEquals(
-                mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.NO),
-                toMark(pairing, true, order).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer },
+                mapOf(idOf(site, "g1") to MarkVerdict.YES, idOf(site, "g2") to MarkVerdict.NO),
+                toMark(pairing, true, order)
+                    .filter { it.item in setOf(idOf(site, "g1"), idOf(site, "g2")) }
+                    .associate { it.item to it.answer },
                 "answered, $order",
             )
         }
         // Taken back: the works to mark again, as they were before
-        listOf("g1", "g2").forEach { marking.unanswerMarking("site", it, UniverseFacets.PAIRINGS, pairing) }
-        listOf("fake:C1", "fake:C2").forEach { corrections.uncorrectFacet("site", "g1", UniverseFacets.CHARACTERS, it) }
-        assertTrue(toMark(pairing).map { it.item }.containsAll(listOf("g1", "g2")))
+        listOf(idOf(site, "g1"), idOf(site, "g2")).forEach {
+            marking.unanswerMarking("site", it, UniverseFacets.PAIRINGS, pairing)
+        }
+        listOf("fake:C1", "fake:C2").forEach {
+            corrections.uncorrectFacet("site", idOf(site, "g1"), UniverseFacets.CHARACTERS, it)
+        }
+        assertTrue(toMark(pairing).map { it.item }.containsAll(listOf(idOf(site, "g1"), idOf(site, "g2"))))
     }
 
     /**
@@ -155,33 +180,41 @@ class SiteUniverseDraftsTest : SiteTestBase() {
     private fun draftsFollowThePage() {
         // The site's page changes: the drafts follow it — the pilot no more on the line, no more drafted
         capture("g3|Wingmen third|space|They fly a third time|Space Pilot & Captain")
-        assertEquals("Space Pilot", valueOf("g3", "characters", "fake:C1")?.draftedFrom)
+        assertEquals("Space Pilot", valueOf(idOf(site, "g3"), "characters", "fake:C1")?.draftedFrom)
         capture("g3|Wingmen third|space|They fly a third time|Captain & Navigator")
-        assertNull(valueOf("g3", "characters", "fake:C1")?.draftedFrom)
-        assertTrue(drafted("g3").values.all { it.isEmpty() })
+        assertNull(valueOf(idOf(site, "g3"), "characters", "fake:C1")?.draftedFrom)
+        assertTrue(drafted(idOf(site, "g3")).values.all { it.isEmpty() })
 
         // The user takes the pilot away: taken away it stays, whatever the dictionary does
-        corrections.correctFacet("site", "g1", FacetCorrection(facet = "characters", added = false, key = "fake:C1"))
+        corrections.correctFacet(
+            "site",
+            idOf(site, "g1"),
+            FacetCorrection(facet = "characters", added = false, key = "fake:C1"),
+        )
         universes.addUniverse(UniverseRef("fake", "U2"))
         // The works of the universe added drafted again, in the background
         background.run()
-        val removed = assertNotNull(valueOf("g1", "characters", "fake:C1"))
+        val removed = assertNotNull(valueOf(idOf(site, "g1"), "characters", "fake:C1"))
         assertEquals(FacetValueInfo.Corrected.REMOVED, removed.corrected)
         assertNull(removed.draftedFrom)
 
         // The user's yes is the user's word: shown as confirmed, no more a draft
-        corrections.correctFacet("site", "g2", FacetCorrection(facet = "characters", added = true, key = "fake:C1"))
-        val confirmed = assertNotNull(valueOf("g2", "characters", "fake:C1"))
+        corrections.correctFacet(
+            "site",
+            idOf(site, "g2"),
+            FacetCorrection(facet = "characters", added = true, key = "fake:C1"),
+        )
+        val confirmed = assertNotNull(valueOf(idOf(site, "g2"), "characters", "fake:C1"))
         assertEquals(FacetValueInfo.Corrected.CONFIRMED, confirmed.corrected)
         assertNull(confirmed.draftedFrom)
 
         // The entry gone, the drafts of it go too — what the model learnt of it is the model's to work out again
         universes.bindUniverseEntry(UniverseEntryBinding(u2, "fake", "U2", false))
-        assertNull(valueOf("g2", "universe", u2)?.draftedFrom)
-        assertTrue(drafted("g1", "g2").values.all { it.isEmpty() })
+        assertNull(valueOf(idOf(site, "g2"), "universe", u2)?.draftedFrom)
+        assertTrue(drafted(idOf(site, "g1"), idOf(site, "g2")).values.all { it.isEmpty() })
     }
 
     /** The drafts of the layer the works [ids] of the site are given now. */
-    private fun drafted(vararg ids: String) =
+    private fun drafted(vararg ids: Long) =
         stores.source("site")!!.let { s -> LayerDrafting.of(s, s.items.facetsOf(ids.toList())) }
 }

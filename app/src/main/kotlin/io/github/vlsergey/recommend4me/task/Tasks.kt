@@ -25,7 +25,7 @@ data class Task(
     val type: String? = null,
     val source: String? = null,
     val facet: String? = null,
-    val item: String? = null,
+    val item: Long? = null,
     val works: WorkScope? = null,
 ) {
     override fun toString() =

@@ -10,7 +10,7 @@ interface ItemValueKeys {
      * The value [from] of the facet made [to] on every item that has it, in its place and with the name the item gave
      * it; an item that has [to] already loses [from]. The items changed, told as written.
      */
-    fun rekey(facet: String, from: String, to: String): List<String>
+    fun rekey(facet: String, from: String, to: String): List<Long>
 
     /**
      * The [keys] of the facet some item has: one lookup a key by the index of the values — H2 matches a list bound to
@@ -22,10 +22,10 @@ interface ItemValueKeys {
 /** The [ItemValueKeys] of the source database [db]: [changed] told of every item whose values were keyed anew. */
 internal class ItemValueKeyRepository(
     private val db: DSLContext,
-    private val changed: (Collection<String>) -> Unit,
+    private val changed: (Collection<Long>) -> Unit,
 ) : ItemValueKeys {
 
-    override fun rekey(facet: String, from: String, to: String): List<String> {
+    override fun rekey(facet: String, from: String, to: String): List<Long> {
         val f = ITEM_FACET
         val items =
             db.select(f.ITEM_ID).from(f).where(f.FACET.eq(facet), f.VALUE_KEY.eq(from)).fetch(f.ITEM_ID).filterNotNull()

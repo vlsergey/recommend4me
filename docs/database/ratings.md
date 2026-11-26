@@ -15,29 +15,29 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 erDiagram
     match_feedback {
         VARCHAR mark_kind PK
-        VARCHAR mark_item PK
+        BIGINT mark_item PK
         VARCHAR mark_ref PK
         VARCHAR match_source PK
-        VARCHAR match_item PK
+        BIGINT match_item PK
         VARCHAR match_ref PK
         SMALLINT verdict
         TIMESTAMPTZ given_at
     }
     picture_mark {
-        VARCHAR item_id PK
+        BIGINT item_id PK
         INTEGER position PK
         VARCHAR url
         SMALLINT mark
         TIMESTAMPTZ marked_at
     }
     review_mark {
-        VARCHAR item_id PK
+        BIGINT item_id PK
         VARCHAR review_id PK
         SMALLINT mark
         TIMESTAMPTZ marked_at
     }
     site_signal {
-        VARCHAR item_id PK
+        BIGINT item_id PK
         VARCHAR signal PK
         VARCHAR content
         TIMESTAMPTZ seen_at

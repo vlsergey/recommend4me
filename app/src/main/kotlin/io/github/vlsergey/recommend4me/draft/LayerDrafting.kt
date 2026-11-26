@@ -20,7 +20,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 internal object LayerDrafting {
 
     /** Of the works whose site's values are [site] (item to facet to keys), by their ids, their drafts of the layer. */
-    fun of(store: SourceStore, site: Map<String, Map<String, List<String>>>): Map<String, List<LayerDraft>> {
+    fun of(store: SourceStore, site: Map<Long, Map<String, List<String>>>): Map<Long, List<LayerDraft>> {
         val dictionary = store.draftDictionary
         val fandom = UniverseFacet.fandomFacet(store.schema)
         // A source of no fandoms that asks the catalogue nothing drafts nothing
@@ -52,8 +52,8 @@ internal object LayerDrafting {
     private fun ofCatalogue(
         store: SourceStore,
         dictionary: DraftDictionary,
-        values: Map<String, Map<String, List<FacetValue>>>,
-    ): Map<String, List<LayerDraft>> {
+        values: Map<Long, Map<String, List<FacetValue>>>,
+    ): Map<Long, List<LayerDraft>> {
         val answered = HashMap<Asked, Set<String>>()
         while (true) {
             val lookup = AskedLookup(answered)

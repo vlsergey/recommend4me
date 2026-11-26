@@ -84,7 +84,7 @@ internal class Problem(
     val exampleValues: Array<IntArray> =
         Array(n) { i -> task.examples[i].filter { it in 0 until m }.distinct().sorted().toIntArray() }
 
-    val foldOf = IntArray(n) { foldOf(task.itemIds[it], folds) }
+    val foldOf = IntArray(n) { SuggestionPairs.foldOf(task.itemIds[it], folds) }
 
     /**
      * The names of the values as texts of a work ([SuggestionTask.hints]), learnt from in every fold and judged in
@@ -188,11 +188,6 @@ internal class Problem(
         val seen = Array(folds) { BooleanArray(m) }
         markSeen(seen)
         return BooleanArray(m) { !seen[fold][it] }
-    }
-
-    companion object {
-        /** The fold of an item: the same every time, whatever else the task holds. */
-        fun foldOf(id: String, folds: Int): Int = (id.hashCode() and Int.MAX_VALUE) % folds
     }
 }
 

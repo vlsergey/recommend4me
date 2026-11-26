@@ -32,7 +32,7 @@ class AffPagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, html: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, html, now), database.of(context))
+        return context.sitesOf(source.capture(CapturedPage(url, html, now), database.of(context)))
     }
 
     private fun list(context: MemorySourceContext, html: String = page("list.html")) =
@@ -166,12 +166,12 @@ class AffPagesTest {
 
     @Test
     fun `the addresses of a work's pages name the work`() {
-        assertEquals(adversary, source.itemIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589"))
-        assertEquals(adversary, source.itemIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589&chapter=3"))
-        assertEquals(adversary, source.itemIdOf("https://hp.adult-fanfiction.org/reviews.php?no=600100589&page=2"))
-        assertEquals("anime2-24686", source.itemIdOf("https://anime2.adult-fanfiction.org/story.php?no=24686"))
-        assertNull(source.itemIdOf("https://hp.adult-fanfiction.org/index.php?cat=3"))
-        assertNull(source.itemIdOf("https://www.adult-fanfiction.org/"))
+        assertEquals(adversary, source.siteIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589"))
+        assertEquals(adversary, source.siteIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589&chapter=3"))
+        assertEquals(adversary, source.siteIdOf("https://hp.adult-fanfiction.org/reviews.php?no=600100589&page=2"))
+        assertEquals("anime2-24686", source.siteIdOf("https://anime2.adult-fanfiction.org/story.php?no=24686"))
+        assertNull(source.siteIdOf("https://hp.adult-fanfiction.org/index.php?cat=3"))
+        assertNull(source.siteIdOf("https://www.adult-fanfiction.org/"))
         assertTrue(source.capturePatterns.none { it.matches("https://www.adult-fanfiction.org/") })
     }
 

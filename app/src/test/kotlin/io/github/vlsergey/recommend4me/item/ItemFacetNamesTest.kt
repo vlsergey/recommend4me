@@ -21,7 +21,7 @@ class ItemFacetNamesTest : TwoSitesTestBase() {
 
     @Autowired lateinit var queries: DatabaseQueries
 
-    private fun names(item: String) =
+    private fun names(item: Long) =
         queries
             .queryDatabase(
                 DatabaseQuery(
@@ -38,12 +38,24 @@ class ItemFacetNamesTest : TwoSitesTestBase() {
     fun `a work's values keep the names the page wrote`() {
         alpha("fn1|Lorem|hay|Lorem ipsum dolor||")
         val alpha = stores.source("alpha")!!
-        alpha.items.setFacet("fn1", Books.TAG.key, listOf(FacetValue("t1", "One"), FacetValue("t2", "Two")))
-        assertEquals(listOf("t1" to "One", "t2" to "Two"), names("fn1"))
+        alpha.items.setFacet(
+            idOf("alpha", "fn1"),
+            Books.TAG.key,
+            listOf(FacetValue("t1", "One"), FacetValue("t2", "Two")),
+        )
+        assertEquals(listOf("t1" to "One", "t2" to "Two"), names(idOf("alpha", "fn1")))
         // The site writes a tag's name anew; another page gives the keys alone
-        alpha.items.setFacet("fn1", Books.TAG.key, listOf(FacetValue("t1", "Uno"), FacetValue("t2", "Two")))
-        alpha.items.setFacet("fn1", Books.TAG.key, listOf(FacetValue("t1", null), FacetValue("t2", null)))
-        assertEquals(listOf("t1" to "Uno", "t2" to "Two"), names("fn1"))
+        alpha.items.setFacet(
+            idOf("alpha", "fn1"),
+            Books.TAG.key,
+            listOf(FacetValue("t1", "Uno"), FacetValue("t2", "Two")),
+        )
+        alpha.items.setFacet(
+            idOf("alpha", "fn1"),
+            Books.TAG.key,
+            listOf(FacetValue("t1", null), FacetValue("t2", null)),
+        )
+        assertEquals(listOf("t1" to "Uno", "t2" to "Two"), names(idOf("alpha", "fn1")))
     }
 
     /** The works written before the names were kept are given the names the source has of their keys now. */

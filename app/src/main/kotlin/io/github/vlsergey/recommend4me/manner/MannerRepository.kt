@@ -15,7 +15,7 @@ data class MannerMade(val wordsId: Long, val textHash: String)
 class MannerRepository(private val db: DSLContext) {
 
     /** What the manner of every item that has one was made of. */
-    fun made(): Map<String, MannerMade> =
+    fun made(): Map<Long, MannerMade> =
         db.select(ITEM_MANNER.ITEM_ID, ITEM_MANNER.WORDS_ID, ITEM_MANNER.TEXT_HASH)
             .from(ITEM_MANNER)
             .fetch()
@@ -23,7 +23,7 @@ class MannerRepository(private val db: DSLContext) {
                 it.value1()!! to MannerMade(it.value2()!!, it.value3()!!)
             }
 
-    fun save(itemId: String, made: MannerMade, vector: FloatArray) {
+    fun save(itemId: Long, made: MannerMade, vector: FloatArray) {
         val packed = Vectors.half(vector)
         db.insertInto(ITEM_MANNER)
             .set(ITEM_MANNER.ITEM_ID, itemId)
@@ -38,19 +38,22 @@ class MannerRepository(private val db: DSLContext) {
     }
 
     /** The manners of the items [ids] — every one's text gone — taken away. */
-    fun remove(ids: Collection<String>) {
+    fun remove(ids: Collection<Long>) {
         ids.chunked(BATCH).forEach { chunk ->
             db.deleteFrom(ITEM_MANNER).where(ITEM_MANNER.ITEM_ID.`in`(chunk)).execute()
         }
     }
 
     /** The manners of the items [ids] measured by the words [wordsId]: item to vector. */
-    fun ofMany(ids: Collection<String>, wordsId: Long): Map<String, FloatArray> {
-        val out = HashMap<String, FloatArray>()
+    fun ofMany(ids: Collection<Long>, wordsId: Long): Map<Long, FloatArray> {
+        val out = HashMap<Long, FloatArray>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(ITEM_MANNER.ITEM_ID, ITEM_MANNER.VEC)
                 .from(ITEM_MANNER)
-                .where(ITEM_MANNER.ITEM_ID.`in`(chunk), ITEM_MANNER.WORDS_ID.eq(wordsId))
+                .where(
+                    ITEM_MANNER.ITEM_ID.`in`(chunk),
+                    ITEM_MANNER.WORDS_ID.eq(wordsId),
+                )
                 .fetch { out[it.value1()!!] = Vectors.fromHalf(it.value2()!!) }
         }
         return out

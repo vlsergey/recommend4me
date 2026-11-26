@@ -20,7 +20,7 @@ internal class TaskCast(
          * The task of the works [ids] — of each what its line says ([SaidLines.casts]), its [inputs] and the columns of
          * its context ([context]) — read by the way asked for ([SaidLines.asked]), of the [lines] read before.
          */
-        fun of(lines: SaidLines, ids: List<String>, inputs: List<InputBlock>, context: List<List<String>>): TaskCast {
+        fun of(lines: SaidLines, ids: List<Long>, inputs: List<InputBlock>, context: List<List<String>>): TaskCast {
             val asked = lines.asked
             val casts = lines.casts
             val vectors = lines.vectors

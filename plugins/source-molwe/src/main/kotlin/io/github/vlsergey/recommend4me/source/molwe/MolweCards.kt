@@ -25,21 +25,21 @@ internal class MolweCards(private val items: ItemStore) {
 
     private val fields = MolweFields(items)
 
-    /** Every card of the page written; the ids of their works. */
-    fun read(doc: Document, url: String, now: Instant): List<String> {
+    /** Every card of the page written; the numbers of their works. */
+    fun read(doc: Document, url: String, now: Instant): List<Long> {
         val author = authorOf(doc, url)
         return doc.select(CARD).mapNotNull { card(it, author, now) }
     }
 
-    /** The work of a card, written; its id. None of a card that names no work. */
-    private fun card(card: Element, author: FacetValue?, now: Instant): String? {
+    /** The work of a card, written; its number. None of a card that names no work. */
+    private fun card(card: Element, author: FacetValue?, now: Instant): Long? {
         val link = card.selectFirst(LINK)
-        val id = link?.let { Molwe.workIdOf(it.absUrl("href")) }
+        val site = link?.let { Molwe.workIdOf(it.absUrl("href")) }
         val title =
             card.select(LINK).map { it.text().trim() }.firstOrNull { it.isNotEmpty() }
                 ?: link?.attr("aria-label")?.trim()?.ifEmpty { null }
-        if (link == null || id == null || title == null) return null
-        items.upsert(ItemHead(id, Molwe.workUrl(id), title), now)
+        if (link == null || site == null || title == null) return null
+        val id = items.upsert(ItemHead(site, Molwe.workUrl(site), title), now).id
         fields.kind(id, link.attr("href").startsWith("/originals/"))
         author?.let { items.setFacet(id, AUTHOR, listOf(it)) }
         write(id, card)
@@ -47,7 +47,7 @@ internal class MolweCards(private val items: ItemStore) {
     }
 
     /** What every card tells of the work [id]: its badges, its fandom, its cover, numbers and description. */
-    private fun write(id: String, card: Element) {
+    private fun write(id: Long, card: Element) {
         val badges = card.select("div").firstOrNull { isBadges(it) }
         badges?.let { fields.badges(id, it.children().map(Element::text)) }
         val fandom = badges?.nextElementSibling()?.selectFirst("span[title]")?.attr("title")?.trim()
@@ -65,7 +65,7 @@ internal class MolweCards(private val items: ItemStore) {
      * characters and pairings it writes as one text, its names run together by commas: they are read of the work's
      * page, each an element of its own there.
      */
-    private fun row(id: String, card: Element) {
+    private fun row(id: Long, card: Element) {
         card.select("div:has(> span:containsOwn(Автор:)) > a[href^=/author/]").let { authors ->
             if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors.mapNotNull { author(it) })
         }
@@ -83,7 +83,7 @@ internal class MolweCards(private val items: ItemStore) {
     }
 
     /** The readers of a card, and its reviews of a row. */
-    private fun numbers(id: String, card: Element) {
+    private fun numbers(id: Long, card: Element) {
         fun count(label: String) =
             card.selectFirst("b[aria-label^=\"$label:\"]")?.text()?.let(PageText::number)?.toDouble()
         items.setNumbers(

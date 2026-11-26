@@ -43,7 +43,7 @@ class DuplicatesController(
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
     }
 
-    override fun getItemDuplicates(source: String, item: String): ResponseEntity<List<DuplicatePair>> {
+    override fun getItemDuplicates(source: String, item: Long): ResponseEntity<List<DuplicatePair>> {
         if (stores.source(source)?.items?.exists(item) != true) return ResponseEntity.notFound().build()
         return ResponseEntity.ok(pages.ofItem(ItemKey(source, item)))
     }
@@ -85,9 +85,9 @@ class DuplicatesController(
     override fun getDuplicatePair(
         type: String,
         source: String,
-        item: String,
+        item: Long,
         otherSource: String,
-        otherItem: String,
+        otherItem: Long,
     ): ResponseEntity<DuplicatePair> =
         pages.pair(type, ItemKey(source, item), ItemKey(otherSource, otherItem))?.let { ResponseEntity.ok(it) }
             ?: ResponseEntity.notFound().build()
@@ -95,9 +95,9 @@ class DuplicatesController(
     override fun unanswerDuplicate(
         type: String,
         source: String,
-        item: String,
+        item: Long,
         otherSource: String,
-        otherItem: String,
+        otherItem: Long,
     ): ResponseEntity<Unit> {
         duplicates.unanswer(type, ItemKey(source, item), ItemKey(otherSource, otherItem))
         return ResponseEntity.noContent().build()

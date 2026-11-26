@@ -15,19 +15,19 @@ import org.jooq.DSLContext
  */
 interface FieldCorrections {
     /** The [field] of the work of [itemId] given the [content]. */
-    fun setField(itemId: String, field: String, content: String, now: Instant)
+    fun setField(itemId: Long, field: String, content: String, now: Instant)
 
     /** The user's content of the [field] of the work of [itemId] taken back: the site's stands. */
-    fun unsetField(itemId: String, field: String)
+    fun unsetField(itemId: Long, field: String)
 
     /** The fields the user gave the work of [itemId]: field to content. */
-    fun fieldsOf(itemId: String): Map<String, String>
+    fun fieldsOf(itemId: Long): Map<String, String>
 
     /** The fields the user gave the works of the items [ids]: item to field to content. */
-    fun fieldsOf(ids: Collection<String>): Map<String, Map<String, String>>
+    fun fieldsOf(ids: Collection<Long>): Map<Long, Map<String, String>>
 
     /** Every field correction: item to field to content. */
-    fun allFields(): Map<String, Map<String, String>>
+    fun allFields(): Map<Long, Map<String, String>>
 }
 
 /** The [FieldCorrections] of the normalized works, in the dictionaries, as the items of the [source] see them. */
@@ -37,7 +37,7 @@ internal class WorkFieldCorrections(
     private val works: WorkRepository,
 ) : FieldCorrections {
 
-    override fun setField(itemId: String, field: String, content: String, now: Instant) {
+    override fun setField(itemId: Long, field: String, content: String, now: Instant) {
         val f = WORK_FIELD_CORRECTION
         db.insertInto(f)
             .set(f.WORK, works.of(ItemKey(source, itemId), now))
@@ -50,13 +50,13 @@ internal class WorkFieldCorrections(
             .execute()
     }
 
-    override fun unsetField(itemId: String, field: String) {
+    override fun unsetField(itemId: Long, field: String) {
         val f = WORK_FIELD_CORRECTION
         db.deleteFrom(f).where(f.WORK.eq(works.of(ItemKey(source, itemId), Instant.now())), f.FIELD.eq(field)).execute()
     }
 
     /** The fields of the source's items that meet the [condition]: item to field to content. */
-    private fun seenFields(condition: Condition): Map<String, Map<String, String>> {
+    private fun seenFields(condition: Condition): Map<Long, Map<String, String>> {
         val f = WORK_FIELD_CORRECTION
         return db.select(SITE_WORK.ITEM, f.FIELD, f.CONTENT)
             .from(SITE_WORK)
@@ -68,14 +68,14 @@ internal class WorkFieldCorrections(
             .mapValues { it.value.toMap() }
     }
 
-    override fun fieldsOf(itemId: String): Map<String, String> = fieldsOf(listOf(itemId))[itemId].orEmpty()
+    override fun fieldsOf(itemId: Long): Map<String, String> = fieldsOf(listOf(itemId))[itemId].orEmpty()
 
-    override fun fieldsOf(ids: Collection<String>): Map<String, Map<String, String>> =
+    override fun fieldsOf(ids: Collection<Long>): Map<Long, Map<String, String>> =
         ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
             out.apply { putAll(seenFields(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))) }
         }
 
-    override fun allFields(): Map<String, Map<String, String>> = seenFields(SITE_WORK.SOURCE.eq(source))
+    override fun allFields(): Map<Long, Map<String, String>> = seenFields(SITE_WORK.SOURCE.eq(source))
 
     private companion object {
         /** The ids of a query: memory, not meaning. */

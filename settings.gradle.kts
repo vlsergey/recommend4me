@@ -43,4 +43,7 @@ include(
     "plugins:source-ficbook",
     "plugins:source-ffn",
     "plugins:source-molwe",
+    // Run once, the application stopped: the works of every store named by the application's numbers of them, not by
+    // the sites' ids (2026-11-26); goes once it has run
+    "tools:rekey",
 )

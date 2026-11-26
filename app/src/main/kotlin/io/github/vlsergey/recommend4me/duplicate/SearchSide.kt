@@ -39,7 +39,7 @@ internal fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACE
  */
 internal class SearchSide(
     val store: SourceStore,
-    val ids: List<String>,
+    val ids: List<Long>,
     val titles: Rows,
     val titleLengths: FloatArray,
     val authorNames: Rows,
@@ -83,7 +83,7 @@ internal class SearchSide(
         val weights = Array(values.size) { made[it]!! }
         return SiteWorks(
             store.id,
-            ids,
+            ids.toLongArray(),
             titles,
             titleLengths,
             authorNames,
@@ -112,18 +112,18 @@ internal class SearchSide(
             listOf(PartCounts.WORDS_ID, PartCounts.CHARS_ID) + CharClasses.NAMES.indices.map(PartCounts::classId)
 
         /** Of the works [c] read, the words and the characters of those whose texts are counted. */
-        private fun countedOf(c: ComparedValues.Compared): Map<String, Pair<Double, Double>> {
+        private fun countedOf(c: ComparedValues.Compared): Map<Long, Pair<Double, Double>> {
             val words = c.numbers[PartCounts.WORDS_ID]
             val chars = c.numbers[PartCounts.CHARS_ID] ?: return emptyMap()
-            val out = HashMap<String, Pair<Double, Double>>()
+            val out = HashMap<Long, Pair<Double, Double>>()
             c.ids.forEachIndexed { i, id -> if (chars[i] > 0) out[id] = (words?.get(i) ?: 0.0) to chars[i] }
             return out
         }
 
         /** Of the works [c] read, the counts of the classes of the characters of those whose texts are counted. */
-        private fun classesOf(c: ComparedValues.Compared): Map<String, IntArray> {
+        private fun classesOf(c: ComparedValues.Compared): Map<Long, IntArray> {
             val columns = CharClasses.NAMES.indices.map { c.numbers[PartCounts.classId(it)] }
-            val out = HashMap<String, IntArray>()
+            val out = HashMap<Long, IntArray>()
             c.ids.forEachIndexed { i, id ->
                 val own = IntArray(columns.size) { k -> columns[k]?.get(i)?.toInt() ?: 0 }
                 if (own.any { it > 0 }) out[id] = own
@@ -198,7 +198,7 @@ internal class SearchSide(
         fun readOf(
             s: SourceStore,
             encoder: String,
-            ids: List<String>,
+            ids: List<Long>,
             model: KeptRatios,
             index: ListIndex,
         ): ReadSide? {
@@ -255,7 +255,7 @@ internal class SearchSide(
          * they state.
          */
         private fun sizesOf(
-            ids: List<String>,
+            ids: List<Long>,
             ratios: DoubleArray?,
             numbers: Map<String, NumberDef>,
             numberOf: (id: String) -> DoubleArray?,

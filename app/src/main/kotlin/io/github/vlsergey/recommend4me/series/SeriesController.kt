@@ -28,7 +28,7 @@ class SeriesController(private val views: SeriesViews) : SeriesApi {
     override fun getSeries(type: String, key: String): ResponseEntity<SeriesDetails> =
         views.one(type, key)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
-    override fun takeOutOfSeries(type: String, source: String, item: String): ResponseEntity<Unit> =
+    override fun takeOutOfSeries(type: String, source: String, item: Long): ResponseEntity<Unit> =
         if (views.takeOut(type, ItemKey(source, item))) ResponseEntity.noContent().build()
         else ResponseEntity.notFound().build()
 }

@@ -31,7 +31,7 @@ internal object CharacterVocabulary {
     fun of(
         type: TypeStore,
         facet: String,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
@@ -42,7 +42,7 @@ internal object CharacterVocabulary {
         val out = WorkUniverses.leftOut(answers, facet, made)
         val named = namedBy(universes, dictionary, out)
         val mayOf = mayHave(universes, dictionary.ofUniverse)
-        val barred = { id: String ->
+        val barred = { id: Long ->
             out(id).filterTo(HashSet()) { it in mayOf(id) && it !in UniverseFacet.ORIGINAL_CHARACTERS }
         }
         if (light) return Vocabulary(emptyMap(), allowed = mayOf, names = named, barred = barred)
@@ -107,8 +107,8 @@ internal object CharacterVocabulary {
      */
     private fun read(
         type: TypeStore,
-        ids: Collection<String>?,
-        universes: Map<String, List<String>>,
+        ids: Collection<Long>?,
+        universes: Map<Long, List<String>>,
         characters: CharactersRead,
     ): Characters {
         // The entries of every universe whose characters are read: of the works' universes — of their ids alone —, or
@@ -146,13 +146,13 @@ internal object CharacterVocabulary {
      * every work of the universes.
      */
     private fun namedBy(
-        universes: Map<String, List<String>>,
+        universes: Map<Long, List<String>>,
         dictionary: Characters,
-        out: (String) -> Set<String>,
-    ): (String) -> Named? {
+        out: (Long) -> Set<String>,
+    ): (Long) -> Named? {
         val ofUniverses = HashMap<Set<String>, Map<String, List<String>>>()
         val nameSets = HashMap<Pair<Set<String>, Set<String>>, Named>()
-        return { id: String ->
+        return { id: Long ->
             val us = universes[id].orEmpty().toSet()
             val own =
                 ofUniverses.getOrPut(us) {
@@ -170,9 +170,9 @@ internal object CharacterVocabulary {
      * not a copy a work — its own characters of the other facet barred apart.
      */
     private fun mayHave(
-        universes: Map<String, List<String>>,
+        universes: Map<Long, List<String>>,
         ofUniverse: Map<String, Set<String>>,
-    ): (String) -> Set<String> {
+    ): (Long) -> Set<String> {
         val unions = ConcurrentHashMap<Set<String>, Set<String>>()
         return { id ->
             universes[id].orEmpty().toSet().let { us ->

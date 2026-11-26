@@ -61,7 +61,7 @@ private const val FRAGMENT_WORDS = 8
  * Where the paragraph [quote] is read on the site: the page of its part, with a text fragment of its first words — the
  * browser scrolls to them and marks them (`#:~:text=`).
  */
-private fun placeOf(store: SourceStore, itemId: String, partId: String, quote: String): String {
+private fun placeOf(store: SourceStore, siteId: String, partId: String, quote: String): String {
     val words =
         quote
             .lineSequence()
@@ -72,7 +72,7 @@ private fun placeOf(store: SourceStore, itemId: String, partId: String, quote: S
             .joinToString(" ")
     // The dash, the comma and the ampersand are the fragment's own marks: escaped in the text
     val fragment = URLEncoder.encode(words, StandardCharsets.UTF_8).replace("+", "%20").replace("-", "%2D")
-    return "${store.source.partUrl(itemId, partId)}#:~:text=$fragment"
+    return "${store.source.partUrl(siteId, partId)}#:~:text=$fragment"
 }
 
 /**
@@ -104,7 +104,7 @@ class TextTags(
     private val models = TagTextModelRepository(databases.dictionaries.dsl)
 
     /** The tags offered by the text of the item; null when its source has no tags. */
-    fun of(store: SourceStore, itemId: String): TextTagList? {
+    fun of(store: SourceStore, itemId: Long): TextTagList? {
         val facet = store.tagFacets.firstOrNull() ?: return null
         val encoder = plugins.textEncoder()
         return if (encoder == null) TextTagList(pending = false, fitted = false, tags = emptyList())
@@ -115,7 +115,7 @@ class TextTags(
      * The tags of the [facet] offered by the text of the item, of its paragraphs as the [encoder] encoded them: none
      * while none is encoded, and none of a tag left out ([leftOut]).
      */
-    private fun offered(store: SourceStore, facet: String, itemId: String, encoder: TextEncoder): TextTagList {
+    private fun offered(store: SourceStore, facet: String, itemId: Long, encoder: TextEncoder): TextTagList {
         val model = models.read()
         val paragraphs = store.parts.paragraphs.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
         val waiting = store.parts.paragraphs.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
@@ -137,7 +137,7 @@ class TextTags(
      */
     private fun closest(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         paragraphs: List<Paragraph>,
         vectors: Map<String, List<FloatArray>>,
         model: TagTextModel?,
@@ -181,8 +181,10 @@ class TextTags(
     /**
      * The tags [found] with their closest paragraphs quoted, of their parts' texts; one whose text is gone left out.
      */
-    private fun quoted(store: SourceStore, itemId: String, found: List<TextTagFound>): List<TextTag> {
+    private fun quoted(store: SourceStore, itemId: Long, found: List<TextTagFound>): List<TextTag> {
         val texts = HashMap<String, Pair<String?, List<String>>>()
+        // The site names the work by its own id: the addresses of its chapters are of it
+        val site = store.items.siteIdOf(itemId) ?: return emptyList()
         return found.mapNotNull { f ->
             val paragraph = f.paragraph
             val (title, own) =
@@ -200,7 +202,7 @@ class TextTags(
                     title,
                     paragraph.number,
                     quote,
-                    placeOf(store, itemId, paragraph.partId, quote),
+                    placeOf(store, site, paragraph.partId, quote),
                 )
             }
         }
@@ -210,7 +212,7 @@ class TextTags(
      * The tags not offered for the item: the site's, those answered on, those ignored — and of the tags' hierarchy,
      * those its answers tell already: above a tag it has, under a tag it has not.
      */
-    private fun leftOut(store: SourceStore, facet: String, itemId: String): Set<String> {
+    private fun leftOut(store: SourceStore, facet: String, itemId: Long): Set<String> {
         val from = store.schema.facet(facet)?.examplesFrom
         val bound = store.tags.bindingsOf(store.id)
         val site =
@@ -239,7 +241,7 @@ class TextTags(
      */
     fun answer(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         key: String,
         partId: String,
         paragraph: Int,
@@ -270,7 +272,7 @@ class TextTags(
      */
     private fun heldAgainst(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         tag: Long,
         partId: String,
         paragraph: Int,

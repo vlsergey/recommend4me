@@ -98,18 +98,15 @@ class SiteUniversesTest : SiteTestBase() {
         // The words stay over a refresh of the universe
         universeEntries.chooseUniverseEntry("fake", "U1", "S1", Inclusion(true))
         universes.addUniverse(UniverseRef("fake", "U1"))
-        assertEquals(
-            true,
-            universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.included,
-        )
+        assertEquals(true, universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.included)
         universeEntries.resetUniverseEntry("fake", "U1", "S1")
 
         // The universe is a value to pick for any work, linked to none yet; linked, it names itself by its entry
         assertTrue(searchController.listFacetValues(site, "universe", "space", 10).body!!.any { it.key == u1 })
-        corrections.correctFacet(site, "u1", FacetCorrection(facet = "universe", added = true, key = u1))
+        corrections.correctFacet(site, idOf(site, "u1"), FacetCorrection(facet = "universe", added = true, key = u1))
         fun universeOfWork() =
             items
-                .getItem(site, "u1")
+                .getItem(site, idOf(site, "u1"))
                 .body!!
                 .allFacets
                 .single { it.facet == "universe" }
@@ -145,24 +142,26 @@ class SiteUniversesTest : SiteTestBase() {
         val lotr = universeOf("lotr")
         assertEquals(hp, universeOf("hp-movies"))
         assertNotEquals(hp, lotr)
-        assertEquals("Harry Potter", valueOf("h1", "universe", hp)?.draftedFrom)
-        assertEquals("harry potter", valueOf("h2", "universe", hp)?.draftedFrom)
+        assertEquals("Harry Potter", valueOf(idOf(site, "h1"), "universe", hp)?.draftedFrom)
+        assertEquals("harry potter", valueOf(idOf(site, "h2"), "universe", hp)?.draftedFrom)
         assertEquals("Harry Potter", universes.getUniverse(hp).body!!.name)
 
         // The user's answer on one; merged into another, its fandoms and the answer are the other's
-        corrections.correctFacet(site, "h3", FacetCorrection(facet = "universe", added = true, key = lotr))
+        corrections.correctFacet(site, idOf(site, "h3"), FacetCorrection(facet = "universe", added = true, key = lotr))
         universes.relateUniverses(UniverseRelationRequest(hp, lotr, UniverseRelation.MERGED))
         assertTrue(universes.listUniverses().body!!.none { it.value == lotr })
         assertEquals(hp, universeOf("lotr"))
         assertEquals(3, universes.getUniverse(hp).body!!.sites.size)
         // A work of the fandom merged no answer was on drafted of the dictionary as it is, never naming a universe
         // that is no more; its document of the list written anew by the change of the dictionary, no other work told
-        assertEquals("The Lord of the Rings", valueOf("h5", "universe", hp)?.draftedFrom)
-        assertNull(valueOf("h5", "universe", lotr))
-        assertListed("h5", hp, lotr)
+        assertEquals("The Lord of the Rings", valueOf(idOf(site, "h5"), "universe", hp)?.draftedFrom)
+        assertNull(valueOf(idOf(site, "h5"), "universe", lotr))
+        assertListed(idOf(site, "h5"), hp, lotr)
         assertTrue(
-            stores.source(site)!!.corrections.facetsOf("h3").any { it.facet == "universe" && it.key == hp },
-            "h3 ${stores.source(site)!!.corrections.facetsOf("h3")}",
+            stores.source(site)!!.corrections.facetsOf(idOf(site, "h3")).any {
+                it.facet == "universe" && it.key == hp
+            },
+            "h3 ${stores.source(site)!!.corrections.facetsOf(idOf(site, "h3"))}",
         )
 
         // A site's fandom taken out is a universe of its own; put under another, its works are of the other too
@@ -171,8 +170,8 @@ class SiteUniversesTest : SiteTestBase() {
         namedAtOnce(ring, "The Lord of the Rings")
         universes.relateUniverses(UniverseRelationRequest(hp, ring, UniverseRelation.CHILD))
         assertEquals(listOf(hp), universes.getUniverse(ring).body!!.parents)
-        assertNotNull(valueOf("h3", "universe", ring)?.draftedFrom)
-        assertNotNull(valueOf("h3", "universe", hp))
+        assertNotNull(valueOf(idOf(site, "h3"), "universe", ring)?.draftedFrom)
+        assertNotNull(valueOf(idOf(site, "h3"), "universe", hp))
         // A word on the two in place of the word before; one under a universe of its own descendants refused: a loop
         universes.relateUniverses(UniverseRelationRequest(ring, hp, UniverseRelation.CHILD))
         assertEquals(
@@ -195,7 +194,11 @@ class SiteUniversesTest : SiteTestBase() {
         // An original work has no universe of its fandom
         capture("h4|Mine|magic|My own world||x4|originals:Originals")
         assertTrue(
-            facetsOf("h4").find { it.facet == "universe" }?.propertyValues.orEmpty().none { it.draftedFrom != null }
+            facetsOf(idOf(site, "h4"))
+                .find { it.facet == "universe" }
+                ?.propertyValues
+                .orEmpty()
+                .none { it.draftedFrom != null }
         )
     }
 
@@ -236,30 +239,38 @@ class SiteUniversesTest : SiteTestBase() {
             capture("q$k|Knights $k|dragons|A knight guards the princess in the castle $k|Knight/Princess")
         }
         repeat(12) { k ->
-            corrections.correctFacet(site, "p$k", FacetCorrection(facet = "universe", added = true, key = u2))
+            corrections.correctFacet(
+                site,
+                idOf(site, "p$k"),
+                FacetCorrection(facet = "universe", added = true, key = u2),
+            )
         }
         // The user's word on half of them
         repeat(6) { k ->
             listOf("fake:C1", "fake:C2").forEach {
-                corrections.correctFacet(site, "p$k", FacetCorrection(facet = "characters", added = true, key = it))
+                corrections.correctFacet(
+                    site,
+                    idOf(site, "p$k"),
+                    FacetCorrection(facet = "characters", added = true, key = it),
+                )
             }
             // No other: the model learns of the user's word alone, the other characters of the universe its noes
-            corrections.completeFacet(site, "p$k", "characters")
+            corrections.completeFacet(site, idOf(site, "p$k"), "characters")
             corrections.correctFacet(
                 site,
-                "p$k",
+                idOf(site, "p$k"),
                 FacetCorrection(facet = "pairings", added = true, key = "pair:fake:C1|fake:C2"),
             )
         }
         // And of some works of no universe: none — what the model learns of the knights' texts
-        repeat(6) { k -> corrections.completeFacet(site, "q$k", "characters") }
+        repeat(6) { k -> corrections.completeFacet(site, idOf(site, "q$k"), "characters") }
         val store = stores.source(site)!!
         refresh(store)
         inBackground { suggestions.refresh(store) }
         // The pairings are made of the characters the model gave: once more, over what it gave
         inBackground { suggestions.refresh(store) }
 
-        val facets = items.getItem(site, "p9").body!!.allFacets
+        val facets = items.getItem(site, idOf(site, "p9")).body!!.allFacets
         charactersOfAWork(facets)
         noUniverseNoCharacters(facets)
         newWorkOffered(store)
@@ -284,7 +295,7 @@ class SiteUniversesTest : SiteTestBase() {
             setOf("fake:C1", "fake:C2"),
             listIndexes
                 .of("books")
-                .written { ListModelValues.of(it, site, listOf("p9")) }["p9"]
+                .written { ListModelValues.of(it, site, listOf(idOf(site, "p9"))) }[idOf(site, "p9")]
                 ?.get("characters")
                 .orEmpty()
                 .toSet(),
@@ -307,10 +318,12 @@ class SiteUniversesTest : SiteTestBase() {
         // A universe the model gives a work — more likely than not — lets it have the universe's characters, confirmed
         // or not
         fun outside() =
-            items.getItem(site, "q9").body!!.allFacets.filter { it.facet == "characters" || it.facet == "pairings" }
+            items.getItem(site, idOf(site, "q9")).body!!.allFacets.filter {
+                it.facet == "characters" || it.facet == "pairings"
+            }
         val givenUniverse =
             items
-                .getItem(site, "q9")
+                .getItem(site, idOf(site, "q9"))
                 .body!!
                 .allFacets
                 .single { it.facet == "universe" }
@@ -319,12 +332,12 @@ class SiteUniversesTest : SiteTestBase() {
         if (givenUniverse) {
             val chosen =
                 outside().single { it.facet == "characters" }.propertyValues.map { it.key } +
-                    suggestionsApi.getCandidates(site, "q9", "characters", null, null).body!!.map { it.key }
+                    suggestionsApi.getCandidates(site, idOf(site, "q9"), "characters", null, null).body!!.map { it.key }
             assertTrue(chosen.any { it.startsWith("fake:C") }, "characters of q9 $chosen")
         }
         // Said to have no universe, a work has no characters of one: only its site's line, and the original characters
         // offered
-        corrections.completeFacet(site, "q9", "universe")
+        corrections.completeFacet(site, idOf(site, "q9"), "universe")
         val none = outside()
         assertTrue(
             none.all { f ->
@@ -351,7 +364,7 @@ class SiteUniversesTest : SiteTestBase() {
             "nc1|The captain|space|The Captain commands. The Captain waits. " +
                 "The Captain sleeps, the captain of the guard does not|"
         )
-        corrections.correctFacet(site, "nc1", FacetCorrection(facet = "universe", added = true, key = u2))
+        corrections.correctFacet(site, idOf(site, "nc1"), FacetCorrection(facet = "universe", added = true, key = u2))
         refresh(store)
         // The models fitted after the quiet — here at once; how often its texts name every character is counted for its
         // candidates alone
@@ -359,10 +372,10 @@ class SiteUniversesTest : SiteTestBase() {
         // The candidates wait for nothing: they offer what the weights say now, the work's kept chances
         // are made in the queue of the computations; a value the card gives is never offered beside it
         background.run()
-        val offered = suggestionsApi.getCandidates(site, "nc1", "characters", null, null).body!!
+        val offered = suggestionsApi.getCandidates(site, idOf(site, "nc1"), "characters", null, null).body!!
         val given =
             items
-                .getItem(site, "nc1")
+                .getItem(site, idOf(site, "nc1"))
                 .body!!
                 .allFacets
                 .find { it.facet == "characters" }
@@ -383,42 +396,53 @@ class SiteUniversesTest : SiteTestBase() {
         assertEquals("Captain", offered.find { it.key == "fake:C2" }?.name ?: "Captain")
         // "…": the likeliest so many, then so many more of the rest the texts name three times at least, the most named
         // first, each once
-        val more = suggestionsApi.getCandidates(site, "nc1", "characters", 1, 2).body!!
+        val more = suggestionsApi.getCandidates(site, idOf(site, "nc1"), "characters", 1, 2).body!!
         val byText =
             offered.drop(1).filter { (it.mentions ?: 0) >= 3 }.sortedByDescending { it.mentions }.take(2).map { it.key }
         assertEquals(offered.take(1).map { it.key } + byText, more.map { it.key }, "more $more of $offered")
         assertEquals(listOf(false) + byText.map { true }, more.map { it.named == true }, "more $more")
         // The passages naming a character, each by where it is: the annotation by the key of its label
-        val quotes = suggestionsApi.getMentions(site, "nc1", "characters", "fake:C2").body!!
+        val quotes = suggestionsApi.getMentions(site, idOf(site, "nc1"), "characters", "fake:C2").body!!
         assertTrue(
             quotes.isNotEmpty() &&
                 quotes.all { it.labelKey == "$site:text.annotation" && it.title == null && it.part == null },
             "quotes $quotes",
         )
-        assertEquals(404, suggestionsApi.getCandidates(site, "nc1", "nope", null, null).statusCode.value())
+        assertEquals(404, suggestionsApi.getCandidates(site, idOf(site, "nc1"), "nope", null, null).statusCode.value())
     }
 
     /** The keys of the values of the work n1 of a [facet]. */
     private fun keysOf(facet: String) =
-        items.getItem(site, "nc1").body!!.allFacets.find { it.facet == facet }?.propertyValues.orEmpty().map { it.key }
+        items
+            .getItem(site, idOf(site, "nc1"))
+            .body!!
+            .allFacets
+            .find { it.facet == facet }
+            ?.propertyValues
+            .orEmpty()
+            .map { it.key }
 
     /** The keys of the candidates of the work n1 of a [facet]. */
     private fun candidatesOf(facet: String) =
-        suggestionsApi.getCandidates(site, "nc1", facet, null, null).body!!.map { it.key }
+        suggestionsApi.getCandidates(site, idOf(site, "nc1"), facet, null, null).body!!.map { it.key }
 
     /** A character is a work's main one or its secondary one: never shown, given or offered in both. */
     private fun mainOrSecondary() {
         // A character is a work's main one or its secondary one: never shown, given or offered in both
         // No work has a secondary character yet: nothing to learn from, every character of the universe offered all the
         // same
-        val untaught = suggestionsApi.getCandidates(site, "nc1", "secondary-characters", null, null).body!!
+        val untaught = suggestionsApi.getCandidates(site, idOf(site, "nc1"), "secondary-characters", null, null).body!!
         assertTrue(untaught.isNotEmpty() && untaught.all { it.chance == null }, "secondary $untaught")
         // Each with every name it goes by, the shown one first: a search finds it by any of them
         // — the pilot, unless the model gives it as a main one: a character is never offered in both
         val pilot = untaught.firstOrNull { it.key == "fake:C1" }
         if (pilot != null) assertEquals(listOf("Pilot", "The Pilot"), pilot.names)
         else assertTrue("fake:C1" in keysOf("characters"), "secondary $untaught, main ${keysOf("characters")}")
-        corrections.correctFacet(site, "nc1", FacetCorrection(facet = "characters", added = true, key = "fake:C1"))
+        corrections.correctFacet(
+            site,
+            idOf(site, "nc1"),
+            FacetCorrection(facet = "characters", added = true, key = "fake:C1"),
+        )
         assertTrue(
             "fake:C1" !in keysOf("secondary-characters") && "fake:C1" !in candidatesOf("secondary-characters"),
             "secondary ${keysOf("secondary-characters")}",
@@ -431,7 +455,7 @@ class SiteUniversesTest : SiteTestBase() {
         val secondary =
             corrections.correctFacet(
                 site,
-                "nc1",
+                idOf(site, "nc1"),
                 FacetCorrection(facet = "secondary-characters", added = true, key = "fake:C2"),
             )
         assertTrue(
@@ -446,7 +470,7 @@ class SiteUniversesTest : SiteTestBase() {
         val main =
             corrections.correctFacet(
                 site,
-                "nc1",
+                idOf(site, "nc1"),
                 FacetCorrection(facet = "characters", added = true, key = "fake:C2"),
             )
         assertTrue(
@@ -460,12 +484,16 @@ class SiteUniversesTest : SiteTestBase() {
     /** The original characters, many persons, main and secondary both; every pair of the main ones given or offered. */
     private fun originalCharactersAndPairs() {
         // The original characters are many persons: in both
-        corrections.correctFacet(site, "nc1", FacetCorrection(facet = "characters", added = true, key = "oc:female"))
+        corrections.correctFacet(
+            site,
+            idOf(site, "nc1"),
+            FacetCorrection(facet = "characters", added = true, key = "oc:female"),
+        )
         assertTrue("oc:female" in keysOf("secondary-characters") + candidatesOf("secondary-characters"))
         // Shown by the key of its words; its name, which the model reads, stays one language
         val ofc =
             items
-                .getItem(site, "nc1")
+                .getItem(site, idOf(site, "nc1"))
                 .body!!
                 .allFacets
                 .single { it.facet == "characters" }
@@ -477,7 +505,7 @@ class SiteUniversesTest : SiteTestBase() {
         // fitting too: the model has no chance of it, offered all the same
         val had =
             items
-                .getItem(site, "nc1")
+                .getItem(site, idOf(site, "nc1"))
                 .body!!
                 .allFacets
                 .single { it.facet == "characters" }
@@ -498,12 +526,25 @@ class SiteUniversesTest : SiteTestBase() {
     private fun universeOfFanFiction(store: SourceStore) {
         // The universe of a fan fiction is worked out as its characters are: given when likely, offered first when not
         capture("f1|Fleet tales|space|Ships of the fleet|")
-        corrections.correctFacet(site, "f1", FacetCorrection(facet = "kind", added = true, key = "fanfiction"))
+        corrections.correctFacet(
+            site,
+            idOf(site, "f1"),
+            FacetCorrection(facet = "kind", added = true, key = "fanfiction"),
+        )
         refresh(store)
         inBackground { suggestions.refresh(store) }
         val universes =
-            items.getItem(site, "f1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.map { it.key }
-        val offeredUniverses = suggestionsApi.getCandidates(site, "f1", "universe", null, null).body!!.map { it.key }
+            items
+                .getItem(site, idOf(site, "f1"))
+                .body!!
+                .allFacets
+                .single { it.facet == "universe" }
+                .propertyValues
+                .map { it.key }
+        val offeredUniverses =
+            suggestionsApi.getCandidates(site, idOf(site, "f1"), "universe", null, null).body!!.map {
+                it.key
+            }
         assertEquals(u2, (universes + offeredUniverses).first(), "given $universes, offered $offeredUniverses")
 
         // Its universes all named: no other is offered, the work has its own alone
@@ -514,13 +555,15 @@ class SiteUniversesTest : SiteTestBase() {
         // The other universe: given by the model or offered among the candidates
         fun other(details: io.github.vlsergey.recommend4me.api.model.ItemDetails) =
             details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == u1 } ||
-                suggestionsApi.getCandidates(site, "f1", "universe", null, null).body!!.any { it.key == u1 }
+                suggestionsApi.getCandidates(site, idOf(site, "f1"), "universe", null, null).body!!.any {
+                    it.key == u1
+                }
         // An answer is kept at once; the chances it changes are made as the work is read
-        fun settled(item: String) = items.getItem(site, item).body!!
-        corrections.correctFacet(site, "f1", FacetCorrection(facet = "universe", added = true, key = u2))
-        assertTrue(other(settled("f1")))
-        corrections.completeFacet(site, "f1", "universe")
-        val named = settled("f1").allFacets.single { it.facet == "universe" }
+        fun settled(item: Long) = items.getItem(site, item).body!!
+        corrections.correctFacet(site, idOf(site, "f1"), FacetCorrection(facet = "universe", added = true, key = u2))
+        assertTrue(other(settled(idOf(site, "f1"))))
+        corrections.completeFacet(site, idOf(site, "f1"), "universe")
+        val named = settled(idOf(site, "f1")).allFacets.single { it.facet == "universe" }
         assertEquals(true, named.complete)
         assertEquals(
             listOf(u2),
@@ -529,11 +572,13 @@ class SiteUniversesTest : SiteTestBase() {
         )
         assertEquals(
             emptyList(),
-            suggestionsApi.getCandidates(site, "f1", "universe", null, null).body!!.map { it.key },
+            suggestionsApi.getCandidates(site, idOf(site, "f1"), "universe", null, null).body!!.map {
+                it.key
+            },
         )
         // Taken back, the others are offered again
-        corrections.uncompleteFacet(site, "f1", "universe")
-        val reopened = settled("f1")
+        corrections.uncompleteFacet(site, idOf(site, "f1"), "universe")
+        val reopened = settled(idOf(site, "f1"))
         assertNull(reopened.allFacets.single { it.facet == "universe" }.complete)
         assertTrue(other(reopened))
         this.universes.bindUniverseEntry(UniverseEntryBinding(u1, "fake", "U1", false))
@@ -545,15 +590,15 @@ class SiteUniversesTest : SiteTestBase() {
         capture("o1|Our own world|space|Ships of the fleet|")
         corrections.correctFacet(
             site,
-            "o1",
+            idOf(site, "o1"),
             FacetCorrection(facet = "kind", added = true, key = "alternative-history"),
         )
         capture("o2|A school year|school|Lessons and friends|")
-        corrections.correctFacet(site, "o2", FacetCorrection(facet = "kind", added = true, key = "realism"))
+        corrections.correctFacet(site, idOf(site, "o2"), FacetCorrection(facet = "kind", added = true, key = "realism"))
         // A standard value is shown by its key
         val kind =
             items
-                .getItem(site, "o1")
+                .getItem(site, idOf(site, "o1"))
                 .body!!
                 .allFacets
                 .single { it.facet == "kind" }
@@ -570,11 +615,15 @@ class SiteUniversesTest : SiteTestBase() {
         inBackground { suggestions.refresh(store) }
         assertEquals(
             emptyList(),
-            suggestionsApi.getCandidates(site, "o1", "universe", null, null).body!!.map { it.key },
+            suggestionsApi.getCandidates(site, idOf(site, "o1"), "universe", null, null).body!!.map {
+                it.key
+            },
         )
         assertEquals(
             emptyList(),
-            suggestionsApi.getCandidates(site, "o2", "universe", null, null).body!!.map { it.key },
+            suggestionsApi.getCandidates(site, idOf(site, "o2"), "universe", null, null).body!!.map {
+                it.key
+            },
         )
     }
 
@@ -583,7 +632,7 @@ class SiteUniversesTest : SiteTestBase() {
         // The user's own name of a character and of a universe over the catalogue's: shown everywhere in its place
         fun characterName() =
             items
-                .getItem(site, "p9")
+                .getItem(site, idOf(site, "p9"))
                 .body!!
                 .allFacets
                 .single { it.facet == "characters" }
@@ -613,7 +662,7 @@ class SiteUniversesTest : SiteTestBase() {
      * The document of the work [id] in the index of the list, once the index is written of what changed, holds the
      * universe [has] and not [hasNot].
      */
-    private fun assertListed(id: String, has: String, hasNot: String) {
+    private fun assertListed(id: Long, has: String, hasNot: String) {
         inBackground { listIndexing.writeWaiting("books") }
         val key = ItemKey(site, id)
         val listed = ListFacetValues.of(listIndexes.of("books"), listOf(key))[key]?.get(UniverseFacet.KEY).orEmpty()

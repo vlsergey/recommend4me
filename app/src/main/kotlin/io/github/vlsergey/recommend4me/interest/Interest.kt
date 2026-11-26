@@ -29,6 +29,6 @@ object Interest {
 data class WorkInterestChangeEvent(
     val type: String,
     val source: String,
-    val itemId: String,
+    val itemId: Long,
     val merged: Boolean = false,
 )

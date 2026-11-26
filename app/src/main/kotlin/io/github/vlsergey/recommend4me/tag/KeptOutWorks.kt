@@ -65,7 +65,7 @@ class KeptOutWorks(
     /**
      * The works of every site kept now that the tag [tag] and the tags under it keep out: of every source, its items.
      */
-    private fun keptOfTag(scope: TagScope, tag: String): Map<SourceStore, Set<String>> {
+    private fun keptOfTag(scope: TagScope, tag: String): Map<SourceStore, Set<Long>> {
         val keys = setOf(tag) + TagHierarchy(scope.tags.relations.parents()).descendants(tag)
         return scope.sources.associateWith { s ->
             val facet = normalization.siteFacetOf(s, scope.facet)

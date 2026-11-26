@@ -33,7 +33,7 @@ import org.springframework.stereotype.Service
 private val log = LoggerFactory.getLogger(TextVectors::class.java)
 
 /** The vectors of the texts of these items of a source were written or dropped. */
-data class SiteItemTextVectorChangeEvent(val source: String, val ids: List<String>)
+data class SiteItemTextVectorChangeEvent(val source: String, val ids: List<Long>)
 
 /**
  * Every change the vectors of the site's text fields read of the works of the [scope] of the [type] done
@@ -209,7 +209,7 @@ class TextVectors(
     private fun encoded(
         store: SourceStore,
         with: Encoding,
-        ids: List<String>,
+        ids: List<Long>,
         giveWay: () -> Boolean = { false },
     ): List<ItemKey> {
         val encoder = with.encoder

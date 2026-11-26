@@ -27,9 +27,9 @@ class PartMarks(private val db: DSLContext) {
      * Of every part on the site with a text of the items [ids] (every item when null), in their order: item to its
      * parts.
      */
-    fun of(ids: Collection<String>?): Map<String, List<PartMark>> {
-        val out = HashMap<String, MutableList<PartMark>>()
-        fun read(only: Collection<String>?) =
+    fun of(ids: Collection<Long>?): Map<Long, List<PartMark>> {
+        val out = HashMap<Long, MutableList<PartMark>>()
+        fun read(only: Collection<Long>?) =
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT_HASH, PART.ENCODER, PART.ENCODED_HASH)
                 .from(PART)
                 .where(PART.CONTENT_HASH.isNotNull, onSite)

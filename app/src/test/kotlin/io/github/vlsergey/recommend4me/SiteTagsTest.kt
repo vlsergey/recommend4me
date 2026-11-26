@@ -56,8 +56,12 @@ class SiteTagsTest : SiteTestBase() {
         captures.capturePage(CaptureRequest("${SiteSource.SYNONYMS}cargo", "Freight, Shipment"))
         assertEquals(cargo, tag("shipment"))
         // The user's answer on a tag that will be merged into another
-        corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, key = starhulls))
-        gradesController.rateItem("site", "t2", RatingRequest(5))
+        corrections.correctFacet(
+            "site",
+            idOf(site, "t3"),
+            FacetCorrection(facet = "tags", added = true, key = starhulls),
+        )
+        gradesController.rateItem("site", idOf(site, "t2"), RatingRequest(5))
         refresh(stores.source("site")!!)
         // The synonyms variants of the tag, of no work, with their names: the tag found by them
         val ofCargo = tagsApi.getTag(cargo).body!!.variants.associate { it.tag to (it.name to it.works) }
@@ -137,7 +141,7 @@ class SiteTagsTest : SiteTestBase() {
         // Its names in the order the name is chosen by: the liked work's first, the tag's name
         assertEquals(listOf("Starhulls", "Hulls"), merged.names)
         // The answer on the tag merged is the tag's now
-        val t3 = stores.source("site")!!.corrections.facetsOf("t3").filter { it.facet == "tags" }
+        val t3 = stores.source("site")!!.corrections.facetsOf(idOf(site, "t3")).filter { it.facet == "tags" }
         assertEquals(listOf(hulls to true), t3.map { it.key to it.added })
         // The work's tags show the tag by its name, whichever site's name it has
         val named = tagsApi.nameTag(TagNameRequest(hulls, "Корпуса")).body!!
@@ -147,7 +151,7 @@ class SiteTagsTest : SiteTestBase() {
         assertEquals(listOf("Starhulls", "Hulls"), named.names)
         val shown =
             items
-                .getItem("site", "t3")
+                .getItem("site", idOf(site, "t3"))
                 .body!!
                 .allFacets
                 .single { it.facet == "tags" }
@@ -194,7 +198,7 @@ class SiteTagsTest : SiteTestBase() {
     /** [hulls] ignored: kept with the work and found by the filter, never read by the model, never offered to mark. */
     private fun ignored(hulls: String) {
         // Ignored: kept with the work and found by the filter, never read by the model of the grades
-        val t3Key = ItemKey("site", "t3")
+        val t3Key = ItemKey("site", idOf(site, "t3"))
         val feature = "facet:tags:$hulls"
         assertTrue(feature in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
         assertTrue(tagsApi.ignoreTag(TagIgnoredRequest(hulls, true)).body!!.ignored)
@@ -203,7 +207,7 @@ class SiteTagsTest : SiteTestBase() {
         assertTrue(feature !in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
         assertTrue(
             items
-                .getItem("site", "t3")
+                .getItem("site", idOf(site, "t3"))
                 .body!!
                 .allFacets
                 .single { it.facet == "tags" }
@@ -211,7 +215,9 @@ class SiteTagsTest : SiteTestBase() {
                 .any { it.key == hulls }
         )
         // Never offered to mark: not among the candidates, not found to add
-        assertTrue(suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.none { it.key == hulls })
+        assertTrue(
+            suggestionsApi.getCandidates("site", idOf(site, "t2"), "tags", null, null).body!!.none { it.key == hulls }
+        )
         assertTrue(searchController.listFacetValues("site", "tags", "hull", 10).body!!.none { it.key == hulls })
         assertTrue(searchController.listFacetValues("site", "tags", null, 500).body!!.none { it.key == hulls })
         assertTrue(!tagsApi.ignoreTag(TagIgnoredRequest(hulls, false)).body!!.ignored)
@@ -362,7 +368,7 @@ class SiteTagsTest : SiteTestBase() {
         rows(hulls).singleOrNull { it.tag.key == key && it.site == null }?.relation
 
     /** The values of the work [id]'s tags. */
-    private fun tagsOf(id: String) =
+    private fun tagsOf(id: Long) =
         items.getItem("site", id).body!!.allFacets.single { it.facet == "tags" }.propertyValues
 
     /**
@@ -389,7 +395,12 @@ class SiteTagsTest : SiteTestBase() {
         assertEquals(listOf("hulls"), tagsApi.getTag(hulls).body!!.variants.map { it.tag })
         assertEquals(
             listOf(hulls to true),
-            stores.source("site")!!.corrections.facetsOf("t3").filter { it.facet == "tags" }.map { it.key to it.added },
+            stores
+                .source("site")!!
+                .corrections
+                .facetsOf(idOf(site, "t3"))
+                .filter { it.facet == "tags" }
+                .map { it.key to it.added },
         )
         val other = out.key
         // One row of it among the alike, not merged
@@ -440,12 +451,12 @@ class SiteTagsTest : SiteTestBase() {
         assertEquals(listOf(other), hull.children.map { it.key })
         assertEquals(TagRelation.CHILD, relationOf(hulls, other))
         // The child confirmed: the parent given by it — unless the model gives it the work by itself
-        corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = true, key = other))
-        val parent = tagsOf("t2").single { it.key == hulls }
+        corrections.correctFacet("site", idOf(site, "t2"), FacetCorrection(facet = "tags", added = true, key = other))
+        val parent = tagsOf(idOf(site, "t2")).single { it.key == hulls }
         assertTrue(parent.implied == true || (parent.chance ?: 0.0) > 0.5, "hulls of t2 $parent")
         assertTrue(parent.offered != true, "hulls of t2 $parent")
         // The tag above shown before the tag under it, whatever their chances
-        val order = tagsOf("t2").map { it.key }
+        val order = tagsOf(idOf(site, "t2")).map { it.key }
         assertTrue(order.indexOf(hulls) < order.indexOf(other), "the order of t2 $order")
         // A tag of several parents: under cargo too
         tagsApi.relateTags(TagRelationRequest(cargo, other, TagRelation.CHILD))
@@ -461,19 +472,24 @@ class SiteTagsTest : SiteTestBase() {
         // The parent of a child the user confirmed is not taken away: the work has it by the child
         val implied =
             assertThrows<Refused> {
-                corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = false, key = hulls))
+                corrections.correctFacet(
+                    "site",
+                    idOf(site, "t2"),
+                    FacetCorrection(facet = "tags", added = false, key = hulls),
+                )
             }
         assertEquals(Refusal.TAG_IMPLIED, implied.refusal)
         // The answer on the child taken back, the parent taken away: the child goes with it, not shown at all
-        corrections.uncorrectFacet("site", "t2", "tags", other)
-        corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = false, key = hulls))
-        assertTrue(tagsOf("t2").none { it.key == other }, "tags ${tagsOf("t2")}")
+        corrections.uncorrectFacet("site", idOf(site, "t2"), "tags", other)
+        corrections.correctFacet("site", idOf(site, "t2"), FacetCorrection(facet = "tags", added = false, key = hulls))
+        assertTrue(tagsOf(idOf(site, "t2")).none { it.key == other }, "tags ${tagsOf(idOf(site, "t2"))}")
         assertEquals(
             io.github.vlsergey.recommend4me.api.model.FacetValueInfo.Corrected.REMOVED,
-            tagsOf("t2").single { it.key == hulls }.corrected,
+            tagsOf(idOf(site, "t2")).single { it.key == hulls }.corrected,
         )
         // Nor offered among the candidates
-        val candidates = suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.map { it.key }
+        val candidates =
+            suggestionsApi.getCandidates("site", idOf(site, "t2"), "tags", null, null).body!!.map { it.key }
         assertTrue(other !in candidates, "candidates of t2 $candidates")
         // The other way round: above it
         assertEquals(
@@ -494,14 +510,14 @@ class SiteTagsTest : SiteTestBase() {
         // The answer is only written: it tells the key found or made, nothing of the work read back
         val made =
             corrections
-                .correctFacet("site", "t1", FacetCorrection(facet = "tags", added = true, name = "Пустота"))
+                .correctFacet("site", idOf(site, "t1"), FacetCorrection(facet = "tags", added = true, name = "Пустота"))
                 .body!!
         val void = made.key
         assertEquals("Пустота", made.name)
         assertEquals(
             void,
             items
-                .getItem("site", "t1")
+                .getItem("site", idOf(site, "t1"))
                 .body!!
                 .allFacets
                 .single { it.facet == "tags" }
@@ -510,13 +526,17 @@ class SiteTagsTest : SiteTestBase() {
                 .key,
         )
         assertEquals("Пустота", type.tags.stats.explicitNames()[TagRepository.idOf(void)])
-        corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, name = "пустота"))
+        corrections.correctFacet(
+            "site",
+            idOf(site, "t3"),
+            FacetCorrection(facet = "tags", added = true, name = "пустота"),
+        )
         assertEquals(
             void,
             stores
                 .source("site")!!
                 .corrections
-                .facetsOf("t3")
+                .facetsOf(idOf(site, "t3"))
                 .single { it.facet == "tags" && it.added && it.key != hulls }
                 .key,
         )
@@ -532,17 +552,16 @@ class SiteTagsTest : SiteTestBase() {
         assertTrue(tagsApi.keepOutTag(TagKeptOutRequest(smugglers, true)).body!!.keepsOut)
         // Removed in the background, with everything of it
         background.run()
-        assertNull(store.items.find("ko1"))
+        assertNull(store.items.idOf("ko1"))
         // Written again by the site, not kept — nor anything of it written after its tags
         capture("ko2|Kept two|smugglers|Smugglers again|")
-        assertNull(store.items.find("ko2"))
-        assertTrue(store.items.texts("ko2").isEmpty())
+        assertNull(store.items.idOf("ko2"))
         // A work without it is kept; taken back, its works are kept again
         capture("ko3|Kept three|ships|Ships alone|")
-        assertNotNull(store.items.find("ko3"))
+        assertNotNull(store.items.idOf("ko3"))
         tagsApi.keepOutTag(TagKeptOutRequest(smugglers, false))
         capture("ko2|Kept two|smugglers|Smugglers again|")
-        assertNotNull(store.items.find("ko2"))
+        assertNotNull(store.items.idOf("ko2"))
     }
 
     private companion object {

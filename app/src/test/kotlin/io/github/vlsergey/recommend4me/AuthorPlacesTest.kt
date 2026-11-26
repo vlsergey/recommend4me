@@ -24,7 +24,10 @@ class AuthorPlacesTest : TwoSitesTestBase() {
     @Test
     fun `a place an author's page lists merges the author there, marked by it, never one taken out`() {
         alpha("ap1|Lorem|hay|Lorem ipsum dolor||")
-        stores.source("alpha")!!.items.setFacet("ap1", Books.AUTHOR.key, listOf(FacetValue("ap-ann", "Ann")))
+        stores
+            .source("alpha")!!
+            .items
+            .setFacet(idOf("alpha", "ap1"), Books.AUTHOR.key, listOf(FacetValue("ap-ann", "Ann")))
         val dictionary = stores.type("books")!!.authors
         val ann = madeInBackground { dictionary.bindingsOf("alpha")["ap-ann"] }
         // Her page lists her page on beta, of no work known yet, and an address of no site
@@ -36,7 +39,10 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         assertEquals(0, authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works)
         // A work of hers on beta: still one with Ann
         beta("ap2|Ipsum|hay|Sit amet consectetur")
-        stores.source("beta")!!.items.setFacet("ap2", Books.AUTHOR.key, listOf(FacetValue("ap-bea", "Bea")))
+        stores
+            .source("beta")!!
+            .items
+            .setFacet(idOf("beta", "ap2"), Books.AUTHOR.key, listOf(FacetValue("ap-bea", "Bea")))
         background.run()
         assertEquals(1, authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works)
         assertEquals(ann, dictionary.bindingsOf("beta")["ap-bea"])
@@ -75,8 +81,14 @@ class AuthorPlacesTest : TwoSitesTestBase() {
     fun `a place given by the name is the account of the site's own key of that name`() {
         alpha("ap5|Fortis|hay|Fortis et liber||")
         beta("ap6|Liber|hay|Liber et fortis")
-        stores.source("alpha")!!.items.setFacet("ap5", Books.AUTHOR.key, listOf(FacetValue("ap-dan", "Dan")))
-        stores.source("beta")!!.items.setFacet("ap6", Books.AUTHOR.key, listOf(FacetValue("ap-cat", "Cat Ap")))
+        stores
+            .source("alpha")!!
+            .items
+            .setFacet(idOf("alpha", "ap5"), Books.AUTHOR.key, listOf(FacetValue("ap-dan", "Dan")))
+        stores
+            .source("beta")!!
+            .items
+            .setFacet(idOf("beta", "ap6"), Books.AUTHOR.key, listOf(FacetValue("ap-cat", "Cat Ap")))
         val dictionary = stores.type("books")!!.authors
         val dan = madeInBackground { dictionary.bindingsOf("alpha")["ap-dan"] }
         madeInBackground { dictionary.bindingsOf("beta")["ap-cat"] }
@@ -89,7 +101,10 @@ class AuthorPlacesTest : TwoSitesTestBase() {
     @Test
     fun `an account given by the name before its own key was known is folded into it by the search of the authors`() {
         alpha("ap7|Clarus|hay|Clarus et altus||")
-        stores.source("alpha")!!.items.setFacet("ap7", Books.AUTHOR.key, listOf(FacetValue("ap-eve", "Eve")))
+        stores
+            .source("alpha")!!
+            .items
+            .setFacet(idOf("alpha", "ap7"), Books.AUTHOR.key, listOf(FacetValue("ap-eve", "Eve")))
         val dictionary = stores.type("books")!!.authors
         madeInBackground { dictionary.bindingsOf("alpha")["ap-eve"] }
         // Eve's page lists beta's page of an account by its name, of no key known yet: an account by the name
@@ -97,7 +112,10 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         assertEquals(setOf("name:Fay Ap"), dictionary.bindingsOf("beta", listOf("name:Fay Ap")).keys)
         // The account's own key comes with a work of it; the search of the authors folds the one by the name into it
         beta("ap8|Altus|hay|Altus et clarus")
-        stores.source("beta")!!.items.setFacet("ap8", Books.AUTHOR.key, listOf(FacetValue("ap-fay", "Fay Ap")))
+        stores
+            .source("beta")!!
+            .items
+            .setFacet(idOf("beta", "ap8"), Books.AUTHOR.key, listOf(FacetValue("ap-fay", "Fay Ap")))
         background.run()
         authors.searchAuthorDuplicates("books")
         background.run()

@@ -15,19 +15,19 @@ import org.jooq.DSLContext
  */
 interface CompleteFacets {
     /** The user's word that the work's values of the facet are all named ([complete]), or its taking back. */
-    fun setComplete(itemId: String, facet: String, complete: Boolean, now: Instant)
+    fun setComplete(itemId: Long, facet: String, complete: Boolean, now: Instant)
 
     /**
      * The facets whose values the user said are all named, of each of the items [ids] that has any: by their ids up to
      * a batch of them; of more, every word of the source read once and picked from.
      */
-    fun completeOf(ids: Collection<String>): Map<String, Set<String>>
+    fun completeOf(ids: Collection<Long>): Map<Long, Set<String>>
 
     /** The facets whose values the user said are all named, of the item [itemId]. */
-    fun completeOf(itemId: String): Set<String>
+    fun completeOf(itemId: Long): Set<String>
 
     /** Every item with a facet whose values are all named: they are few, the user says it by hand. */
-    fun allComplete(): Map<String, Set<String>>
+    fun allComplete(): Map<Long, Set<String>>
 }
 
 /** The [CompleteFacets] of the normalized works, in the dictionaries, as the items of the [source] see them. */
@@ -37,7 +37,7 @@ internal class WorkCompleteFacets(
     private val works: WorkRepository,
 ) : CompleteFacets {
 
-    override fun setComplete(itemId: String, facet: String, complete: Boolean, now: Instant) {
+    override fun setComplete(itemId: Long, facet: String, complete: Boolean, now: Instant) {
         val c = WORK_FACET_COMPLETE
         val work = works.of(ItemKey(source, itemId), now)
         if (complete)
@@ -51,7 +51,7 @@ internal class WorkCompleteFacets(
     }
 
     /** The facets whose values are all named, of the source's items that meet the [condition]: item to facets. */
-    private fun seenComplete(condition: Condition): Map<String, Set<String>> {
+    private fun seenComplete(condition: Condition): Map<Long, Set<String>> {
         val c = WORK_FACET_COMPLETE
         return db.select(SITE_WORK.ITEM, c.FACET)
             .from(SITE_WORK)
@@ -64,14 +64,14 @@ internal class WorkCompleteFacets(
     }
 
     /** By their ids, a [BATCH] of them a query: never every word of the source for many, its every item walked. */
-    override fun completeOf(ids: Collection<String>): Map<String, Set<String>> =
+    override fun completeOf(ids: Collection<Long>): Map<Long, Set<String>> =
         ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
             out.apply { putAll(seenComplete(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))) }
         }
 
-    override fun completeOf(itemId: String): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
+    override fun completeOf(itemId: Long): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
 
-    override fun allComplete(): Map<String, Set<String>> = seenComplete(SITE_WORK.SOURCE.eq(source))
+    override fun allComplete(): Map<Long, Set<String>> = seenComplete(SITE_WORK.SOURCE.eq(source))
 
     private companion object {
         /** The ids a query asks for by their ids at most. */

@@ -20,10 +20,10 @@ import org.jooq.impl.DSL
  */
 class ItemChanges(private val db: DSLContext) {
     /** The [datum] of the items [ids] changed [at]. */
-    fun changed(ids: Collection<String>, datum: WorkDatum, at: Instant) {
+    fun changed(ids: Collection<Long>, datum: WorkDatum, at: Instant) {
         val column = columnOf(datum)
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.update(ITEM).set(ITEM.CHANGED_AT, at).set(column, at).where(ITEM.SITE_ID.`in`(chunk)).execute()
+            db.update(ITEM).set(ITEM.CHANGED_AT, at).set(column, at).where(ITEM.INTERNAL_ID.`in`(chunk)).execute()
         }
     }
 
@@ -31,20 +31,20 @@ class ItemChanges(private val db: DSLContext) {
      * Of the items [ids] — of every item when null — the date every outer kind of their data last changed,
      * milliseconds; a kind never dated left out.
      */
-    fun of(ids: Collection<String>?): Map<String, Map<WorkDatum, Long>> {
-        val out = HashMap<String, Map<WorkDatum, Long>>()
+    fun of(ids: Collection<Long>?): Map<Long, Map<WorkDatum, Long>> {
+        val out = HashMap<Long, Map<WorkDatum, Long>>()
         fun read(condition: Condition) =
-            db.select(listOf(ITEM.SITE_ID) + COLUMNS.values)
+            db.select(listOf(ITEM.INTERNAL_ID) + COLUMNS.values)
                 .from(ITEM)
                 .where(condition, ITEM.CHANGED_AT.isNotNull)
                 .fetch { r ->
-                    out[r.get(ITEM.SITE_ID)!!] =
+                    out[r.get(ITEM.INTERNAL_ID)!!] =
                         COLUMNS.entries
                             .mapNotNull { (datum, column) -> r.get(column)?.let { datum to it.toEpochMilli() } }
                             .toMap()
                 }
         if (ids == null) read(DSL.noCondition())
-        else ids.distinct().chunked(BATCH).forEach { read(ITEM.SITE_ID.`in`(it)) }
+        else ids.distinct().chunked(BATCH).forEach { read(ITEM.INTERNAL_ID.`in`(it)) }
         return out
     }
 
@@ -57,14 +57,14 @@ class ItemChanges(private val db: DSLContext) {
         val after =
             when {
                 cursor == null -> DSL.noCondition()
-                cursor.at == null -> at.isNull.and(ITEM.SITE_ID.gt(cursor.id)).or(at.isNotNull)
+                cursor.at == null -> at.isNull.and(ITEM.INTERNAL_ID.gt(cursor.id)).or(at.isNotNull)
                 // A range of the index of the dates the reading begins at, not a pass of every item before the cursor
-                else -> at.ge(cursor.at).and(at.gt(cursor.at).or(ITEM.SITE_ID.gt(cursor.id)))
+                else -> at.ge(cursor.at).and(at.gt(cursor.at).or(ITEM.INTERNAL_ID.gt(cursor.id)))
             }
-        return db.select(ITEM.SITE_ID, at)
+        return db.select(ITEM.INTERNAL_ID, at)
             .from(ITEM)
             .where(after)
-            .orderBy(at.asc().nullsFirst(), ITEM.SITE_ID.asc())
+            .orderBy(at.asc().nullsFirst(), ITEM.INTERNAL_ID.asc())
             .limit(limit)
             .fetch { ItemCursor(it.value2(), it.value1()!!) }
     }

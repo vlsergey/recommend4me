@@ -69,7 +69,7 @@ internal object RandomSearches {
         // trigrams a byte a number
         return SiteWorks(
             source,
-            List(count) { "%05d".format(it) },
+            LongArray(count) { it.toLong() },
             sparse(titles),
             titleLengths,
             sparse(authorNames),

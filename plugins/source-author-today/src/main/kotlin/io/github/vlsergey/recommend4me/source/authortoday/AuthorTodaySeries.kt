@@ -44,7 +44,11 @@ internal class AuthorTodaySeries(private val items: ItemStore) {
                 updatedAt = dated(dates, "Обновление"),
                 works =
                     doc.select(".collection-work-list .book-row").mapNotNull { row ->
-                        val id = row.selectFirst(".book-title a[href^=/work/]")?.let { workId(it.attr("href")) }
+                        // The work of the row, written of its card before
+                        val id =
+                            row.selectFirst(".book-title a[href^=/work/]")
+                                ?.let { workId(it.attr("href")) }
+                                ?.let(items::idOf)
                         id?.let { SeriesWork(it, row.selectFirst(".label-row-index")?.text()?.trim()?.toIntOrNull()) }
                     },
                 // A series of many works is listed on pages of 30, "?page=2": a page of several is not every work
@@ -66,20 +70,24 @@ internal class AuthorTodaySeries(private val items: ItemStore) {
                     title = link.text().trim().ifEmpty { null },
                     description = article.selectFirst(".description")?.let(PageText::of).orEmpty(),
                     status = article.selectFirst(".mb-sm .hint-top")?.let { status(it.text()) },
-                    works =
-                        article
-                            .select(".bookcard .bookcard-title a[href^=/work/]")
-                            .mapNotNull { workId(it.attr("href")) }
-                            .distinct()
-                            .map { SeriesWork(it) },
+                    works = written(article.select(".bookcard .bookcard-title a[href^=/work/]")),
                     whole = true,
                 )
             )
         }
     }
 
+    /**
+     * The works of the [links] to them, in their order, of those written: a work never seen is not of the series yet.
+     */
+    private fun written(links: List<Element>): List<SeriesWork> {
+        val sites = links.mapNotNull { workId(it.attr("href")) }.distinct()
+        val ids = items.idsOf(sites)
+        return sites.mapNotNull { ids[it] }.map { SeriesWork(it) }
+    }
+
     /** The number of the work [id] in its series, after the link to it on its page ("#9"). */
-    fun place(id: String, block: Element) {
+    fun place(id: Long, block: Element) {
         val link = block.selectFirst("a[href^=/work/series/]") ?: return
         val key = SERIES.matchEntire(link.attr("href").substringBefore('?'))?.groupValues?.get(1) ?: return
         val number = NUMBER.find(link.nextElementSibling()?.text().orEmpty())?.groupValues?.get(1)?.toIntOrNull()

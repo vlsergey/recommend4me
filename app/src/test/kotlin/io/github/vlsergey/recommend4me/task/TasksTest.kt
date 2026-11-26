@@ -134,7 +134,7 @@ class TasksTest {
         )
         try {
             assertFailsWith<IllegalStateException> {
-                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) {
+                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 1), emptyMap()) {
                     ran.incrementAndGet()
                 }
             }
@@ -142,7 +142,7 @@ class TasksTest {
             assertTrue(tasks.waiting().isEmpty())
             // The request's attributes are not passed to a thread it starts: the background runs it
             inBackground {
-                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) {
+                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 1), emptyMap()) {
                     ran.incrementAndGet()
                 }
             }
@@ -150,7 +150,7 @@ class TasksTest {
         } finally {
             RequestContextHolder.resetRequestAttributes()
         }
-        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) { ran.incrementAndGet() }
+        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 1), emptyMap()) { ran.incrementAndGet() }
         assertEquals(2, ran.get())
     }
 
@@ -183,17 +183,17 @@ class TasksTest {
     @Test
     fun `a work is expected to take as long as the last run of its kind, of any item`() {
         val tasks = tasks()
-        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1")))
-        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) { Thread.sleep(30) }
-        val expected = records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "2"))!!
+        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 1)))
+        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 1), emptyMap()) { Thread.sleep(30) }
+        val expected = records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = 2))!!
         assertTrue(expected >= 30, "expected $expected ms")
-        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "other", item = "2")))
+        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "other", item = 2)))
     }
 
     @Test
     fun `works alike asked while one waits are that one, its reasons summed`() {
         val tasks = tasks()
-        val held = Task(TaskKind.ENCODE_TAG_NAMES, item = "1")
+        val held = Task(TaskKind.ENCODE_TAG_NAMES, item = 1)
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val blocker = thread {

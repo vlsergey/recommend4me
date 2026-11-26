@@ -33,7 +33,7 @@ class LanguagesTest {
     fun `of a facet of one value the likeliest alone, the user's answer in place of the rest`() {
         val books = FacetDef(StandardLanguages.KEY, infer = true, single = true)
         val games = FacetDef(StandardLanguages.KEY, infer = true)
-        fun chance(key: String, p: Double) = Chance("1", StandardLanguages.KEY, key, false, p)
+        fun chance(key: String, p: Double) = Chance(1, StandardLanguages.KEY, key, false, p)
         val chances = mapOf(StandardLanguages.KEY to mapOf("ru" to chance("ru", 0.9), "en" to chance("en", 0.7)))
         assertEquals(
             listOf("ru"),
@@ -44,7 +44,7 @@ class LanguagesTest {
             ModelValues.of(SourceSchema(listOf(games)), emptyMap(), chances)[StandardLanguages.KEY],
         )
 
-        val answered = listOf(FacetCorrection("1", StandardLanguages.KEY, "uk", true, null))
+        val answered = listOf(FacetCorrection(1, StandardLanguages.KEY, "uk", true, null))
         val given = mapOf(StandardLanguages.KEY to listOf("ru"))
         assertEquals(
             listOf("uk"),

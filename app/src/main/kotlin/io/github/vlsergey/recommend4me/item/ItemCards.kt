@@ -56,11 +56,11 @@ class ItemCards(
 ) {
 
     /** The predictions of the items [ids] of the [source] as the index of the list of the [type] keeps them. */
-    fun predictions(type: TypeStore, source: String, ids: Collection<String>): Map<String, Predicted> =
+    fun predictions(type: TypeStore, source: String, ids: Collection<Long>): Map<Long, Predicted> =
         indexes.of(type.id).searching { ListPredictions.of(it, source, ids) }
 
     /** The grades of the items [ids] of a source at their [versions]. */
-    fun graded(ratings: List<Rating>, versions: Map<String, String>): Map<String, Graded> =
+    fun graded(ratings: List<Rating>, versions: Map<Long, String>): Map<Long, Graded> =
         ratings
             .groupBy { it.itemId }
             .mapNotNull { (id, list) ->
@@ -330,7 +330,7 @@ class ItemCards(
     private inner class SourceCards(
         private val store: SourceStore,
         private val source: String,
-        private val ids: List<String>,
+        private val ids: List<Long>,
         private val read: CardsRead,
     ) {
         private val type = read.type

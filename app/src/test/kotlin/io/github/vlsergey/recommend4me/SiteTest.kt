@@ -54,7 +54,7 @@ class SiteTest : SiteTestBase() {
 
         val page = pages.getPage("https://$site.example/work/x1?from=list").body!!
         assertEquals(site, page.source)
-        assertEquals("x1", page.itemId)
+        assertEquals(idOf(site, "x1"), page.itemId)
         assertEquals(".tags", page.decor.facets.single().after)
         val item = assertNotNull(page.item)
         // A facet the work has no values of comes too, by the key of its label: the page adds values
@@ -69,7 +69,8 @@ class SiteTest : SiteTestBase() {
         predictionExplained()
         scorersCompared()
         answeredBeforeTraining()
-        seriesAndCards()
+        series()
+        cardsAndLookups()
     }
 
     /** The work's tags worked out from the site's: the untagged work [item] given those of its kind, others offered. */
@@ -87,7 +88,7 @@ class SiteTest : SiteTestBase() {
         assertTrue(given.count { it.corrected == null } >= 3, "given $given")
         // Asked for more: every other value of the facet, the likeliest first — the offered ones
         // among them, beyond them those whose chances are not kept
-        val more = suggestionsApi.getCandidates(site, "x1", "tags", null, null).body!!
+        val more = suggestionsApi.getCandidates(site, idOf(site, "x1"), "tags", null, null).body!!
         val offeredKeys = given.filter { it.offered == true }.map { it.key }.toSet()
         assertTrue(
             more.map { it.key }.containsAll(offeredKeys) && more.size > offeredKeys.size,
@@ -103,7 +104,7 @@ class SiteTest : SiteTestBase() {
     /** The site's tags its word, shown as they are; of the work's, the site's mistaken one the least likely. */
     private fun siteTagsShown() {
         // The site's tags are its word, shown as they are; of the work's, the site's mistaken one is the least likely
-        val w1 = items.getItem(site, "w1").body!!.allFacets
+        val w1 = items.getItem(site, idOf(site, "w1")).body!!.allFacets
         assertEquals(
             setOf("space", "ships", "magic"),
             w1.single { it.facet == "tag" }.propertyValues.map { it.key }.toSet(),
@@ -158,15 +159,27 @@ class SiteTest : SiteTestBase() {
         // The site's word is not corrected
         val refused =
             assertThrows<Refused> {
-                corrections.correctFacet(site, "x1", FacetCorrection(facet = "tag", added = true, key = "space"))
+                corrections.correctFacet(
+                    site,
+                    idOf(site, "x1"),
+                    FacetCorrection(facet = "tag", added = true, key = "space"),
+                )
             }
         assertEquals(Refusal.SITE_FIELD, refused.refusal)
         // The field by the key of its label: the site's tags are a standard facet
         assertEquals(mapOf("field" to "standard:facet.tag"), refused.params)
 
         // The work's tags are: a value given and confirmed is the user's, one taken away is shown so
-        corrections.correctFacet(site, "x1", FacetCorrection(facet = "tags", added = true, key = tag("space")))
-        corrections.correctFacet(site, "x1", FacetCorrection(facet = "tags", added = false, key = tag("ships")))
+        corrections.correctFacet(
+            site,
+            idOf(site, "x1"),
+            FacetCorrection(facet = "tags", added = true, key = tag("space")),
+        )
+        corrections.correctFacet(
+            site,
+            idOf(site, "x1"),
+            FacetCorrection(facet = "tags", added = false, key = tag("ships")),
+        )
         val facets =
             pages
                 .getPage("https://$site.example/work/x1")
@@ -193,10 +206,10 @@ class SiteTest : SiteTestBase() {
         // A tag added by its name finds a tag of that name, any case — the other classes' sites have theirs too, in the
         // one application of the tests; a new one is a new normalized tag of that name
         val before = stores.type("books")!!.tags.ids()
-        corrections.correctFacet(site, "x1", FacetCorrection(facet = "tags", added = true, name = "MAGIC"))
+        corrections.correctFacet(site, idOf(site, "x1"), FacetCorrection(facet = "tags", added = true, name = "MAGIC"))
         assertEquals(before, stores.type("books")!!.tags.ids())
-        corrections.correctFacet(site, "x1", FacetCorrection(facet = "tags", added = true, name = "Космос"))
-        val values = items.getItem(site, "x1").body!!.allFacets.single { it.facet == "tags" }.propertyValues
+        corrections.correctFacet(site, idOf(site, "x1"), FacetCorrection(facet = "tags", added = true, name = "Космос"))
+        val values = items.getItem(site, idOf(site, "x1")).body!!.allFacets.single { it.facet == "tags" }.propertyValues
         // Added — or confirmed, where the model gave it too
         val answeredYes = setOf(FacetValueInfo.Corrected.ADDED, FacetValueInfo.Corrected.CONFIRMED)
         val space = values.single { it.name == "Космос" }.key
@@ -216,7 +229,7 @@ class SiteTest : SiteTestBase() {
             corrections
                 .correctFacet(
                     site,
-                    "x1",
+                    idOf(site, "x1"),
                     FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2")),
                 )
                 .body!!
@@ -229,14 +242,14 @@ class SiteTest : SiteTestBase() {
             corrections
                 .correctFacet(
                     site,
-                    "x1",
+                    idOf(site, "x1"),
                     FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2")),
                 )
                 .body!!
                 .key,
         )
         // As it was: the entry is the other tests'
-        corrections.uncorrectFacet(site, "x1", "tags", made.key)
+        corrections.uncorrectFacet(site, idOf(site, "x1"), "tags", made.key)
         tagCataloguesApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
     }
 
@@ -247,8 +260,8 @@ class SiteTest : SiteTestBase() {
     private fun predictionExplained() {
         // The prediction is told part by part, each part with its features; a page of the site gets the parts alone
         (3..8).forEach { k ->
-            gradesController.rateItem(site, "s$k", RatingRequest(5))
-            gradesController.rateItem(site, "d$k", RatingRequest(1))
+            gradesController.rateItem(site, idOf(site, "s$k"), RatingRequest(5))
+            gradesController.rateItem(site, idOf(site, "d$k"), RatingRequest(1))
         }
         inBackground {
             recommendations.retrain("books")
@@ -262,7 +275,7 @@ class SiteTest : SiteTestBase() {
             worth.full != null && worth.parts.any { it.labelKey == tagLabel && it.metrics != null },
             "parts ${worth.parts.map { it.labelKey }}",
         )
-        val explained = items.getItem(site, "x1").body!!.explanation
+        val explained = items.getItem(site, idOf(site, "x1")).body!!.explanation
         assertTrue(
             explained.any { it.labelKey == tagLabel && it.features.isNotEmpty() },
             "parts ${explained.map { it.labelKey }}",
@@ -279,18 +292,18 @@ class SiteTest : SiteTestBase() {
             explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) },
             "strongest first",
         )
-        val onPage = explanationController.getExplanation(site, "x1").body!!
+        val onPage = explanationController.getExplanation(site, idOf(site, "x1")).body!!
         assertTrue(onPage.isNotEmpty() && onPage.all { it.features.isEmpty() }, "on a page $onPage")
         // What a model that had not seen a graded work says is read apart, fitted in the queue: being
         // fitted, the request answers so and does not wait; an ungraded work has none
         // The works of the background done before: the page asks, and the queue fits it while the page still asks
         background.run()
-        assertEquals(HttpStatus.ACCEPTED, explanationController.getHeldOut(site, "s3").statusCode)
+        assertEquals(HttpStatus.ACCEPTED, explanationController.getHeldOut(site, idOf(site, "s3")).statusCode)
         background.run()
-        val heldOut = explanationController.getHeldOut(site, "s3")
+        val heldOut = explanationController.getHeldOut(site, idOf(site, "s3"))
         assertEquals(HttpStatus.OK, heldOut.statusCode)
         assertTrue(heldOut.body!!.explanation.isNotEmpty())
-        assertEquals(HttpStatus.NO_CONTENT, explanationController.getHeldOut(site, "x1").statusCode)
+        assertEquals(HttpStatus.NO_CONTENT, explanationController.getHeldOut(site, idOf(site, "x1")).statusCode)
     }
 
     /** The scorers compared in the background, a comparison under way answered as it stands. */
@@ -313,8 +326,16 @@ class SiteTest : SiteTestBase() {
     private fun answeredBeforeTraining() {
         // Graded works answered on before the model is trained again: a tag two graded works now
         // have is a feature the kept model does not know, and a work is still told of as it is now
-        corrections.correctFacet(site, "s4", FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"))
-        corrections.correctFacet(site, "s3", FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"))
+        corrections.correctFacet(
+            site,
+            idOf(site, "s4"),
+            FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"),
+        )
+        corrections.correctFacet(
+            site,
+            idOf(site, "s3"),
+            FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"),
+        )
         val graded = pages.getPage("https://$site.example/work/s3").body!!.item!!
         assertTrue(
             graded.facets.single { it.facet == "tags" }.propertyValues.any { it.name == "Совсем новый тег" },
@@ -322,44 +343,51 @@ class SiteTest : SiteTestBase() {
         )
     }
 
-    /**
-     * The other works of the series, the cards of a list with the works' grades, a work found by its title or address,
-     * a page of no work, an error told by its key.
-     */
-    private fun seriesAndCards() {
+    /** The other works of the series: as the works say them, as the series' page lists them. */
+    private fun series() {
+        // A work by the application's number of it, once written
+        fun n(id: String) = idOf(site, id)
         // The other works of the series, with the user's grades
         capture("s1|Space 1|space|Starships cross the galaxy 1|Pilot/Captain|Галактика")
         capture("s2|Space 2|space|Starships cross the galaxy 2|Pilot/Captain|Галактика")
-        gradesController.rateItem(site, "s2", RatingRequest(5))
-        val series = items.getItem(site, "s1").body!!.series!!
+        gradesController.rateItem(site, n("s2"), RatingRequest(5))
+        val series = items.getItem(site, n("s1")).body!!.series!!
         assertEquals("Галактика", series.title)
-        assertEquals(listOf("s1", "s2"), series.works.map { it.work.item })
-        assertEquals(5, series.works.single { it.work.item == "s2" }.work.grade)
-        assertTrue(items.getItem(site, "s1").body!!.related.none { it.role == ApiFacetRole.SERIES })
+        assertEquals(listOf(n("s1"), n("s2")), series.works.map { it.work.item })
+        assertEquals(5, series.works.single { it.work.item == n("s2") }.work.grade)
+        assertTrue(items.getItem(site, n("s1")).body!!.related.none { it.role == ApiFacetRole.SERIES })
 
         // The series' page seen: a work it lists is of it, the works in its order; listed whole, a work not
         // listed is of it no more
         capture("s3|Space 0|space|Starships cross the galaxy 0|Pilot/Captain")
         captures.capturePage(CaptureRequest("https://$site.example/series/галактика", "Галактика|Starships.|s3,s2,s1"))
-        val seen = items.getItem(site, "s3").body!!.series!!
-        assertEquals(listOf("s3", "s2", "s1"), seen.works.map { it.work.item })
+        val seen = items.getItem(site, n("s3")).body!!.series!!
+        assertEquals(listOf(n("s3"), n("s2"), n("s1")), seen.works.map { it.work.item })
         assertEquals(listOf(1, 2, 3), seen.works.map { it.places.single().position })
         assertEquals("Starships.", seen.sites.single().description)
         assertTrue(seen.works.all { it.bySite && !it.said })
         assertTrue(seen.sites.single().seen)
         captures.capturePage(CaptureRequest("https://$site.example/series/галактика", "Галактика|Starships.|s3,s1"))
-        assertEquals(null, items.getItem(site, "s2").body!!.series)
-        assertEquals(listOf("s3", "s1"), items.getItem(site, "s1").body!!.series!!.works.map { it.work.item })
-        assertFalse(items.getItem(site, "s1").body!!.series!!.sites.single().stale)
+        assertEquals(null, items.getItem(site, n("s2")).body!!.series)
+        assertEquals(
+            listOf(n("s3"), n("s1")),
+            items.getItem(site, n("s1")).body!!.series!!.works.map { it.work.item },
+        )
+        assertFalse(items.getItem(site, n("s1")).body!!.series!!.sites.single().stale)
 
         // A work met of the series after its page was read: the page is to be visited again, till it is
         capture("s9|Space 9|space|Starships cross the galaxy 9|Pilot/Captain|Галактика")
-        assertTrue(items.getItem(site, "s9").body!!.series!!.sites.single().stale)
+        assertTrue(items.getItem(site, n("s9")).body!!.series!!.sites.single().stale)
         captures.capturePage(CaptureRequest("https://$site.example/series/галактика", "Галактика|Starships.|s3,s1,s9"))
-        assertFalse(items.getItem(site, "s9").body!!.series!!.sites.single().stale)
+        assertFalse(items.getItem(site, n("s9")).body!!.series!!.sites.single().stale)
+    }
 
+    /**
+     * The cards of a list with the works' grades, a work found by its title or address, a page of no work, an error.
+     */
+    private fun cardsAndLookups() {
         // The cards of a list get the works' grades
-        gradesController.rateItem(site, "s1", RatingRequest(4))
+        gradesController.rateItem(site, idOf(site, "s1"), RatingRequest(4))
         val cards =
             pages
                 .getCards(
@@ -375,11 +403,11 @@ class SiteTest : SiteTestBase() {
         // A work is found by a piece of its title and by the address of its page — of this site's works: the other
         // classes' catalogues have their works of the title too, in the one application of the tests
         assertEquals(
-            listOf("x1"),
+            listOf(idOf(site, "x1")),
             searchController.lookupItems("books", "lost fl", 10).body!!.filter { it.source == site }.map { it.item },
         )
         assertEquals(
-            "d3",
+            idOf(site, "d3"),
             searchController.lookupItems("books", "https://$site.example/work/d3", 10).body!!.first().item,
         )
 
@@ -390,7 +418,11 @@ class SiteTest : SiteTestBase() {
         // An error says what is wrong: by the key of its words, filled with what was asked
         val error =
             assertThrows<Refused> {
-                corrections.correctFacet(site, "x1", FacetCorrection(facet = "nope", added = true, key = "x"))
+                corrections.correctFacet(
+                    site,
+                    idOf(site, "x1"),
+                    FacetCorrection(facet = "nope", added = true, key = "x"),
+                )
             }
         assertEquals("standard:error.noField", error.refusal.key)
         assertEquals(mapOf("field" to "nope"), error.params)
@@ -402,18 +434,18 @@ class SiteTest : SiteTestBase() {
         catalogue()
         capture("n1|New one|space|Starships cross the galaxy, pilots fight in orbit near planets|Pilot/Captain")
         val store = stores.source(site)!!
-        fun encoded() = store.textVectors.halvesOf(listOf("n1"), "words")
+        fun encoded() = store.textVectors.halvesOf(listOf(idOf(site, "n1")), "words")
         // Captured just now: its texts wait for the background
-        assertTrue("n1" !in encoded())
+        assertTrue(idOf(site, "n1") !in encoded())
         // Its page opened: its texts encoded on the spot and kept, it is judged by them at once — on the page as in the
         // work's details, nothing more to come
         fun worked(facets: List<ItemFacet>) = facets.filter { it.facet == "tags" || it.facet == "pairing" }
         val page = pages.getPage("https://$site.example/work/n1")
         assertEquals(HttpStatus.OK, page.statusCode)
-        assertTrue("n1" in encoded())
+        assertTrue(idOf(site, "n1") in encoded())
         val judged = worked(page.body!!.item!!.facets)
         assertTrue(judged.single { it.facet == "tags" }.propertyValues.all { it.chance != null }, "judged $judged")
-        val details = items.getItem(site, "n1")
+        val details = items.getItem(site, idOf(site, "n1"))
         assertEquals(HttpStatus.OK, details.statusCode)
         assertTrue(
             worked(details.body!!.allFacets).single { it.facet == "tags" }.propertyValues.all { it.chance != null }

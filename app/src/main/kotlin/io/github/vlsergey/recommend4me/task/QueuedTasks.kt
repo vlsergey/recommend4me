@@ -212,7 +212,7 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
 
         /** The key of a [work]: what, type, source, facet and item, tab-separated; and of a task over works, which. */
         fun key(work: Task): String =
-            (listOf(work.what.value, work.type, work.source, work.facet, work.item).map { it.orEmpty() } +
+            (listOf(work.what.value, work.type, work.source, work.facet, work.item?.toString()).map { it.orEmpty() } +
                     listOfNotNull(work.works?.value))
                 .joinToString("\t")
 

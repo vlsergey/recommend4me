@@ -29,10 +29,10 @@ class WorkSizes(private val indexes: ListIndexes) {
     fun ofItems(
         type: TypeStore,
         s: SourceStore,
-        ids: List<String>,
-        numbers: Map<String, Map<String, Double>>,
-        fields: Map<String, Map<String, String>>,
-    ): Map<String, ItemSize> {
+        ids: List<Long>,
+        numbers: Map<Long, Map<String, Double>>,
+        fields: Map<Long, Map<String, String>>,
+    ): Map<Long, ItemSize> {
         if (s.wordsKey() == null && s.charsKey() == null) return emptyMap()
         val compared = ComparedValues(s, indexes.of(type.id)).of(ids, emptyList())
         val ratios =
@@ -41,17 +41,17 @@ class WorkSizes(private val indexes: ListIndexes) {
     }
 
     /** The [ratios] of the items [ids] by their places, by the items; none of no model. */
-    private fun ratiosOf(ids: List<String>, ratios: DoubleArray?): Map<String, Double> =
+    private fun ratiosOf(ids: List<Long>, ratios: DoubleArray?): Map<Long, Double> =
         if (ratios == null) emptyMap() else ids.indices.associate { ids[it] to ratios[it] }
 
     /** The sizes of the items [ids] of what is read of them: their numbers, the fields the user wrote, their ratios. */
     private fun sized(
         s: SourceStore,
-        ids: List<String>,
-        numbers: Map<String, Map<String, Double>>,
-        fields: Map<String, Map<String, String>>,
-        ratios: Map<String, Double>,
-    ): Map<String, ItemSize> {
+        ids: List<Long>,
+        numbers: Map<Long, Map<String, Double>>,
+        fields: Map<Long, Map<String, String>>,
+        ratios: Map<Long, Double>,
+    ): Map<Long, ItemSize> {
         val words = s.wordsKey()
         val chars = s.charsKey()
         return ids.associateWith { id ->

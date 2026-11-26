@@ -9,7 +9,7 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 data class Picture(
-    val itemId: String,
+    val itemId: Long,
     val position: Int,
     val url: String,
     val previewFile: String?,
@@ -43,12 +43,14 @@ class PictureRepository(private val db: DSLContext) {
      * its position empty. A picture whose address changed is a new picture — its files and vector are forgotten.
      * Returns the files no longer anyone's.
      */
-    fun sync(itemId: String, urls: List<String?>): List<String> {
+    fun sync(itemId: Long, urls: List<String?>): List<String> {
         val wanted = urls.withIndex().filter { it.value != null }.associate { it.index to it.value!! }
         return db.transactionResult { c ->
                 val tx = DSL.using(c)
                 val known =
-                    tx.selectFrom(PICTURE).where(PICTURE.ITEM_ID.eq(itemId)).fetch().associateBy { it.position!! }
+                    tx.selectFrom(PICTURE).where(PICTURE.ITEM_ID.eq(itemId)).fetch().associateBy {
+                        it.position!!
+                    }
                 val orphans = ArrayList<String>()
                 var vectorsChanged = false
                 wanted.forEach { (position, url) ->
@@ -93,7 +95,7 @@ class PictureRepository(private val db: DSLContext) {
             .also { refreshItemVectorsIfAny(itemId) }
     }
 
-    private fun refreshItemVectorsIfAny(itemId: String) {
+    private fun refreshItemVectorsIfAny(itemId: Long) {
         val encoder =
             db.select(PICTURE.ENCODER)
                 .from(PICTURE)
@@ -113,7 +115,7 @@ class PictureRepository(private val db: DSLContext) {
 
     fun countFailed(): Int = db.fetchCount(PICTURE, PICTURE.ERROR.isNotNull)
 
-    fun saveFiles(itemId: String, position: Int, previewFile: String?, fullFile: String?) {
+    fun saveFiles(itemId: Long, position: Int, previewFile: String?, fullFile: String?) {
         db.update(PICTURE)
             .set(PICTURE.PREVIEW_FILE, previewFile)
             .set(PICTURE.FULL_FILE, fullFile)
@@ -121,19 +123,19 @@ class PictureRepository(private val db: DSLContext) {
             .execute()
     }
 
-    fun find(itemId: String, position: Int, encoder: String?): Picture? =
+    fun find(itemId: Long, position: Int, encoder: String?): Picture? =
         db.selectFrom(PICTURE).where(PICTURE.ITEM_ID.eq(itemId), PICTURE.POSITION.eq(position)).fetchOne {
             pictureOf(it, encoder)
         }
 
-    fun ofItem(itemId: String, encoder: String?): List<Picture> =
+    fun ofItem(itemId: Long, encoder: String?): List<Picture> =
         db.selectFrom(PICTURE).where(PICTURE.ITEM_ID.eq(itemId)).orderBy(PICTURE.POSITION).fetch {
             pictureOf(it, encoder)
         }
 
     /** How many pictures every item of [ids] has, and whether it has a cover. */
-    fun countsOf(ids: Collection<String>): Map<String, Pair<Int, Boolean>> {
-        val out = HashMap<String, Pair<Int, Boolean>>()
+    fun countsOf(ids: Collection<Long>): Map<Long, Pair<Int, Boolean>> {
+        val out = HashMap<Long, Pair<Int, Boolean>>()
         ids.distinct().chunked(PICTURES_BATCH).forEach { chunk ->
             db.select(PICTURE.ITEM_ID, PICTURE.POSITION).from(PICTURE).where(PICTURE.ITEM_ID.`in`(chunk)).fetch { r ->
                 val (n, cover) = out[r.value1()!!] ?: (0 to false)
@@ -144,7 +146,7 @@ class PictureRepository(private val db: DSLContext) {
     }
 
     /** Drops the originals of an item; returns the files to delete. */
-    fun forgetOriginals(itemId: String): List<String> {
+    fun forgetOriginals(itemId: Long): List<String> {
         val files =
             db.select(PICTURE.FULL_FILE)
                 .from(PICTURE)

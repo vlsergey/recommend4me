@@ -27,7 +27,7 @@ class WorkRepository(private val db: DSLContext) {
     val changes = WorkChanges(db)
 
     /** Those of the [items] of the [source] bound to a normalized work, with the version kept of each. */
-    fun boundAmong(source: String, items: Collection<String>): Map<String, String> =
+    fun boundAmong(source: String, items: Collection<Long>): Map<Long, String> =
         items
             .chunked(BATCH)
             .flatMap { chunk ->
@@ -39,14 +39,14 @@ class WorkRepository(private val db: DSLContext) {
             .toMap()
 
     /** Every item of the [source] bound to a normalized work: item to work. */
-    fun allOf(source: String): Map<String, Long> =
+    fun allOf(source: String): Map<Long, Long> =
         db.select(SITE_WORK.ITEM, SITE_WORK.NORMALIZED)
             .from(SITE_WORK)
             .where(SITE_WORK.SOURCE.eq(source))
             .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     /** The normalized works of the [items] of the [source]: item to work. */
-    fun ofItems(source: String, items: Collection<String>): Map<String, Long> =
+    fun ofItems(source: String, items: Collection<Long>): Map<Long, Long> =
         items
             .distinct()
             .chunked(BATCH)
@@ -62,7 +62,7 @@ class WorkRepository(private val db: DSLContext) {
      * The [items] of the [source], none bound yet, with their versions, bound to a normalized work each of its own, at
      * once.
      */
-    fun bindNew(source: String, items: Map<String, String>, now: Instant) = db.transaction { c ->
+    fun bindNew(source: String, items: Map<Long, String>, now: Instant) = db.transaction { c ->
         val tx = DSL.using(c)
         items.forEach { (item, version) ->
             val id =
@@ -157,7 +157,7 @@ class WorkRepository(private val db: DSLContext) {
     }
 
     /** The items of the [source] bound to a work, never measured for the order it is shown by them. */
-    fun unmeasured(source: String): List<String> =
+    fun unmeasured(source: String): List<Long> =
         db.select(SITE_WORK.ITEM)
             .from(SITE_WORK)
             .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.FULLNESS.isNull.or(SITE_WORK.SHOWN_FIRST.isNull))
@@ -167,7 +167,7 @@ class WorkRepository(private val db: DSLContext) {
      * How much each item of the [source] says of its work ([fullness]: item to it) and whether it has a value the work
      * is shown by first (those of the items among [shownFirst]), written where it changed.
      */
-    fun measured(source: String, fullness: Map<String, Long>, shownFirst: Set<String>) {
+    fun measured(source: String, fullness: Map<Long, Long>, shownFirst: Set<Long>) {
         fullness.entries.chunked(BATCH).forEach { chunk ->
             db.batch(
                     chunk.map { (item, value) ->
@@ -208,8 +208,8 @@ class WorkRepository(private val db: DSLContext) {
          * The order a work is shown by its items, of the rows (work, source, item, shown first, fullness): shown first,
          * then the fullest, those alike by their keys; an item never measured last.
          */
-        val SHOWN_ORDER: Comparator<Record5<Long?, String?, String?, Boolean?, Long?>> =
-            compareBy<Record5<Long?, String?, String?, Boolean?, Long?>, Boolean?>(nullsLast(reverseOrder())) {
+        val SHOWN_ORDER: Comparator<Record5<Long?, String?, Long?, Boolean?, Long?>> =
+            compareBy<Record5<Long?, String?, Long?, Boolean?, Long?>, Boolean?>(nullsLast(reverseOrder())) {
                     it.value4()
                 }
                 .thenBy(nullsLast(reverseOrder())) { it.value5() }

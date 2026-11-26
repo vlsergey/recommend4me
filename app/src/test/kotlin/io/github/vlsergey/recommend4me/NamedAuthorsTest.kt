@@ -21,14 +21,14 @@ class NamedAuthorsTest : TwoSitesTestBase() {
         alpha("na3|Dolor|hay|Adipiscing elit||")
         val alpha = stores.source("alpha")!!
         // A dump gave the works their authors by the names alone: Nell of two works, Ned of one
-        alpha.items.setFacet("na1", Books.AUTHOR.key, listOf(FacetValue("name:Nell", "Nell")))
-        alpha.items.setFacet("na2", Books.AUTHOR.key, listOf(FacetValue("name:Nell", "Nell")))
-        alpha.items.setFacet("na3", Books.AUTHOR.key, listOf(FacetValue("name:Ned", "Ned")))
+        alpha.items.setFacet(idOf("alpha", "na1"), Books.AUTHOR.key, listOf(FacetValue("name:Nell", "Nell")))
+        alpha.items.setFacet(idOf("alpha", "na2"), Books.AUTHOR.key, listOf(FacetValue("name:Nell", "Nell")))
+        alpha.items.setFacet(idOf("alpha", "na3"), Books.AUTHOR.key, listOf(FacetValue("name:Ned", "Ned")))
         val dictionary = stores.type("books")!!.authors
         val byName = dictionary.bindingsOf("alpha").getValue("name:Nell")
 
         // The site's page gives the first work her own key; the dump's author of the name is she
-        alpha.items.setFacet("na1", Books.AUTHOR.key, listOf(FacetValue("na-nell", "Nell")))
+        alpha.items.setFacet(idOf("alpha", "na1"), Books.AUTHOR.key, listOf(FacetValue("na-nell", "Nell")))
         val nell = dictionary.bindingsOf("alpha").getValue("na-nell")
         assertNotEquals(byName, nell)
         assertEquals(nell, dictionary.bindingsOf("alpha")["name:Nell"])
@@ -45,15 +45,18 @@ class NamedAuthorsTest : TwoSitesTestBase() {
         alpha("nb1|Lorem|hay|Lorem ipsum dolor||")
         alpha("nb2|Ipsum|hay|Sit amet consectetur||")
         val alpha = stores.source("alpha")!!
-        alpha.items.setFacet("nb1", Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
-        alpha.items.setFacet("nb2", Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
+        alpha.items.setFacet(idOf("alpha", "nb1"), Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
+        alpha.items.setFacet(idOf("alpha", "nb2"), Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
         val dictionary = stores.type("books")!!.authors
 
         // The site's page of the first work: its author another, Bea its beta
-        alpha.items.setFacet("nb1", Books.AUTHOR.key, listOf(FacetValue("nb-amy", "Amy")))
-        alpha.items.setFacet("nb1", "beta", listOf(FacetValue("nb-bea", "Bea")))
+        alpha.items.setFacet(idOf("alpha", "nb1"), Books.AUTHOR.key, listOf(FacetValue("nb-amy", "Amy")))
+        alpha.items.setFacet(idOf("alpha", "nb1"), "beta", listOf(FacetValue("nb-bea", "Bea")))
         val bea = dictionary.bindingsOf("alpha").getValue("nb-bea")
         assertEquals(bea, dictionary.bindingsOf("alpha")["name:Bea"])
-        assertEquals(listOf("nb-amy"), alpha.items.facetsOf(listOf("nb1")).getValue("nb1")[Books.AUTHOR.key])
+        assertEquals(
+            listOf("nb-amy"),
+            alpha.items.facetsOf(listOf(idOf("alpha", "nb1"))).getValue(idOf("alpha", "nb1"))[Books.AUTHOR.key],
+        )
     }
 }

@@ -29,6 +29,8 @@ class TextVectorRepositoryTest {
                 .set(ITEM.UPDATED_AT, now)
                 .set(ITEM.FIRST_SEEN_AT, now)
                 .execute()
+            // The application's number of the work: what every store names it by
+            val p1 = db.dsl.fetchValue("SELECT internal_id FROM item WHERE site_id = 'p1'") as Long
             val vectors = TextVectorRepository(db.dsl)
             val threads = 2
             val pool = Executors.newFixedThreadPool(threads)
@@ -36,13 +38,13 @@ class TextVectorRepositoryTest {
                 // Every round starts from no row, and both threads are let go at once: the MERGEs of a
                 // key not yet stored are what raced
                 repeat(ROUNDS) { round ->
-                    vectors.delete("p1", "annotation")
+                    vectors.delete(p1, "annotation")
                     val start = CyclicBarrier(threads)
                     val saves =
                         (0 until threads).map { t ->
                             pool.submit {
                                 start.await()
-                                vectors.save("p1", "annotation", "e", "h$round-$t", FloatArray(4) { t.toFloat() })
+                                vectors.save(p1, "annotation", "e", "h$round-$t", FloatArray(4) { t.toFloat() })
                             }
                         }
                     saves.forEach { it.get(10, TimeUnit.SECONDS) }
@@ -51,7 +53,7 @@ class TextVectorRepositoryTest {
                 pool.shutdownNow()
             }
             assertEquals(1, db.dsl.fetchCount(TEXT_VECTOR))
-            assertEquals(setOf("p1"), vectors.hashesOf(listOf("p1", "p2"), "e").keys)
+            assertEquals(setOf(p1), vectors.hashesOf(listOf(p1, p1 + 1), "e").keys)
         }
     }
 

@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service
  * The chances of works, made in memory when they are read ([FacetSuggestions.chances]): item to facet to value to
  * chance.
  */
-typealias WorkChances = Map<String, Map<String, Map<String, Chance>>>
+typealias WorkChances = Map<Long, Map<String, Map<String, Chance>>>
 
 /**
  * WHAT THE MODEL SAYS OF THE VALUES OF FACETS, by the suggester plugin, for every facet a source marks
@@ -70,13 +70,13 @@ internal constructor(
     /** The chances of the works [ids] made now down the chain ([FacetChain.chances]). */
     fun chances(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         through: String? = null,
         laps: Laps = Laps(),
     ): WorkChances = chain.chances(store, ids, through, laps)
 
     /** The model's chance of one value for every work of [ids] ([OneFacetModel.chancesOfValue]). */
-    fun chancesOfValue(store: SourceStore, ids: Collection<String>, facet: String, key: String): Map<String, Double> =
+    fun chancesOfValue(store: SourceStore, ids: Collection<Long>, facet: String, key: String): Map<Long, Double> =
         ownModel.chancesOfValue(store, ids, facet, key)
 
     /** The model's weight of every value of the [facet] over the works as a whole ([OneFacetModel.weights]). */
@@ -88,7 +88,7 @@ internal constructor(
      */
     fun chancesOf(
         store: SourceStore,
-        ids: Collection<String>,
+        ids: Collection<Long>,
         wanted: Collection<String>,
         laps: Laps = Laps(),
         known: EveryItemFacets? = null,
@@ -97,7 +97,7 @@ internal constructor(
     /** The values to suggest for an item ([WorkCandidates.ofItem]). */
     fun ofItem(
         store: SourceStore,
-        itemId: String,
+        itemId: Long,
         chances: Map<String, Map<String, Chance>>? = null,
     ): List<ItemFacetSuggestions> = candidates.ofItem(store, itemId, chances)
 }
