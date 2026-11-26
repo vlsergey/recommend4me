@@ -29,7 +29,8 @@ class V41__item_data_moved_by_number : BaseJavaMigration() {
         val marked = c.number("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$REKEYED'") > 0
         check(works == 0L || marked) {
             "the other stores of the works of this file are not named by the works' numbers yet: " +
-                "the tool of the move (tools/rekey) is run first, the application stopped"
+                "the tool of the move (tools/rekey, in the history of the repository: run 2026-11-26 and removed) " +
+                "is run first, the application stopped"
         }
         c.createStatement().use {
             it.execute("CREATE TABLE IF NOT EXISTS $MOVED(table_name CHARACTER VARYING(100) PRIMARY KEY, upto BIGINT)")
