@@ -31,6 +31,15 @@ object TextLanguages {
     private val BY_THREE: Map<String, String> = Locale.getISOLanguages().associateBy { Locale.of(it).isO3Language }
 
     /**
+     * The language the [text] of the [field] of the [doc] is stemmed as: the one its field says it is written in
+     * ([SearchField.language]: the site's, the user's or the model's word) when a stemmer is known of it — nothing told
+     * of the text then —; else told of the text itself ([of]).
+     */
+    fun of(text: String, field: SearchField, doc: SearchDocument): String =
+        field.language?.takeIf { Stemmers.of(it) != Stemmers.DEFAULT || it == Stemmers.DEFAULT }?.let(Stemmers::of)
+            ?: of(text, doc.language)
+
+    /**
      * The language the [text] is stemmed as: its own when long enough and a stemmer is known of it, else the [work]'s
      * ([Stemmers.of]).
      */

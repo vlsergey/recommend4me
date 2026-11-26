@@ -12,15 +12,12 @@ import org.apache.lucene.search.PhraseQuery
 import org.apache.lucene.search.PrefixQuery
 import org.apache.lucene.search.Query
 import org.apache.lucene.search.TermQuery
-import org.apache.lucene.search.uhighlight.Passage
-import org.apache.lucene.search.uhighlight.PassageFormatter
-import org.apache.lucene.search.uhighlight.UnifiedHighlighter
 
 /**
  * THE SEARCH BY WORDS: the words of the line found — as words, in any of their forms, or as the beginnings of words —
  * in the title, the facets and the texts, a field weighing what a match there says; with a bonus when a naming field
  * (the title, the author) holds the whole line. A name the encoder never saw — a developer, a character — is found this
- * way. And the piece of a work's text where the words are found, the words marked.
+ * way. The piece of a work's text where the words are found is [WorkSnippet]'s.
  */
 internal object WordSearch {
 
@@ -116,7 +113,7 @@ internal object WordSearch {
         return parts.map { Word(it, asTyped) }
     }
 
-    private fun wordQuery(field: String, word: Word): Query {
+    fun wordQuery(field: String, word: Word): Query {
         val exact = TermQuery(Term(field, word.token))
         return if (!word.prefix) exact
         else
@@ -146,72 +143,6 @@ internal object WordSearch {
     }
 
     /**
-     * Marks the words of a query in a text given to it, without the index — the texts are not stored in it — the text
-     * read as its [language], as it was put in the index.
-     */
-    private fun highlighter(language: String) =
-        UnifiedHighlighter.builderWithoutSearcher(Stemmers.analyzer(language))
-            .withFormatter(SnippetFormatter())
-            .withMaxNoHighlightPassages(0)
-            // Not only the first 10 000 characters, the default: a changelog is longer
-            .withMaxLength(MAX_TEXT)
-            .build()
-
-    /**
-     * The piece of the item's text where the [terms] are found, with the words found marked: where they all stand
-     * together, from the weightiest field that has them so — the place that made the item a match — or else from the
-     * weightiest field that holds one; null when none is found. The third value: whether the words all stand together
-     * there. The [terms] are of the [language]. [stemmed]: the languages the document's texts were stemmed as in the
-     * index ([LuceneIndex.keptLanguages]) — of one alone, every text of it is read as that one, none told again.
-     */
-    fun snippet(
-        terms: List<String>,
-        language: String,
-        doc: SearchDocument,
-        stemmed: List<String>? = null,
-    ): Triple<SearchField, Snippet, Boolean>? {
-        val parts = terms.flatMap { words(it, language) }.distinct()
-        if (parts.isEmpty()) return null
-        val contents =
-            doc.fields
-                .sortedByDescending { it.weight }
-                .mapNotNull { field ->
-                    field.values
-                        .filter { it.isNotBlank() }
-                        .takeIf { it.isNotEmpty() }
-                        ?.let { field to it.joinToString(if (field.list) ", " else "\n\n") }
-                }
-        val all = terms.flatMap { LuceneIndex.tokens(it, language) }.distinct()
-        // A text read as it was put in the index: as its own language, or the work's — of a document stemmed as one
-        // language, that one; else told once of a field, the words together and apart looked for in it as that one
-        val languages = HashMap<String, String>()
-        fun marked(field: SearchField, content: String, name: String, query: Query) =
-            highlighter(
-                    stemmed?.singleOrNull() ?: languages.getOrPut(field.key) { TextLanguages.of(content, doc.language) }
-                )
-                .highlightWithoutSearcher(name, query, content, 1) as Snippet?
-        val together =
-            if (all.size <= 1) null
-            else
-                contents.firstNotNullOfOrNull { (field, content) ->
-                    val name = LuceneIndex.fieldName(field)
-                    val near = PhraseQuery.Builder().setSlop(NEAR).apply { all.forEach { add(Term(name, it)) } }.build()
-                    marked(field, content, name, near)?.let { Triple(field, it, true) }
-                }
-        return together
-            ?: contents.firstNotNullOfOrNull { (field, content) ->
-                val name = LuceneIndex.fieldName(field)
-                val query =
-                    BooleanQuery.Builder()
-                        .apply { parts.forEach { part -> add(wordQuery(name, part), BooleanClause.Occur.SHOULD) } }
-                        .build()
-                marked(field, content, name, query)?.let { Triple(field, it, all.size <= 1) }
-            }
-    }
-
-    private const val MAX_TEXT = 1_000_000
-
-    /**
      * The whole line in a naming field: what is looked for, ahead of any likeness by meaning — WORD_WEIGHT · (1 +
      * NAME_BONUS) = 1.8 beats MAX_CLOSENESS = 1.5 ([LuceneSearch]). At 1.0 a developer's name, a word the encoder never
      * saw, lost to the items its vector happened to lie near.
@@ -227,7 +158,7 @@ internal object WordSearch {
     const val NAME_PART = "name"
 
     /** How far apart, in words, the words of a query still stand together. */
-    private const val NEAR = 6
+    const val NEAR = 6
 
     /** What the words standing together weigh against the words found apart. */
     private const val TOGETHER = 2f
@@ -240,47 +171,4 @@ internal object WordSearch {
 
     /** Of a query of more than two words, every third may be missing. */
     private const val EVERY_THIRD = 3
-}
-
-/** A piece of a found text, and where in it the words of the query stand (start, end). */
-class Snippet(val text: String, val highlights: List<Pair<Int, Int>>)
-
-/**
- * The best passage of a text as a [Snippet]: the passage — a sentence — cut to its part around the first word found
- * when it is long, the words found as ranges in it; null without a word found.
- */
-private class SnippetFormatter : PassageFormatter() {
-    override fun format(passages: Array<Passage>, content: String): Any? {
-        val passage = passages.firstOrNull { it.numMatches > 0 } ?: return null
-        var from = passage.startOffset
-        var to = passage.endOffset
-        val first = passage.matchStarts[0]
-        if (to - from > MAX) {
-            from = maxOf(from, first - MAX / BEFORE_FIRST)
-            to = minOf(to, from + MAX)
-        }
-        // A word boundary, not the middle of a word
-        while (from > passage.startOffset && !content[from - 1].isWhitespace()) from--
-        val raw = content.substring(from, to)
-        val base = from + (raw.length - raw.trimStart().length)
-        val text = raw.trim()
-        val prefix = if (from > passage.startOffset) "…" else ""
-        val suffix = if (to < passage.endOffset) "…" else ""
-        val highlights =
-            (0 until passage.numMatches)
-                .map { passage.matchStarts[it] - base to passage.matchEnds[it] - base }
-                .filter { (start, end) -> start >= 0 && end <= text.length }
-                // A word found both as a word and as the beginning of one is one word
-                .distinct()
-                .map { (start, end) -> start + prefix.length to end + prefix.length }
-        return Snippet(prefix + text + suffix, highlights)
-    }
-
-    companion object {
-        /** How long a piece of text is shown at most, around the first word found. */
-        private const val MAX = 220
-
-        /** Of a long piece, a third of it is shown before the first word found: [MAX] divided by this. */
-        private const val BEFORE_FIRST = 3
-    }
 }

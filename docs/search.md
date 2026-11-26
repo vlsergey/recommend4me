@@ -9,7 +9,11 @@ what is found and the place shown are the application's (`app/.../meaning`, `app
 One Lucene index of a content type (`types/<type>/search-index/`, `LuceneIndex`): a document of every item, a field of
 every text and value of the item (`SearchDocuments`, `WorkTexts`), its weight in the field's name
 (`<marks>.<weight in hundredths>.<key>`). Every text is stemmed once, in its own language (`TextLanguages`,
-`Stemmers`), every word at its place — no stop word dropped, a function word may be of a name.
+`Stemmers`), every word at its place — no stop word dropped, a function word may be of a name. A text's language is the
+one its work's values say (`SearchField.language`: the description's language of a text, the work's one language of a
+chapter — of the index's documents the site's and the user's word, of a card's the model's too, more likely than not as
+the list keeps it); of none said, a long text tells its own of its first 1 000 characters, a short one is the
+description's.
 
 The index keeps the fingerprint of what every item's document was made of and is written again only of the items whose
 fingerprint changed (`DocumentPrints`, `IndexKept`, `SourceCatchUp`); the documents are brought in by the stage of the
@@ -78,7 +82,11 @@ centre they were made by kept with the part (`part.full_text`) and with the text
    every way of finding at the top; of none learnt, the reranker's order.
 7. **What is shown** (`Search.matches`): where the words stand together; else the best span of the pieces, from the
    beginning of the word of its first piece to the end of the word of its last, the words of the pieces that matched
-   the line's best marked (`PlaceShown`); else the passage nearest by meaning, whole.
+   the line's best marked (`PlaceShown`); else the passage nearest by meaning, whole. The documents of the cards are
+   read once (`SearchDocuments.shown`), the values the list keeps the model gave them among their values — no model
+   run —, of their chapters those of the passage nearest and of the place of the pieces alone, every other named; a
+   chapter named is read only where the index holds the line's words of the work in its chapters, eight at a time till
+   one has them (`WorkSnippet`, `SearchContext.texts`), and for words apart only of a work found by no passage.
 
 ## The pieces
 

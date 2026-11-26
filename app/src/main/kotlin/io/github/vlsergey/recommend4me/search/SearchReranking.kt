@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.encoder.TextReranker
 import io.github.vlsergey.recommend4me.fulltext.NearWindow
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 import org.slf4j.LoggerFactory
@@ -22,7 +21,6 @@ private val log = LoggerFactory.getLogger(SearchReranking::class.java)
  */
 @Component
 class SearchReranking(
-    private val stores: Stores,
     private val plugins: Plugins,
     private val documents: SearchDocuments,
     private val windowTexts: WindowTexts,
@@ -53,7 +51,7 @@ class SearchReranking(
                 .toMap()
         val kept = type.searchScores.of(reranker.id, found.line).filter { (key, s) -> printed[key] == s.textsHash }
         val todo = keys.filter { it !in kept }
-        val readings = readingsOf(todo, ofWindows, found)
+        val readings = readingsOf(type, todo, ofWindows, found)
         val scored =
             scoresOf(reranker, found.line, readings, printed).also {
                 type.searchScores.save(reranker.id, found.line, it)
@@ -82,21 +80,23 @@ class SearchReranking(
 
     /**
      * Every text each work of [todo] is read by: its windows of [ofWindows], else its document as the reranker reads it
-     * ([readable]); none of a work whose document is gone.
+     * ([readable]) — the values the list keeps the model gave it, of its chapters that of its passage nearest alone
+     * ([SearchDocuments.shown]); none of a work whose document is gone.
      */
     private fun readingsOf(
+        type: TypeStore,
         todo: List<ItemKey>,
         ofWindows: Map<ItemKey, List<String>>,
         found: SearchResult,
     ): Map<ItemKey, List<String>> {
-        val read =
-            todo
-                .filter { it !in ofWindows }
-                .groupBy { it.source }
-                .flatMap { (source, list) ->
-                    stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
-                }
-                .associate { it.key to it.value }
+        // Of the chapters, that of the passage nearest alone: what is read of them
+        val unread = todo.filter { it !in ofWindows }
+        val chapters = unread.associateWith { key ->
+            listOfNotNull(found.nearest[key]?.field)
+                .filter { it.startsWith(SearchDocuments.PART) }
+                .mapTo(HashSet()) { it.removePrefix(SearchDocuments.PART) }
+        }
+        val read = documents.shown(type, unread, chapters)
         return todo.associateWith { key ->
             ofWindows[key] ?: read[key]?.let { listOf(readable(it, found.nearest[key])) }.orEmpty()
         }

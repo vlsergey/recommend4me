@@ -38,13 +38,15 @@ class Search(
     /**
      * What the plugin is given to search the [type] with: the items nearest by meaning to the line's vector moved by
      * the correction [shift] learnt, if any, by the full-text vectors of the windows ([FullTextNearest]); the windows
-     * it found kept for the reranker of this search ([windows]). The documents as the index has them — the site's and
-     * the user's values, none of the models' ([SearchDocuments.documents]) —, those [read] already given as read.
+     * it found kept for the reranker of this search ([windows]). The documents as a card reads them
+     * ([SearchDocuments.shown]), of every work the [chapters] named read with it, those [read] already given as read;
+     * the text of any other chapter read when the plugin asks for it.
      */
     private inner class Context(
         private val type: TypeStore,
         private val shift: QueryShift? = null,
         private val read: Map<ItemKey, SearchDocument> = emptyMap(),
+        private val chapters: Map<ItemKey, Set<String>> = emptyMap(),
     ) : SearchContext {
         /** The windows nearest to the line the plugin asked for, the nearest first. */
         var windows: List<NearWindow> = emptyList()
@@ -59,17 +61,12 @@ class Search(
                 .orEmpty()
 
         override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
-            read.filterKeys { it in keys } +
-                keys
-                    .filter { it !in read }
-                    .groupBy { it.source }
-                    .flatMap { (source, list) ->
-                        stores
-                            .source(source)
-                            ?.let { documents.documents(it, list.map { k -> k.id }, models = false).entries }
-                            .orEmpty()
-                    }
-                    .associate { it.key to it.value }
+            read.filterKeys { it in keys } + documents.shown(type, keys.filter { it !in read }, chapters)
+
+        override fun texts(key: ItemKey, fields: Collection<String>): Map<String, String> {
+            val parts = fields.filter { it.startsWith(PART) }.map { it.removePrefix(PART) }
+            return type.source(key.source)?.parts?.textsOf(key.id, parts).orEmpty().mapKeys { PART + it.key }
+        }
     }
 
     /**
@@ -115,9 +112,15 @@ class Search(
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return emptyMap()
-        // The documents of the works read once, for the plugin and for the places of the pieces alike
-        val docs = Context(type).documents(keys)
-        val found = provider.matches(typeId, result, keys, Context(type, read = docs))
+        // The documents of the works read once, for the plugin and for the places of the pieces alike: of their
+        // chapters, those of the passage nearest and of the place of the pieces alone
+        val chapters = keys.associateWith { key ->
+            listOfNotNull(result.nearest[key]?.field, result.places[key]?.field)
+                .filter { it.startsWith(PART) }
+                .mapTo(HashSet()) { it.removePrefix(PART) }
+        }
+        val docs = documents.shown(type, keys, chapters)
+        val found = provider.matches(typeId, result, keys, Context(type, read = docs, chapters = chapters))
         // Of a work whose words stand together, they are shown; else its place by the pieces, when it has one
         val placed = keys.filter { it in result.places && found[it]?.byMeaning != false }
         return found + placesShown(result, placed, docs)

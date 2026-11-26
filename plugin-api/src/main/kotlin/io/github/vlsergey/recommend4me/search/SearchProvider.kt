@@ -42,6 +42,17 @@ class SearchField(
      * is of these alone, not searched.
      */
     val counted: Boolean = false,
+    /**
+     * The language its text is written in (ISO 639-1), as the site, the user or the model says it — the model's when
+     * more likely than not; null when none says: a long text then tells its own, a short one is read as the document's
+     * [SearchDocument.language].
+     */
+    val language: String? = null,
+    /**
+     * Whether its text came with the document: a chapter of a document of a card is named alone — a work's chapters are
+     * megabytes, a card shows one place of one — and read when wanted ([SearchContext.texts]).
+     */
+    val read: Boolean = true,
 ) {
     /** The field's values as one text: what its passages' characters count in. */
     val text: String
@@ -117,8 +128,13 @@ interface SearchContext {
     /**
      * The documents of the items, read now: their fields alone, no passage — a passage of a text is cut by the
      * encoder's tokens, what a page of matches has no time for; the passage nearest by meaning comes with the result.
+     * Of the chapters, those of the passage nearest and of the place of the line found read with them, the others named
+     * alone ([SearchField.read]).
      */
     fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument>
+
+    /** The texts of the fields [fields] of the item [key] its document named alone, by field; one of none left out. */
+    fun texts(key: ItemKey, fields: Collection<String>): Map<String, String>
 }
 
 /**

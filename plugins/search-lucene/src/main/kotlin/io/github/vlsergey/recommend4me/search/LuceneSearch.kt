@@ -4,6 +4,10 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import java.nio.file.Path
 import org.apache.lucene.analysis.CharArraySet
 import org.apache.lucene.analysis.en.EnglishAnalyzer
+import org.apache.lucene.index.Term
+import org.apache.lucene.search.BooleanClause
+import org.apache.lucene.search.BooleanQuery
+import org.apache.lucene.search.TermQuery
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(LuceneSearch::class.java)
@@ -98,23 +102,38 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         keys: Collection<ItemKey>,
         context: SearchContext,
     ): Map<ItemKey, SearchMatch> {
-        val state = result.state as? State
-        val documents = state?.let { context.documents(keys) }.orEmpty()
-        val stemmed =
-            if (state == null) emptyMap()
-            else indexes.of(contentType).search { IndexKept.languages(it, keys.map { k -> k.toString() }) }
+        val state = result.state as? State ?: return emptyMap()
+        val documents = context.documents(keys)
         val byWords = HashMap<ItemKey, SearchMatch>()
         val byMeaning = HashMap<ItemKey, SearchMatch>()
-        if (state != null)
+        indexes.of(contentType).search { searcher ->
+            val stemmed = IndexKept.languages(searcher, keys.map { k -> k.toString() })
             keys.forEach { key ->
                 val doc = documents[key] ?: return@forEach
-                val words = WordSearch.snippet(state.terms, state.language, doc, stemmed[key.toString()])
+                // The chapters the document named alone: looked into where the index holds the words of the item
+                val unread =
+                    Unread(
+                        holds = { name, query ->
+                            val ofItem =
+                                BooleanQuery.Builder()
+                                    .add(TermQuery(Term(LuceneIndex.ID, key.toString())), BooleanClause.Occur.FILTER)
+                                    .add(query, BooleanClause.Occur.MUST)
+                                    .build()
+                            searcher.count(ofItem) > 0
+                        },
+                        texts = { fields -> context.texts(key, fields.map { it.key }) },
+                    )
+                val passage = MeaningSearch.passageOf(state.nearest[key], doc)
+                val words =
+                    WorkSnippet(state.terms, state.language, doc, stemmed[key.toString()], unread, passage == null)
+                        .found()
                 if (words != null)
                     byWords[key] = SearchMatch(words.first.key, false, words.second.text, words.second.highlights)
                 // The words apart did not make the item a match, its meaning did: the passage nearest by meaning is
                 // shown
-                if (words?.third != true) MeaningSearch.passageOf(state.nearest[key], doc)?.let { byMeaning[key] = it }
+                if (words?.third != true && passage != null) byMeaning[key] = passage
             }
+        }
         return byWords + byMeaning
     }
 

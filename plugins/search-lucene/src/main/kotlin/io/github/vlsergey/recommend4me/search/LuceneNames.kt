@@ -75,7 +75,7 @@ internal class LuceneNames(private val indexes: LuceneIndexes) : NameCounting {
                     .filter { it.isNotBlank() }
                     .mapNotNull { text ->
                         val ranges =
-                            foundIn(text, document, matcher)
+                            foundIn(text, field, document, matcher)
                                 .filter { it.value in wanted }
                                 .map { it.first.start until it.last.end }
                         if (ranges.isEmpty()) null else NamePlace(field.key, text, ranges)
@@ -101,7 +101,7 @@ internal class LuceneNames(private val indexes: LuceneIndexes) : NameCounting {
                     .filter { it.isNotBlank() }
                     .mapNotNull { text ->
                         // A paragraph ends at a line break, as the marks of the index have it
-                        val found = foundIn(text, document, matcher).filter { it.value == a || it.value == b }
+                        val found = foundIn(text, field, document, matcher).filter { it.value == a || it.value == b }
                         val breaks = text.indices.filter { text[it] == '\n' }
                         fun paragraphOf(at: Int) = breaks.binarySearch(at).let { if (it >= 0) it else -it - 1 }
                         val ranges =
@@ -121,9 +121,14 @@ internal class LuceneNames(private val indexes: LuceneIndexes) : NameCounting {
          * The names of a [text] of the document found again, read as it was put in the index: its words with their
          * characters.
          */
-        private fun foundIn(text: String, document: SearchDocument, matcher: NameMatcher): List<Found> {
+        private fun foundIn(
+            text: String,
+            field: SearchField,
+            document: SearchDocument,
+            matcher: NameMatcher,
+        ): List<Found> {
             val words = ArrayList<NamedWord>()
-            Stemmers.analyzer(TextLanguages.of(text, document.language)).tokenStream("", text).use { stream ->
+            Stemmers.analyzer(TextLanguages.of(text, field, document)).tokenStream("", text).use { stream ->
                 val term = stream.addAttribute(CharTermAttribute::class.java)
                 val step = stream.addAttribute(PositionIncrementAttribute::class.java)
                 val payload = stream.addAttribute(PayloadAttribute::class.java)

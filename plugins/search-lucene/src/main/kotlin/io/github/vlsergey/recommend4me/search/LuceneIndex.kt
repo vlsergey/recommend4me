@@ -234,7 +234,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         /** The languages the own words of [doc] are stemmed as ([TextLanguages]), in order. */
         fun languagesOf(doc: SearchDocument): List<String> =
             doc.fields
-                .flatMap { f -> f.values.filter { it.isNotBlank() }.map { TextLanguages.of(it, doc.language) } }
+                .flatMap { f -> f.values.filter { it.isNotBlank() }.map { TextLanguages.of(it, f, doc) } }
                 .distinct()
                 .sorted()
 
@@ -313,7 +313,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
                         field.values
                             .filter { it.isNotBlank() }
                             .forEach { value ->
-                                val language = TextLanguages.of(value, doc.language).also { used += it }
+                                val language = TextLanguages.of(value, field, doc).also { used += it }
                                 val stream =
                                     stemmers
                                         .getOrPut(language) { Stemmers.analyzer(language, reuse = false) }

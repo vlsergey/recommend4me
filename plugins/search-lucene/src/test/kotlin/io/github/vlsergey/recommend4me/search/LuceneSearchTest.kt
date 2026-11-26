@@ -32,6 +32,8 @@ class LuceneSearchTest {
 
             override fun documents(keys: Collection<ItemKey>) =
                 documents.filter { it.key in keys }.associateBy { it.key }
+
+            override fun texts(key: ItemKey, fields: Collection<String>): Map<String, String> = emptyMap()
         }
 
     @Test
@@ -213,6 +215,44 @@ class LuceneSearchTest {
             assertEquals(listOf(listOf(added.key)), asked.map { it.toList() })
             search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", "9")))
             assertTrue(search.search("books", "lighthouse", "en", context).keys.isEmpty())
+        }
+    }
+
+    @Test
+    fun `a chapter a card names alone is read only where the index holds the line's words`() {
+        val key = ItemKey("test", "6")
+        val chapters =
+            mapOf(
+                "part:1" to "Дождь шёл всю ночь, и никто не выходил из дома до самого утра.",
+                "part:2" to "Корабль шёл к берегу. Старый смотритель маяка зажёг огонь над тёмной бухтой.",
+            )
+        val title = SearchField("title", "Название", 1.0f, listOf("Северный берег"), naming = true)
+        fun chapter(field: String, values: List<String>) =
+            SearchField(field, field, 0.5f, values, group = "parts", counted = true, read = values.isNotEmpty())
+        val whole = SearchDocument(key, listOf(title) + chapters.map { (f, t) -> chapter(f, listOf(t)) }, "ru")
+        // As a card has it: the chapters named alone
+        val card = SearchDocument(key, listOf(title) + chapters.keys.map { chapter(it, emptyList()) }, "ru")
+        val asked = ArrayList<String>()
+        val ofCard =
+            object : SearchContext by context {
+                override fun documents(keys: Collection<ItemKey>) = mapOf(key to card).filterKeys { it in keys }
+
+                override fun texts(key: ItemKey, fields: Collection<String>): Map<String, String> {
+                    asked += fields
+                    return chapters.filterKeys { it in fields }
+                }
+            }
+        LuceneSearch(Files.createTempDirectory("search")).use { search ->
+            search.rebuild("books", sequenceOf(whole))
+            val inTitle = search.search("books", "северный берег", "ru", ofCard)
+            assertEquals("title", search.matches("books", inTitle, inTitle.keys, ofCard).getValue(key).field)
+            assertTrue(asked.isEmpty(), "no chapter read of a work whose words are in its title: $asked")
+
+            val inChapter = search.search("books", "смотритель маяка", "ru", ofCard)
+            val shown = search.matches("books", inChapter, inChapter.keys, ofCard).getValue(key)
+            assertEquals("part:2", shown.field)
+            assertTrue("маяка" in shown.text, shown.text)
+            assertTrue(asked.isNotEmpty(), "the chapters read where the index holds the words")
         }
     }
 }
