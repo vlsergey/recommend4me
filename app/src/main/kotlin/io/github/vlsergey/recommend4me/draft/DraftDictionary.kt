@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.draft
 
+import io.github.vlsergey.recommend4me.database.WholeKeys
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_ENTRY
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_PARENT
@@ -35,7 +36,7 @@ class DraftDictionary(private val db: DSLContext) {
         keys.distinct().chunked(BATCH).forEach { chunk ->
             db.select(FANDOM_SITE.SITE_KEY, FANDOM_SITE.FANDOM)
                 .from(FANDOM_SITE)
-                .where(FANDOM_SITE.SOURCE.eq(source), FANDOM_SITE.SITE_KEY.`in`(chunk))
+                .where(WholeKeys.of(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY, source, chunk))
                 .fetch { bound[it.value1()!!] = it.value2()!! }
         }
         val above = ancestors(bound.values.toSet())

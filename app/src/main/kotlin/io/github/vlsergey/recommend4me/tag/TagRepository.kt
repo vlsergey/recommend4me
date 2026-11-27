@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.database.WholeKeys
 import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_TAG
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_TAG
@@ -86,7 +87,7 @@ class TagRepository(private val db: DSLContext) {
             .flatMap { chunk ->
                 db.select(SITE_TAG.TAG, SITE_TAG.NORMALIZED)
                     .from(SITE_TAG)
-                    .where(SITE_TAG.SOURCE.eq(source), SITE_TAG.TAG.`in`(chunk))
+                    .where(WholeKeys.of(SITE_TAG.SOURCE, SITE_TAG.TAG, source, chunk))
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()

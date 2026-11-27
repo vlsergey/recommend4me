@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.author
 
+import io.github.vlsergey.recommend4me.database.WholeKeys
 import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR_DISTINCT
@@ -75,7 +76,7 @@ class AuthorRepository(
             .flatMap { chunk ->
                 db.select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED)
                     .from(SITE_AUTHOR)
-                    .where(DSL.row(SITE_AUTHOR.SOURCE, SITE_AUTHOR.AUTHOR).`in`(chunk.map { DSL.row(source, it) }))
+                    .where(WholeKeys.of(SITE_AUTHOR.SOURCE, SITE_AUTHOR.AUTHOR, source, chunk))
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()

@@ -41,10 +41,15 @@ class MarkLikenessRepository(private val db: DSLContext) {
                     .forEach { ids ->
                         db.select(MARK_LIKENESS_STRENGTH.ITEM_ID, MARK_LIKENESS_STRENGTH.STRENGTH)
                             .from(MARK_LIKENESS_STRENGTH)
+                            // The key asked whole, of its three columns: of the first two and a list, H2 walks
+                            // every row of the source ([io.github.vlsergey.recommend4me.database.WholeKeys])
                             .where(
-                                MARK_LIKENESS_STRENGTH.MARK_KIND.eq(kind.name),
-                                MARK_LIKENESS_STRENGTH.SOURCE.eq(source),
-                                MARK_LIKENESS_STRENGTH.ITEM_ID.`in`(ids),
+                                DSL.row(
+                                        MARK_LIKENESS_STRENGTH.MARK_KIND,
+                                        MARK_LIKENESS_STRENGTH.SOURCE,
+                                        MARK_LIKENESS_STRENGTH.ITEM_ID,
+                                    )
+                                    .`in`(ids.map { DSL.row(kind.name, source, it) })
                             )
                             .fetch { strengths[ItemKey(source, it.value1()!!)] = Vectors.unpack(it.value2()!!) }
                     }

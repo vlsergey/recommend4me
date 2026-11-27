@@ -117,21 +117,31 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
                     moved += work
                 }
         }
+        // By the index of the works alone, the source picked of the few items of a work: asked with the source beside,
+        // H2 takes the key of the source and walks every item of it (2026-11-27,
+        // [io.github.vlsergey.recommend4me.database.WholeKeys])
         return moved.chunked(BATCH).flatMapTo(HashSet()) { chunk ->
-            db.select(SITE_WORK.ITEM)
+            db.select(SITE_WORK.SOURCE, SITE_WORK.ITEM)
                 .from(SITE_WORK)
-                .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.NORMALIZED.`in`(chunk))
-                .fetch { it.value1()!! }
+                .where(SITE_WORK.NORMALIZED.`in`(chunk))
+                .fetch()
+                .filter { it.value1() == source }
+                .map { it.value2()!! }
         }
     }
 
-    /** Of the normalized works [works], those of the source: by their ids, a [BATCH] a query. */
+    /**
+     * Of the normalized works [works], those of the source: by their ids, a [BATCH] a query, by the index of the works
+     * alone, the source picked of the few items of a work (the reason told in [moveFacetValues]).
+     */
     private fun ownOf(tx: DSLContext, works: Collection<Long>): Set<Long> =
         works.distinct().chunked(BATCH).flatMapTo(HashSet()) { chunk ->
-            tx.selectDistinct(SITE_WORK.NORMALIZED)
+            tx.select(SITE_WORK.NORMALIZED, SITE_WORK.SOURCE)
                 .from(SITE_WORK)
-                .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.NORMALIZED.`in`(chunk))
-                .fetch { it.value1()!! }
+                .where(SITE_WORK.NORMALIZED.`in`(chunk))
+                .fetch()
+                .filter { it.value2() == source }
+                .map { it.value1()!! }
         }
 
     /** Every facet correction: they are few, the user makes them by hand. */

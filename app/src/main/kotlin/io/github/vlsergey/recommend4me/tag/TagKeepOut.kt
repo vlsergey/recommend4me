@@ -21,14 +21,21 @@ class TagKeepOut(private val db: DSLContext) {
             TagRepository.key(it.value1()!!)
         }
 
-    /** The site's tags of the [source] bound to any of the normalized tags [keys]: the site's keys. */
+    /**
+     * The site's tags of the [source] bound to any of the normalized tags [keys]: the site's keys. By the index of the
+     * normalized tags alone, the source picked of the few site's tags of each: asked with the source beside, H2 takes
+     * the key of the source and walks every tag of it (2026-11-27,
+     * [io.github.vlsergey.recommend4me.database.WholeKeys]).
+     */
     fun siteTags(source: String, keys: Collection<String>): Set<String> {
         val ids = keys.mapNotNull(TagRepository::idOf)
         return if (ids.isEmpty()) emptySet()
         else
-            db.select(SITE_TAG.TAG)
+            db.select(SITE_TAG.SOURCE, SITE_TAG.TAG)
                 .from(SITE_TAG)
-                .where(SITE_TAG.SOURCE.eq(source), SITE_TAG.NORMALIZED.`in`(ids))
-                .fetchSet { it.value1()!! }
+                .where(SITE_TAG.NORMALIZED.`in`(ids))
+                .fetch()
+                .filter { it.value1() == source }
+                .mapTo(HashSet()) { it.value2()!! }
     }
 }

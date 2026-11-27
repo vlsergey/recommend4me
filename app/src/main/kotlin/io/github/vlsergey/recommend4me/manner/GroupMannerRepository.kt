@@ -1,9 +1,9 @@
 package io.github.vlsergey.recommend4me.manner
 
+import io.github.vlsergey.recommend4me.database.WholeKeys
 import io.github.vlsergey.recommend4me.database.model.tables.references.GROUP_MANNER
 import io.github.vlsergey.recommend4me.vector.Vectors
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /** The groups of works a manner is kept of: a normalized author's works, a normalized series' works. */
 enum class MannerGroup {
@@ -53,7 +53,7 @@ class GroupMannerRepository(private val db: DSLContext) {
         keys.chunked(BATCH).forEach { chunk ->
             // Every key asked whole: of the kind and a list, every group of the kind walked ([of])
             db.deleteFrom(GROUP_MANNER)
-                .where(DSL.row(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY).`in`(chunk.map { DSL.row(kind.name, it) }))
+                .where(WholeKeys.of(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY, kind.name, chunk))
                 .execute()
         }
     }
@@ -69,7 +69,7 @@ class GroupMannerRepository(private val db: DSLContext) {
             db.select(GROUP_MANNER.GROUP_KEY, GROUP_MANNER.VEC)
                 .from(GROUP_MANNER)
                 .where(
-                    DSL.row(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY).`in`(chunk.map { DSL.row(kind.name, it) }),
+                    WholeKeys.of(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY, kind.name, chunk),
                     GROUP_MANNER.WORDS_ID.eq(wordsId),
                 )
                 .fetch { out[it.value1()!!] = Vectors.fromHalf(it.value2()!!) }
