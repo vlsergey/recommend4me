@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Field
@@ -163,6 +164,22 @@ class WorkStages(private val at: Map<WorkStage, Long>) {
         }
     }
 }
+
+/**
+ * Of the items [keys] of the [index], those the user marked their works of or rated ([WorkScope.MARKED]): what the
+ * models of the grades learn of — a feature of another work changed trains them nothing.
+ */
+fun markedAmong(index: ListIndex, keys: Collection<ItemKey>): Set<ItemKey> =
+    if (keys.isEmpty()) emptySet()
+    else
+        index.written { db ->
+            ListAmong.of(db, keys.map { it.toString() }) {
+                    db.select(ITEM.ITEM_KEY).from(ITEM).where(ListIndex.AMONG, ITEM.MARKED.eq(true)).fetch {
+                        ItemKey.parse(it.value1()!!)
+                    }
+                }
+                .toSet()
+        }
 
 /** The items [keys] of the [index] done of the [stage] by the sweep begun [at] — in place, an item of no row left. */
 fun WorkStage.done(index: ListIndex, keys: Collection<ItemKey>, at: Long) = index.set(column, keys.associateWith { at })

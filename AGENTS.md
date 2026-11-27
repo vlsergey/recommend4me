@@ -133,9 +133,13 @@ a new rule of the interface the owner gives is written there.
 
 What is done once — an import of a dump, a fix of the data, a migration of a store — is not built into
 the application: no mode of a source, no button, no job, no plugin interface of it (user, 2026-11-17, of
-the ficbook dump's import). It is done by a tool run once outside the application, or by a migration of
-the database that runs once by itself, and its code goes when it is done. What the application keeps
-of the data it wrote is described where that data is read.
+the ficbook dump's import). **A change of what an older version kept into what a newer one keeps is a
+migration of the database** — it is of every user's databases, not of the owner's alone (owner,
+2026-11-27, of the normalized series made of the series the sites and the user's groups kept); a
+migration needing another file reads it itself, given its place (`V45__normalized_series_made`). **A
+tool run once outside the application is for what touches no other user's data** — the owner's own
+import of a dump. Either one's code goes when it is done; a migration stays by its number. What the
+application keeps of the data it wrote is described where that data is read.
 
 ## A request never waits for a computation
 

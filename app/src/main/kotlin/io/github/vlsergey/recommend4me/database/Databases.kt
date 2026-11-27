@@ -7,7 +7,9 @@ import io.github.vlsergey.recommend4me.part.V26__item_text_size_filled
 import io.github.vlsergey.recommend4me.part.V28__item_text_classes_filled
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
+import io.github.vlsergey.recommend4me.series.SourceFile
 import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
+import io.github.vlsergey.recommend4me.series.V45__normalized_series_made
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Duration
 import org.jooq.DSLContext
@@ -49,8 +51,17 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
             "dictionaries",
             DataFolder.database(folder.root, "dictionaries"),
             "dictionaries",
-            // A migration done once and nothing now, kept by its number
-            code = listOf(V34__different_in_series_taken_back()),
+            code =
+                listOf(
+                    // A migration done once and nothing now, kept by its number
+                    V34__different_in_series_taken_back(),
+                    // The normalized series made of every source's series of its items, read of their files
+                    V45__normalized_series_made(
+                        plugins.sources.map {
+                            SourceFile(it.id, it.contentType, folder.source(it.id).resolve("source"))
+                        }
+                    ),
+                ),
         ) { db ->
             CatalogueRenameRepository.moveFrom("dictionaries", db, preferences.dsl)
         }

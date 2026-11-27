@@ -20,6 +20,7 @@ import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
+import io.github.vlsergey.recommend4me.worklist.markedAmong
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -28,7 +29,9 @@ import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(Manners::class.java)
 
-/** The manners of this many items or groups of a content type were made again: the model may want to learn them. */
+/**
+ * The manners of this many items the models of the grades learn of were made again: the models may want to learn them.
+ */
 data class WorkMannerChangeEvent(val type: String, val items: Int)
 
 /**
@@ -144,8 +147,10 @@ class Manners(
         val works = WorkClusters.of(type.links.groupsOf(items))
         val dated = groups.dated + items.flatMap(works::members)
         sweeps.made(STAGE, type.id, scope, dated.distinct())
+        // Of the works the models of the grades learn of alone: the manners of the others train them nothing
+        val learnt = markedAmong(lists.of(type.id), dated)
+        if (learnt.isNotEmpty()) events.publishEvent(WorkMannerChangeEvent(type.id, learnt.size))
         if (items.isNotEmpty() || groups.groups > 0) {
-            events.publishEvent(WorkMannerChangeEvent(type.id, items.size + groups.groups))
             log.info(
                 "{}: of {} works the manners of {} items and of {} authors and series made or taken away, in {} ms",
                 type.id,
