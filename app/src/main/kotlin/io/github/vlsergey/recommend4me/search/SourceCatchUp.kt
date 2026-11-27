@@ -50,7 +50,12 @@ internal class SourceCatchUp(private val documents: SearchDocuments) {
     }
 
     private companion object {
-        /** The works indexed again at a time: memory, not meaning. */
-        const val CHUNK = 500
+        /**
+         * The works indexed again at a time, a commit of the index of the search each — with its sync to the disk —: a
+         * turn's ([WorkTexts.PORTION]) of a source at once, one commit a turn, not one for every half of it (of a
+         * thousand works of ficbook, the commits took a fifteenth of the turn, 2026-11-27). Memory too: the chapters of
+         * so many works held at once.
+         */
+        const val CHUNK = WorkTexts.PORTION
     }
 }
