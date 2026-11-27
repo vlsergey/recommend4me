@@ -62,7 +62,7 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
         within.forEach { (x, y) ->
             val a = items[x]?.firstOrNull() ?: return@forEach
             val b = items[y]?.firstOrNull() ?: return@forEach
-            type.links.takeBack(a, b, now, ofSeries = true)
+            type.links.takeBackOfSeries(a, b, now)
             taken++
         }
         log.info(

@@ -23,13 +23,17 @@ class GroupManner(val madeOf: String, val works: Int, val vector: FloatArray)
  */
 class GroupMannerRepository(private val db: DSLContext) {
 
-    /** What the manner of every group of the [kind] was made of: key to the hash. */
-    fun made(kind: MannerGroup): Map<String, String> =
-        db.select(GROUP_MANNER.GROUP_KEY, GROUP_MANNER.MADE_OF)
-            .from(GROUP_MANNER)
-            .where(GROUP_MANNER.KIND.eq(kind.name))
-            .fetch()
-            .associate { it.value1()!! to it.value2()!! }
+    /** What the manners of the groups [keys] of the [kind] were made of: key to the hash. */
+    fun madeOf(kind: MannerGroup, keys: Collection<String>): Map<String, String> {
+        val out = HashMap<String, String>()
+        keys.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(GROUP_MANNER.GROUP_KEY, GROUP_MANNER.MADE_OF)
+                .from(GROUP_MANNER)
+                .where(WholeKeys.of(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY, kind.name, chunk))
+                .fetch { out[it.value1()!!] = it.value2()!! }
+        }
+        return out
+    }
 
     fun save(kind: MannerGroup, key: String, wordsId: Long, manner: GroupManner) {
         val packed = Vectors.half(manner.vector)
@@ -48,7 +52,7 @@ class GroupMannerRepository(private val db: DSLContext) {
             .execute()
     }
 
-    /** The manners of the groups [keys] of the [kind] — none of whose works has a text now — taken away. */
+    /** The manners of the groups [keys] of the [kind] — of no work with a manner now — taken away. */
     fun remove(kind: MannerGroup, keys: Collection<String>) {
         keys.chunked(BATCH).forEach { chunk ->
             // Every key asked whole: of the kind and a list, every group of the kind walked ([of])

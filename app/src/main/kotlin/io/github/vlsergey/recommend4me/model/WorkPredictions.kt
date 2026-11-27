@@ -4,26 +4,21 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.setvector.WorkSetVectorFillEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
-import io.github.vlsergey.recommend4me.textvector.WorkTextVectorFillEvent
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.NextWorks
 import io.github.vlsergey.recommend4me.worklist.StageSweeps
 import io.github.vlsergey.recommend4me.worklist.TakenWork
-import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
-import io.github.vlsergey.recommend4me.worklist.WorkFieldFillEvent
 import io.github.vlsergey.recommend4me.worklist.WorkStage
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(WorkPredictions::class.java)
@@ -36,7 +31,7 @@ private val log = LoggerFactory.getLogger(WorkPredictions::class.java)
  * of the marked and rated works, and one of the others after every other task, a [PORTION] of them a turn ([turn]) —
  * the highest expected first, from where the last turn left —: each scored by the models kept of the fields the index
  * of the list keeps ([EveryWork.ofKeys]), their predictions written where they changed ([Scoring.score]), every one
- * marked done. Of no model of the grades, none scored.
+ * marked done. Of no model of the grades, none scored. Planned by what the expectations read ([PredictionTriggers]).
  *
  * THE AVERAGE WORK of a new model counted along its pass ([AverageCount]) — every work's features and vectors as they
  * are scored — kept at the end of the pass of the other works, the last, for the next training
@@ -76,27 +71,6 @@ class WorkPredictions(
         type.sweep.save(SweepState(trainedAt(type), AverageWork.basis(plugins, type), Instant.now(), 0, 0, null))
         WorkScope.entries.forEach { plan(type.id, it, reason, TaskCursor.FIRST) }
     }
-
-    /** The documents of works written anew, of what the expectations are made of changed: their expectations made. */
-    @EventListener
-    fun documentsWritten(event: WorkDocumentWriteEvent) {
-        if (STAGE in event.stages)
-            WorkScope.entries.forEach {
-                plan(event.type, it, "items", TaskCursor.FIRST)
-            }
-    }
-
-    /** The fields the expectations wait for done: the expectations of the works they got past made. */
-    @EventListener
-    fun fieldsFilled(event: WorkFieldFillEvent) = plan(event.type, event.scope, "fields", TaskCursor.FIRST)
-
-    /** The vectors of the texts the expectations read done: of the works whose vectors changed, made. */
-    @EventListener
-    fun vectorsFilled(event: WorkTextVectorFillEvent) = plan(event.type, event.scope, "texts", TaskCursor.FIRST)
-
-    /** The sets the expectations read done: of the works whose sets changed, made. */
-    @EventListener
-    fun setsFilled(event: WorkSetVectorFillEvent) = plan(event.type, event.scope, "setVectors", TaskCursor.FIRST)
 
     /** The expectations of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =

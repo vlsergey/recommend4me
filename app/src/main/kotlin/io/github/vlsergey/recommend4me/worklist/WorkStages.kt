@@ -27,6 +27,11 @@ enum class WorkDatum(val outer: Boolean) {
     GRADES(true),
     /** Which items its work is of. */
     MEMBERS(true),
+    /**
+     * Which normalized authors and series its work is of and which works those hold, by the user's word: authors merged
+     * or taken apart, works put in a series or out of it, a work of theirs removed.
+     */
+    GROUPS(true),
     /** The vectors of the site's text fields. */
     VECTORS(false),
     /** The vectors of the windows of its chapters. */
@@ -36,7 +41,9 @@ enum class WorkDatum(val outer: Boolean) {
     /** The vectors of its sets: its chapters', reviews', screenshots'. */
     SETS(false),
     /** The values the models of the fields give it. */
-    FIELDS(false);
+    FIELDS(false),
+    /** The manners of the texts of its work, of its authors' and of its series' works. */
+    MANNERS(false);
 
     /** The column of the row of an item of the date the data last changed, milliseconds. */
     val column: Field<Long?> = ITEM.columnOf("${name.lowercase()}_at")
@@ -82,6 +89,13 @@ enum class WorkStage(
         WorkDatum.FIELDS,
         "fields",
     ),
+    // The manners of the texts: of the work's own items, of its authors' and its series' works
+    MANNERS(
+        listOf(WorkDatum.DATA, WorkDatum.CHAPTERS, WorkDatum.MEMBERS, WorkDatum.GROUPS),
+        emptyList(),
+        WorkDatum.MANNERS,
+        "manner",
+    ),
     PREDICTED(
         listOf(
             WorkDatum.DATA,
@@ -92,8 +106,9 @@ enum class WorkStage(
             WorkDatum.VECTORS,
             WorkDatum.PICTURES,
             WorkDatum.SETS,
+            WorkDatum.MANNERS,
         ),
-        listOf(FIELDS),
+        listOf(FIELDS, MANNERS),
         null,
         "predicted",
     ),

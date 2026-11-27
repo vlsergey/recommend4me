@@ -1,170 +1,208 @@
 package io.github.vlsergey.recommend4me.manner
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
-import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
-import io.github.vlsergey.recommend4me.part.PartMark
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.api.model.WorkScope
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
+import io.github.vlsergey.recommend4me.model.ModelAutoChanges
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
-import io.github.vlsergey.recommend4me.series.TypeSeries
-import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
-import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.work.WorkClusters
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.NextWorks
+import io.github.vlsergey.recommend4me.worklist.StageSweeps
+import io.github.vlsergey.recommend4me.worklist.WorkDatum
+import io.github.vlsergey.recommend4me.worklist.WorkDocumentWriteEvent
+import io.github.vlsergey.recommend4me.worklist.WorkStage
 import java.time.Instant
-import kotlin.math.abs
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(Manners::class.java)
 
-/** The manners of this many items of a content type were made again: the model may want to learn them. */
+/** The manners of this many items or groups of a content type were made again: the model may want to learn them. */
 data class WorkMannerChangeEvent(val type: String, val items: Int)
 
 /**
- * THE MANNER OF EVERY ITEM WITH A TEXT, AND OF EVERY NORMALIZED AUTHOR AND SERIES ([MannerGroups]), made in the queue
- * of the computations after the chapters read, the items written or the user's word on what is one work, series or
- * author go quiet, and on start: the words of the content type ([MannerWords]) fitted on every text of it — again when
- * the number of the items with a text changed by a hundredth of the one they were fitted on ([REFIT]), every manner
- * then made again by them —, else the manner of every item whose texts changed made by the words kept. Two passes over
- * every text to fit: the words chosen of the first, the shares of the second.
+ * Every change of the manners of the works of the [scope] of the [type] made ([WorkStage.MANNERS]): the stages reading
+ * them, or waiting for them, look again.
  */
-@Service
+data class WorkMannerFillEvent(val type: String, val scope: WorkScope)
+
+/**
+ * THE MANNERS OF THE TEXTS — THE STAGE [WorkStage.MANNERS] OF THE TASKS OVER THE WORKS ([StageSweeps]): of the works
+ * whose chapters, data, items or groups changed past its mark, the manner of every item made by the words of the
+ * content type where its texts changed ([ItemManners]), and those of the authors and the series of their works where
+ * what they hold changed ([MannerGroups]) — by their keys, no other work read —; a task of the marked and rated works,
+ * and one of the others after every other task, a [PORTION] of them a turn, the highest expected first; every work
+ * marked done, those whose manners changed dated so, of every item of their works and of their groups' works: the
+ * expectations read them. The words ([MannerWords]) are fitted on every text of the type by a task of their own ([fit])
+ * — of none kept, or as the items whose chapters changed come to a hundredth of those they were fitted on
+ * ([chaptersWritten]) —, every manner then made again by them: the stage marked at nought.
+ */
+@Component
 class Manners(
     private val stores: Stores,
-    private val works: Works,
     private val tasks: Tasks,
+    private val lists: ListIndexes,
+    private val sweeps: StageSweeps,
     private val events: ApplicationEventPublisher,
 ) {
-    /** Of every item of every source of the [type], its manner made again where its texts or the words changed. */
-    fun refresh(type: TypeStore) {
+    // What the last run of the application left undone of it: planned again by the queue at its start, from where it
+    // was to go on
+    init {
+        tasks.resumption.resumes(MAKING) { left, reason ->
+            val type = left.work.type ?: return@resumes
+            val scopes = left.work.works?.let(::listOf) ?: WorkScope.entries
+            scopes.forEach { plan(type, it, reason, left.cursor ?: TaskCursor.FIRST) }
+        }
+        tasks.resumption.resumes(FITTING) { left, reason ->
+            left.work.type?.let(stores::type)?.let { planFit(it, reason) }
+        }
+    }
+
+    /** The documents of works written anew, of what their manners are made of changed: their manners made. */
+    @EventListener
+    fun documentsWritten(event: WorkDocumentWriteEvent) {
+        if (STAGE in event.stages) WorkScope.entries.forEach { plan(event.type, it, "items", TaskCursor.FIRST) }
+    }
+
+    /**
+     * An item removed: of no group now — every group it was of holds one work fewer, and the works of the rest of them
+     * are dated so ([WorkDatum.GROUPS]): their groups made anew as the stage takes them.
+     */
+    @EventListener
+    fun removed(event: SiteItemRemoveEvent) {
+        val type = stores.type(event.type) ?: return
+        val key = ItemKey(event.source, event.itemId)
+        val groups = type.mannerMembers.groupsOf(listOf(key))[key].orEmpty()
+        type.mannerMembers.forget(key)
+        if (groups.isEmpty()) return
+        val rest = type.mannerMembers.itemsOf(groups)
+        val left = groups.filter { rest[it].isNullOrEmpty() }
+        left.groupBy({ it.kind }, { it.key }).forEach { (kind, keys) -> type.groupManners.remove(kind, keys) }
+        type.works.changed(rest.values.flatten(), WorkDatum.GROUPS, Instant.now())
+    }
+
+    /**
+     * The chapters of items written: counted beside the words ([ModelAutoChanges]), fitted again once they come to a
+     * hundredth of the items with a text they were fitted on (owner, 2026-11-25, of the models: "accumulated --
+     * scheduled the update") — not of every new chapter: every text of the type read again, half an hour of ficbook's
+     * —; of no words yet, at the first.
+     */
+    @EventListener
+    fun chaptersWritten(event: SiteItemChapterChangeEvent) {
+        val type = stores.typeOf(event.source)
+        if (type.autoChanges.count(ModelAutoChanges.MANNER, event.ids.size)) planFit(type, "catalogueGrew")
+    }
+
+    /** The manners of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor]. */
+    fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
+        tasks.plan(
+            Task(MAKING, type = typeId, works = scope),
+            null,
+            reason,
+            priority = NextWorks.priority(scope),
+            cursor = cursor,
+        ) {
+            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let { tasks.again("sweep", cursor = it) }
+        }
+
+    /**
+     * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose manners are to be made, from the [cursor]
+     * on, made; where the next turn goes on from — none when none is left.
+     */
+    internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
+        val type = stores.type(typeId) ?: return null
+        val taken = sweeps.next(STAGE, typeId, type.sources.map { it.id }, scope, cursor, portion)
+        if (taken.isNotEmpty()) {
+            val keys = taken.map { it.key }
+            // Of no words yet, nothing to measure by: the works done, made again of the words once fitted
+            type.mannerWords.find()?.let { words -> made(type, scope, words, keys) }
+            sweeps.done(STAGE, typeId, scope, keys)
+            lists.of(typeId).commit()
+        }
+        if (taken.size < portion && sweeps.complete(STAGE, typeId, scope))
+            events.publishEvent(WorkMannerFillEvent(typeId, scope))
+        return taken.lastOrNull()?.cursor()?.takeIf { taken.size == portion }
+    }
+
+    /** The manners of the items [keys] and of their works' groups made by the [words], and those changed dated. */
+    private fun made(type: TypeStore, scope: WorkScope, words: MannerWords, keys: List<ItemKey>) {
         val started = System.currentTimeMillis()
-        val texts = type.sources.associateWith { s -> s.parts.marks.of(null).mapValues { (_, parts) -> hashOf(parts) } }
-        val count = texts.values.sumOf { it.size }
-        val kept = type.mannerWords.find()
-        val fitting = refits(kept?.texts, count)
-        val made =
-            when {
-                fitting -> fitted(type, texts, count)
-                kept != null -> caughtUp(kept, texts)
-                else -> 0
-            }
-        val gone = texts.entries.sumOf { (s, own) -> (s.manner.made().keys - own.keys).also(s.manner::remove).size }
-        val groups = MannerGroups.refresh(type, works.of(type), TypeSeries.read(type))
-        if (made + gone + groups > 0) {
-            events.publishEvent(WorkMannerChangeEvent(type.id, made + gone + groups))
+        val items = ItemManners.made(type, words, keys)
+        val groups = MannerGroups.refresh(type, words.id, keys)
+        // A work's manner is of all its items: every one of a work whose item's changed
+        val works = WorkClusters.of(type.links.groupsOf(items))
+        val dated = groups.dated + items.flatMap(works::members)
+        sweeps.made(STAGE, type.id, scope, dated.distinct())
+        if (items.isNotEmpty() || groups.groups > 0) {
+            events.publishEvent(WorkMannerChangeEvent(type.id, items.size + groups.groups))
             log.info(
-                "{}: the manners of {} items made{}, of {} taken away, of {} authors and series made or taken away, " +
-                    "of {} items with a text, in {} ms",
+                "{}: of {} works the manners of {} items and of {} authors and series made or taken away, in {} ms",
                 type.id,
-                made,
-                if (fitting) " by words fitted again" else "",
-                gone,
-                groups,
-                count,
+                keys.size,
+                items.size,
+                groups.groups,
                 System.currentTimeMillis() - started,
             )
         }
     }
 
+    /** How many items of the [type] have a text: counted by the databases. */
+    private fun itemsWithText(type: TypeStore): Int = type.sources.sumOf { it.parts.marks.itemsWithText() }
+
+    /** The words of the manners of the [type] fitted anew, for the [reason]. */
+    private fun planFit(type: TypeStore, reason: String) =
+        tasks.plan(Task(FITTING, type = type.id), null, reason, priority = TaskPriority.BACKGROUND) { fit(type) }
+
     /**
-     * The words fitted on every text of the type — [count] items with a text, of the hashes [texts] — and the manner of
-     * every one made by them; how many were made.
+     * The words of the [type] fitted on every text of it, kept, and the stage marked at nought: every manner made again
+     * by them. Two passes over every text: the words chosen of the first, their means and spreads of the second.
      */
-    private fun fitted(type: TypeStore, texts: Map<SourceStore, Map<Long, String>>, count: Int): Int {
+    internal fun fit(type: TypeStore) {
+        val started = System.currentTimeMillis()
+        val count = itemsWithText(type)
+        val counted = type.autoChanges.of(ModelAutoChanges.MANNER)?.changes ?: 0
+        if (count == 0) return
         val tally = WordTally()
         type.sources.forEach { s -> s.parts.texts.forEach { _, own -> tally.add(own) } }
         val chosen = tally.chosen(MannerWords.SIZE)
-        // The shares of the chosen words in every text, the means and spreads not known yet: of a draft of them
+        // The shares of the chosen words in every text, their means and spreads not known yet: of a draft of them
         val draft = MannerWords(0, chosen, FloatArray(chosen.size), FloatArray(chosen.size) { 1f }, 0)
-        val shares =
-            type.sources.associateWith { s ->
-                HashMap<Long, FloatArray>().apply {
-                    s.parts.texts.forEach { id, own -> draft.shares(own)?.let { put(id, it) } }
-                }
-            }
-        val words =
-            MannerWords.fitted(
-                Vectors.keyOf("${type.id}:manner:${System.nanoTime()}"),
-                chosen,
-                shares.values.flatMap { it.values },
-                count,
-            )
+        val moments = ShareMoments(chosen)
+        type.sources.forEach { s -> s.parts.texts.forEach { _, own -> draft.shares(own)?.let(moments::add) } }
+        val words = moments.fitted(Vectors.keyOf("${type.id}:manner:${System.nanoTime()}"), count)
         type.mannerWords.keep(words, Instant.now())
-        shares.forEach { (s, own) ->
-            own.forEach { (id, v) ->
-                texts[s]?.get(id)?.let { hash -> s.manner.save(id, MannerMade(words.id, hash), words.standardised(v)) }
-            }
-        }
-        return shares.values.sumOf { it.size }
+        type.autoChanges.learnt(ModelAutoChanges.MANNER, count)
+        type.autoChanges.letGo(ModelAutoChanges.MANNER, counted)
+        sweeps.reset(STAGE, type.id, type.sources.map { it.id })
+        WorkScope.entries.forEach { plan(type.id, it, "manner", TaskCursor.FIRST) }
+        log.info(
+            "{}: the words of the manners fitted on {} items with a text in {} ms",
+            type.id,
+            count,
+            System.currentTimeMillis() - started,
+        )
     }
-
-    /** The manner of every item whose [texts] are not those its manner was made of made by the [words]; how many. */
-    private fun caughtUp(words: MannerWords, texts: Map<SourceStore, Map<Long, String>>): Int =
-        texts.entries.sumOf { (s, own) ->
-            val made = s.manner.made()
-            val todo = own.filter { (id, hash) -> made[id] != MannerMade(words.id, hash) }
-            todo.keys.chunked(CHUNK).forEach { chunk ->
-                s.parts.contentsOf(chunk).forEach { (id, parts) ->
-                    words.of(parts.map { it.third })?.let {
-                        s.manner.save(id, MannerMade(words.id, todo.getValue(id)), it)
-                    }
-                }
-            }
-            todo.size
-        }
-
-    // --- In the background ---
-
-    // What the last run of the application left undone of it: planned again by the queue at its start
-    init {
-        tasks.resumption.resumes(MAKING) { left, reason ->
-            left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
-        }
-    }
-
-    @EventListener
-    fun partsSaved(event: SiteItemChapterChangeEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
-
-    /** An item's authors or series may have changed: the manners of the authors and the series with them. */
-    @EventListener
-    fun itemsChanged(event: SiteItemWriteEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
-
-    @EventListener
-    fun regrouped(event: WorkGroupChangeEvent) {
-        stores.type(event.type)?.let { schedule(it, QUIET_SECONDS, "regrouped") }
-    }
-
-    private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) =
-        tasks.plan(Task(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
 
     companion object {
         val MAKING = TaskKind.MAKE_WORK_MANNERS
 
-        private const val START_DELAY_SECONDS = 60L
+        val FITTING = TaskKind.FIT_MANNER_WORDS
 
-        /** The quiet after the last chapters read before the manners are made: a reader reads on. */
-        private const val QUIET_SECONDS = 60L
+        /** The stage of the tasks over the works it is. */
+        val STAGE = WorkStage.MANNERS
 
-        /** The words are fitted again as the items with a text change by a [REFIT]th of those they were fitted on. */
-        private const val REFIT = 100
-
-        /**
-         * Whether the words fitted on [kept] items with a text — none when there are none — are fitted again of the
-         * [count] there are now: as they change by a hundredth (owner, 2026-11-25, of the models: "accumulated --
-         * scheduled the update"), not of every new chapter — every text of the type read again, half an hour of
-         * ficbook's.
-         */
-        fun refits(kept: Int?, count: Int): Boolean = count > 0 && (kept == null || abs(count - kept) * REFIT >= kept)
-
-        /** The items whose texts are read at once: memory, not meaning. */
-        private const val CHUNK = 50
-
-        /** What the texts of an item's parts are, of their hashes: its manner is made again when it changes. */
-        fun hashOf(parts: List<PartMark>): String = Vectors.hash(parts.joinToString("\n") { "${it.partId}:${it.hash}" })
+        /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
+        const val PORTION = 1000
     }
 }

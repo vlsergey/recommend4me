@@ -5158,6 +5158,7 @@ components:
           - fitPieceProjection
           - fitFullTextCentre
           - fitHeldOutModel
+          - fitMannerWords
           - fitSearchWeights
           - fitSetDirections
           - fitTagTextModel

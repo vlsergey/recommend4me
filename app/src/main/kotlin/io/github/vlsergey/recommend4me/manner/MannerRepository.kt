@@ -14,14 +14,17 @@ data class MannerMade(val wordsId: Long, val textHash: String)
  */
 class MannerRepository(private val db: DSLContext) {
 
-    /** What the manner of every item that has one was made of. */
-    fun made(): Map<Long, MannerMade> =
-        db.select(ITEM_MANNER.ITEM_ID, ITEM_MANNER.WORDS_ID, ITEM_MANNER.TEXT_HASH)
-            .from(ITEM_MANNER)
-            .fetch()
-            .associate {
-                it.value1()!! to MannerMade(it.value2()!!, it.value3()!!)
-            }
+    /** What the manners of the items [ids] that have one were made of. */
+    fun madeOf(ids: Collection<Long>): Map<Long, MannerMade> {
+        val out = HashMap<Long, MannerMade>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(ITEM_MANNER.ITEM_ID, ITEM_MANNER.WORDS_ID, ITEM_MANNER.TEXT_HASH)
+                .from(ITEM_MANNER)
+                .where(ITEM_MANNER.ITEM_ID.`in`(chunk))
+                .fetch { out[it.value1()!!] = MannerMade(it.value2()!!, it.value3()!!) }
+        }
+        return out
+    }
 
     fun save(itemId: Long, made: MannerMade, vector: FloatArray) {
         val packed = Vectors.half(vector)
@@ -37,7 +40,7 @@ class MannerRepository(private val db: DSLContext) {
             .execute()
     }
 
-    /** The manners of the items [ids] — every one's text gone — taken away. */
+    /** The manners of the items [ids] — of no text now, or of no word of the words — taken away. */
     fun remove(ids: Collection<Long>) {
         ids.chunked(BATCH).forEach { chunk ->
             db.deleteFrom(ITEM_MANNER).where(ITEM_MANNER.ITEM_ID.`in`(chunk)).execute()

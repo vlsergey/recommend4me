@@ -114,6 +114,7 @@
   "What.fitPieceProjection": "Projection of the pieces of the texts learnt",
   "What.fitFullTextCentre": "Centre of the full-text vectors learnt",
   "What.fitHeldOutModel": "The model that has not seen a graded work",
+  "What.fitMannerWords": "The words the manner of the texts is measured by",
   "What.fitSearchWeights": "The search's weights by your judgments",
   "What.fitSetDirections": "Directions of sets",
   "What.fitTagTextModel": "Model of tags by the text",

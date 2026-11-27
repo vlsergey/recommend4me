@@ -38,7 +38,7 @@ class ItemRemoval(
         val type = stores.typeOf(key.source)
         // Of its work, before the item goes: whether it is graded, the items of it left
         val graded = store.ratings.ofItem(key.id).isNotEmpty()
-        val remaining = works.of(type).members(key).filter { it != key }
+        val remaining = works.ofKeys(type, listOf(key)).members(key).filter { it != key }
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
@@ -47,7 +47,7 @@ class ItemRemoval(
         store.signals.forget(key.id)
         // A word on a match of a mark of any source may name it
         type.sources.forEach { it.marks.forget(key) }
-        type.links.forget(key)
+        type.works.forget(key)
         type.models.forget(key)
         type.likeness.forget(key)
         type.searchJudgments.forget(key)

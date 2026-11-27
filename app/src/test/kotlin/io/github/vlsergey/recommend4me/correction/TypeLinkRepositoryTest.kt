@@ -23,9 +23,10 @@ class TypeLinkRepositoryTest {
     @Test
     fun `a link makes one work, a word on two works is a word on every item of them`() {
         Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
+            val works = WorkRepository(dictionaries.dsl)
             val links =
                 TypeLinkRepository(
-                    WorkRepository(dictionaries.dsl),
+                    works,
                     WorkPairJournal(dictionaries.dsl),
                     listOf("a", "b"),
                     series = SeriesGroups(dictionaries.dsl) { regroupings++ },
@@ -79,9 +80,9 @@ class TypeLinkRepositoryTest {
                     )
                 ),
             )
-            links.forget(ItemKey("b", 2))
+            works.membership.forget(ItemKey("b", 2))
             assertEquals(emptyList(), links.groups())
-            links.forget(ItemKey("a", 1))
+            works.membership.forget(ItemKey("a", 1))
             assertEquals(emptySet(), links.distincts())
         }
     }

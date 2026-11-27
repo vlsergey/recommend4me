@@ -114,6 +114,7 @@
   "What.fitPieceProjection": "Обучение проекции векторов токенов текстов",
   "What.fitFullTextCentre": "Обучение центра векторов полнотекстового поиска",
   "What.fitHeldOutModel": "Модель без оценки работы",
+  "What.fitMannerWords": "Слова, по которым меряется манера текстов",
   "What.fitSearchWeights": "Веса поиска по вашим оценкам найденного",
   "What.fitSetDirections": "Направления наборов",
   "What.fitTagTextModel": "Модель тегов по тексту",

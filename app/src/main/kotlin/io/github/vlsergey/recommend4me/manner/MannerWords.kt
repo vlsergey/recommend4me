@@ -63,9 +63,6 @@ class MannerWords(
          */
         const val SIZE = 1000
 
-        /** The least spread of a word's share: of a word of the same share in every text, a division by it. */
-        private const val LEAST_SPREAD = 1e-9f
-
         fun unpack(id: Long, texts: Int, bytes: ByteArray): MannerWords =
             DataInputStream(ByteArrayInputStream(bytes)).use { input ->
                 val n = input.readInt()
@@ -74,30 +71,42 @@ class MannerWords(
                 val spreads = FloatArray(n) { input.readFloat() }
                 MannerWords(id, words, means, spreads, texts)
             }
+    }
+}
 
-        /**
-         * The words [words] with the mean and the spread of their [shares] in every text that has a word ([shares] of a
-         * model of no means yet), under the id [id], fitted on [texts] items with a text.
-         */
-        fun fitted(id: Long, words: List<String>, shares: Collection<FloatArray>, texts: Int): MannerWords {
-            val n = words.size
-            val means = FloatArray(n)
-            val spreads = FloatArray(n)
-            if (shares.isEmpty()) return MannerWords(id, words, means, FloatArray(n) { 1f }, texts)
-            for (k in 0 until n) {
-                var sum = 0.0
-                var square = 0.0
-                shares.forEach { s ->
-                    sum += s[k]
-                    square += s[k].toDouble() * s[k]
-                }
-                val mean = sum / shares.size
-                means[k] = mean.toFloat()
-                spreads[k] =
-                    sqrt((square / shares.size - mean * mean).coerceAtLeast(0.0)).toFloat().coerceAtLeast(LEAST_SPREAD)
-            }
-            return MannerWords(id, words, means, spreads, texts)
+/**
+ * THE MEANS AND THE SPREADS OF THE SHARES OF THE CHOSEN [words] OVER THE TEXTS, summed one text at a time: no text's
+ * shares kept the while (1.4 million texts of a thousand words, 5.5 GB).
+ */
+internal class ShareMoments(private val words: List<String>) {
+    private val sums = DoubleArray(words.size)
+    private val squares = DoubleArray(words.size)
+    private var count = 0
+
+    /** The [shares] of the words in one text, counted. */
+    fun add(shares: FloatArray) {
+        count++
+        for (k in shares.indices) {
+            sums[k] += shares[k]
+            squares[k] += shares[k].toDouble() * shares[k]
         }
+    }
+
+    /** The words of the [id], their means and spreads of the texts counted, fitted on [texts] items with a text. */
+    fun fitted(id: Long, texts: Int): MannerWords {
+        if (count == 0) return MannerWords(id, words, FloatArray(words.size), FloatArray(words.size) { 1f }, texts)
+        val means = FloatArray(words.size) { (sums[it] / count).toFloat() }
+        val spreads =
+            FloatArray(words.size) {
+                val mean = sums[it] / count
+                sqrt((squares[it] / count - mean * mean).coerceAtLeast(0.0)).toFloat().coerceAtLeast(LEAST_SPREAD)
+            }
+        return MannerWords(id, words, means, spreads, texts)
+    }
+
+    private companion object {
+        /** The least spread of a word's share: of a word of the same share in every text, a division by it. */
+        const val LEAST_SPREAD = 1e-9f
     }
 }
 

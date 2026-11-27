@@ -1,6 +1,7 @@
 -- THE INDEX OF THE LIST OF WORKS OF A CONTENT TYPE (owner, 2026-11-22: "study replacing the index, not the full-text
--- one, by DuckDB"; "work"), a DuckDB file of its own (worklist.ListIndex), made by this script as it is new and made
--- anew as its tables are other than this script makes: everything in it is made of the databases again
+-- one, by DuckDB"; "work"), a DuckDB file of its own (worklist.ListIndex), made by this script as it is new, its
+-- tables widened in place as this script adds columns that may be null (database.DuckTables), and made anew as its
+-- tables are other than this script makes otherwise: everything in it is made of the databases again
 -- (worklist.ListIndexing, from the first item of every source). Read by H2 too, as jOOQ's classes are made of it.
 
 -- Every item: the work it is of and its rank among the work's items, the shown one 0; whether the work is of several;
@@ -30,16 +31,19 @@ CREATE TABLE item (
     answers_at BIGINT,
     grades_at BIGINT,
     members_at BIGINT,
+    groups_at BIGINT,
     vectors_at BIGINT,
     windows_at BIGINT,
     cast_at BIGINT,
     sets_at BIGINT,
     fields_at BIGINT,
+    manners_at BIGINT,
     vectors_done BIGINT,
     windows_done BIGINT,
     cast_done BIGINT,
     sets_done BIGINT,
     fields_done BIGINT,
+    manners_done BIGINT,
     predicted_done BIGINT,
     texts_done BIGINT
 );

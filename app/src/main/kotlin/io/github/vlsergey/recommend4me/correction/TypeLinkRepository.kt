@@ -93,17 +93,25 @@ class TypeLinkRepository(
 
     /**
      * The word on the works of the two taken back: of two works the user said to be of one series, both taken out of it
-     * ([apart]). Nothing of two works with no word. [ofSeries]: the word "different" taken back by the application, the
-     * two being of one series — by the sites, or by the user's words "one series" —, the series left as it is, in the
-     * journal so.
+     * ([apart]). Nothing of two works with no word.
      */
-    fun takeBack(a: ItemKey, b: ItemKey, now: Instant, ofSeries: Boolean = false) {
-        if (!ofSeries && apart(a, b, now)) return
+    fun takeBack(a: ItemKey, b: ItemKey, now: Instant) {
+        if (apart(a, b, now)) return
+        val before = word(a, b, now) ?: return
+        works.relations.takeBack(works.of(a, now), works.of(b, now))
+        journal.write(a, b, null, before, now)
+    }
+
+    /**
+     * The word "different" on the works of [a] and [b] taken back by the application, the two being of one series — by
+     * the sites, or by the user's words "one series" —: the series left as it is, in the journal so.
+     */
+    fun takeBackOfSeries(a: ItemKey, b: ItemKey, now: Instant) {
         val x = works.of(a, now)
         val y = works.of(b, now)
-        val before = (if (ofSeries) works.relations.word(x, y) else word(a, b, now)) ?: return
+        val before = works.relations.word(x, y) ?: return
         works.relations.takeBack(x, y)
-        journal.write(a, b, null, before, now, ofSeries)
+        journal.write(a, b, null, before, now, ofSeries = true)
     }
 
     /**
@@ -119,9 +127,6 @@ class TypeLinkRepository(
         journal.write(a, b, null, SERIES, now)
         return true
     }
-
-    /** The item removed from the library. */
-    fun forget(key: ItemKey) = works.membership.forget(key)
 
     companion object {
         const val SAME = "SAME"

@@ -12,8 +12,8 @@ import org.jooq.impl.DSL
  */
 class SeriesGroups(
     private val db: DSLContext,
-    /** Told of every work put in a group or out of it. */
-    private val regrouped: () -> Unit,
+    /** Told of every work put in a group or out of it: the works of every group that changed. */
+    private val regrouped: (Collection<Long>) -> Unit,
 ) {
 
     /** Every group: its id to its works. */
@@ -56,7 +56,7 @@ class SeriesGroups(
      */
     fun together(x: Long, y: Long, now: Instant) {
         db.transaction { c -> joined(DSL.using(c), x, y, now) }
-        regrouped()
+        regrouped(worksOf(groupsOf(listOf(x, y)).values).values.flatten() + listOf(x, y))
     }
 
     /** [together] within the transaction [tx]. */
@@ -89,12 +89,14 @@ class SeriesGroups(
 
     /** The [works] out of their groups: the user's word of them taken back. */
     fun leave(works: Collection<Long>) {
+        // Of their groups before: every work of them changed
+        val before = worksOf(groupsOf(works).values).values.flatten()
         db.transaction { c ->
             val tx = DSL.using(c)
             tx.deleteFrom(SERIES_GROUP_WORK).where(SERIES_GROUP_WORK.WORK.`in`(works.distinct())).execute()
             dropSmall(tx)
         }
-        regrouped()
+        regrouped(before + works)
     }
 
     /** Whether the two works are of one group. */

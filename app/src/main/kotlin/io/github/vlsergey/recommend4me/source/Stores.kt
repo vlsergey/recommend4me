@@ -25,6 +25,7 @@ import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.item.SiteTexts
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
+import io.github.vlsergey.recommend4me.manner.MannerMemberRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerWordsRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
@@ -293,7 +294,9 @@ class SourceStore(
 
     /** The normalized authors: the authors of every site bound to them. */
     val authors =
-        AuthorRepository(databases.dictionaries.dsl) { events.publishEvent(WorkGroupChangeEvent(contentType.id)) }
+        AuthorRepository(databases.dictionaries.dsl) { sites ->
+            events.publishEvent(WorkGroupChangeEvent(contentType.id, authors = sites))
+        }
 
     /**
      * The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the
@@ -331,14 +334,17 @@ class TypeStore(
     val id: String
         get() = type.id
 
-    /** Told of the user's every word that puts works, series or authors together or apart. */
+    /** Told of the user's every word that puts two items one work or two. */
     private val regrouped = { events.publishEvent(WorkGroupChangeEvent(type.id)) }
 
     /** The normalized works of the type's items. */
     val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })
 
     /** The works the user said to be one series. */
-    val seriesGroups = SeriesGroups(databases.dictionaries.dsl, regrouped)
+    val seriesGroups =
+        SeriesGroups(databases.dictionaries.dsl) { works ->
+            events.publishEvent(WorkGroupChangeEvent(type.id, works = works.distinct()))
+        }
 
     val links =
         TypeLinkRepository(
@@ -357,7 +363,10 @@ class TypeStore(
     /** The changes of the dictionaries the works are drafted by, as they are written. */
     val dictionaryChanges = DictionaryChanges(databases.dictionaries.dsl)
 
-    val authors = AuthorRepository(databases.dictionaries.dsl, regrouped)
+    val authors =
+        AuthorRepository(databases.dictionaries.dsl) { sites ->
+            events.publishEvent(WorkGroupChangeEvent(type.id, authors = sites))
+        }
 
     val models = ModelRepository(databases.model(type.id))
 
@@ -374,6 +383,9 @@ class TypeStore(
 
     /** The manners of the type's normalized authors and series. */
     val groupManners = GroupMannerRepository(databases.model(type.id))
+
+    /** The items every manner of an author or a series was last made of. */
+    val mannerMembers = MannerMemberRepository(databases.model(type.id))
 
     /** The likeness of the names of the sites' fandoms learnt of the user's word on the universes. */
     val fandomLikeness = FandomLikenessRepository(databases.model(type.id))

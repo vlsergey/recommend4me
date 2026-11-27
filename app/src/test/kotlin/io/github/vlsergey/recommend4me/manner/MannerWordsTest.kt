@@ -35,7 +35,7 @@ class MannerWordsTest {
         val second = draft.shares(listOf("и", "он он он"))!!
         assertContentEquals(floatArrayOf(0.5f, 0.25f), first)
         assertContentEquals(floatArrayOf(0.25f, 0.75f), second)
-        val fitted = MannerWords.fitted(7, words, listOf(first, second), 2)
+        val fitted = ShareMoments(words).apply { listOf(first, second).forEach(::add) }.fitted(7, 2)
         assertContentEquals(floatArrayOf(1f, -1f), fitted.of(listOf("и и он нет")))
         assertNull(fitted.of(listOf("42 — 17")), "a text of no word has no manner")
         val kept = MannerWords.unpack(fitted.id, fitted.texts, fitted.pack())

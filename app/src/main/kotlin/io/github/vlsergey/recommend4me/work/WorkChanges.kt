@@ -15,8 +15,9 @@ import org.jooq.impl.DSL
 /**
  * WHEN THE USER'S WORD ON A NORMALIZED WORK LAST CHANGED, the work's own dates in the dictionaries (owner, 2026-11-21:
  * "a work has the date it was last changed"): of every kind of it ([WorkDatum]) — its answers on values and fields, its
- * grade and mark of interest, the items it is of (merged, taken out, in [WorkMembership]'s transaction) — and of any of
- * them the date the index of the list writes its items anew by ([NORMALIZED_WORK.CHANGED_AT]).
+ * grade and mark of interest, the items it is of (merged, taken out, in [WorkMembership]'s transaction), the authors
+ * and series it is of and what they hold ([WorkGroupDates]) — and of any of them the date the index of the list writes
+ * its items anew by ([NORMALIZED_WORK.CHANGED_AT]).
  */
 class WorkChanges(private val db: DSLContext) {
 
@@ -32,6 +33,10 @@ class WorkChanges(private val db: DSLContext) {
                 changed(db, works, datum, at)
             }
         }
+
+    /** The [datum] of the normalized [works] changed [at]. */
+    fun worksChanged(works: Collection<Long>, datum: WorkDatum, at: Instant) =
+        works.distinct().chunked(BATCH).forEach { changed(db, it, datum, at) }
 
     /**
      * The next [limit] normalized works of items of the [sources] the user's word changed, after the [cursor] — of
@@ -93,6 +98,7 @@ class WorkChanges(private val db: DSLContext) {
                 WorkDatum.ANSWERS to NORMALIZED_WORK.ANSWERS_AT,
                 WorkDatum.GRADES to NORMALIZED_WORK.GRADES_AT,
                 WorkDatum.MEMBERS to NORMALIZED_WORK.MEMBERS_AT,
+                WorkDatum.GROUPS to NORMALIZED_WORK.GROUPS_AT,
             )
 
         /** The [datum] of the [works] changed [at], within the transaction [tx]. */

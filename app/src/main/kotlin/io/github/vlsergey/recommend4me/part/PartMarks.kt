@@ -23,25 +23,29 @@ data class PartMark(
  */
 class PartMarks(private val db: DSLContext) {
 
-    /**
-     * Of every part on the site with a text of the items [ids] (every item when null), in their order: item to its
-     * parts.
-     */
-    fun of(ids: Collection<Long>?): Map<Long, List<PartMark>> {
+    /** Of every part on the site with a text of the items [ids], in their order: item to its parts. */
+    fun of(ids: Collection<Long>): Map<Long, List<PartMark>> {
         val out = HashMap<Long, MutableList<PartMark>>()
-        fun read(only: Collection<Long>?) =
+        ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT_HASH, PART.ENCODER, PART.ENCODED_HASH)
                 .from(PART)
-                .where(PART.CONTENT_HASH.isNotNull, onSite)
-                .and(only?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition())
+                .where(PART.CONTENT_HASH.isNotNull, onSite, PART.ITEM_ID.`in`(chunk))
                 .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch {
                     out.getOrPut(it.value1()!!) { ArrayList() } +=
                         PartMark(it.value2()!!, it.value3(), it.value4()!!, it.value5(), it.value6())
                 }
-        if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
+        }
         return out
     }
+
+    /** How many items have a part on the site with a text: counted by the database, no row read. */
+    fun itemsWithText(): Int =
+        db.select(DSL.countDistinct(PART.ITEM_ID))
+            .from(PART)
+            .where(PART.CONTENT_HASH.isNotNull, onSite)
+            .fetchOne()!!
+            .value1()!!
 
     private companion object {
         /** The items read by one statement: the length of a query's list, not a meaning. */

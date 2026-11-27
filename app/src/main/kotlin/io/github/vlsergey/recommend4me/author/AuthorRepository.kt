@@ -40,8 +40,11 @@ data class SiteAuthorBound(val ref: SiteAuthorRef, val mergedBy: MergedBy?)
  */
 class AuthorRepository(
     private val db: DSLContext,
-    /** Told of every merge of two authors and every author of a site taken out of one. */
-    private val regrouped: () -> Unit,
+    /**
+     * Told of every merge of two authors and every author of a site taken out of one: the authors of the sites of every
+     * normalized author whose works changed.
+     */
+    private val regrouped: (List<SiteAuthorRef>) -> Unit,
 ) {
 
     /** The entries of the catalogues the authors are bound to. */
@@ -161,6 +164,8 @@ class AuthorRepository(
      * those of [into], bound when they were, and [from] gone.
      */
     fun merge(from: Long, into: Long, now: Instant, by: MergedBy = MergedBy.User) {
+        // Of both, before the authors of the sites of [from] are bound anew: the works of both changed
+        val sites = sitesOf(listOf(from, into)).values.flatten()
         db.transaction { c ->
             val tx = DSL.using(c)
             val place = (by as? MergedBy.Place)?.owner
@@ -213,15 +218,17 @@ class AuthorRepository(
             }
             tx.deleteFrom(NORMALIZED_AUTHOR).where(NORMALIZED_AUTHOR.ID.eq(from)).execute()
         }
-        regrouped()
+        regrouped(sites)
     }
 
     /**
      * The author of a site taken out of the normalized author [from], to one of their own, and the two told apart: not
      * offered as one again; the new id.
      */
-    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long =
-        db.transactionResult { c ->
+    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long {
+        // Of [from] before, [site] among them: the works of both changed
+        val sites = sitesOf(listOf(from)).values.flatten() + site
+        return db.transactionResult { c ->
                 val tx = DSL.using(c)
                 val id =
                     tx.insertInto(NORMALIZED_AUTHOR)
@@ -249,7 +256,8 @@ class AuthorRepository(
                     .execute()
                 id
             }
-            .also { regrouped() }
+            .also { regrouped(sites.distinct()) }
+    }
 
     /**
      * The account of the [source] a dump gave by its name ([named]), its works given the site's own key ([key]) of the

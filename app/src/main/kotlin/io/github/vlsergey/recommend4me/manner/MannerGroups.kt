@@ -1,102 +1,165 @@
 package io.github.vlsergey.recommend4me.manner
 
+import io.github.vlsergey.recommend4me.author.authorFacetOf
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.series.TypeSeries
-import io.github.vlsergey.recommend4me.source.FacetRole
-import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
 
 /**
- * THE MANNERS OF THE NORMALIZED AUTHORS AND OF THE NORMALIZED SERIES of a content type, kept ([GroupMannerRepository]):
- * of every author the mean of the manners of all their works that have a text, of every series the mean of those of its
- * works — a work's own the mean of its items'. Made of the kept manners of the items, every work's authors and its
- * series as they are now, and written where what one is made of changed: a text read again, a work bound to another, an
- * author merged with another, a work put in a series. What a group is made of is told by the items' keys and the hashes
- * of their texts alone; the vectors are read, by their keys, of the works of the groups changed only, a portion at a
- * time — never every item's at once (1.4 million of them, 3.5 GB, took the whole memory twice on 2026-11-21).
+ * THE MANNERS OF THE NORMALIZED AUTHORS AND OF THE NORMALIZED SERIES of the works a turn of the stage takes
+ * ([Manners]), kept ([GroupMannerRepository]): of every author the mean of the manners of all their works that have a
+ * text, of every series the mean of those of its works — a work's own the mean of its items'. The groups of a work
+ * taken are those it is of now and those it was of as their manners were last made ([MannerMemberRepository]): each
+ * made of what it holds now — an author's items found by the authors of the sites bound to them, a series' by the
+ * series read around its works ([TypeSeries.around]) —, written where what it is made of changed (the words, its works,
+ * the texts of their items), taken away of no work with a manner. Everything read by keys: no group, work or item
+ * outside those taken and their groups; the vectors of the groups changed alone, a portion at a time.
  */
 internal object MannerGroups {
 
-    /** An item with a manner, and what its texts were. */
-    private class Item(val key: ItemKey, val textHash: String)
+    /** Of a turn, how many groups' manners were written or taken away, and every item whose groups' manners did. */
+    class Made(val groups: Int, val dated: Set<ItemKey>)
 
-    /** A group whose manner is to be made anew: its key, its works, what it is made of. */
-    private class Changed(val key: String, val works: List<ItemKey>, val madeOf: String)
+    /** A group whose manner is to be made anew: its works, by the item naming each, and what it is made of. */
+    private class Changed(val group: GroupRef, val works: List<ItemKey>, val madeOf: String)
 
-    /**
-     * The manners of every author and series of the [type] made again where what they are made of changed, of the works
-     * as [clusters] and [series] tell them; how many were written or taken away.
-     */
-    fun refresh(type: TypeStore, clusters: WorkClusters, series: TypeSeries): Int {
-        val words = type.mannerWords.id() ?: return 0
-        val works = HashMap<ItemKey, MutableList<Item>>()
-        val authors = HashMap<String, MutableSet<ItemKey>>()
-        type.sources.forEach { s ->
-            s.manner.made().forEach { (id, made) ->
-                if (made.wordsId != words) return@forEach
-                val key = ItemKey(s.id, id)
-                works.getOrPut(clusters.representative(key)) { ArrayList() } += Item(key, made.textHash)
-            }
-            authorFacet(s)?.let { facet ->
-                val bound = s.authors.bindingsOf(s.id)
-                s.items.forEachFacet(facet) { id, keys ->
-                    val work = clusters.representative(ItemKey(s.id, id))
-                    keys.mapNotNull(bound::get).forEach { authors.getOrPut(it.toString()) { HashSet() } += work }
-                }
+    /** The groups of the works of the [taken] items of the [type] made anew by the words [words] where they changed. */
+    fun refresh(type: TypeStore, words: Long, taken: Collection<ItemKey>): Made {
+        val clusters = WorkClusters.of(type.links.groupsOf(taken))
+        val items = taken.flatMapTo(LinkedHashSet()) { clusters.members(it) }
+        val before = type.mannerMembers.groupsOf(items)
+        val beforeSeries = before.values.flatten().filter { it.kind == MannerGroup.SERIES }
+        val keptOf = type.mannerMembers.itemsOf(beforeSeries)
+        // The series of the works taken now and of those of the series they were of: one reading around them all
+        val workOf = type.works.worksOf(items + keptOf.values.flatten())
+        val series = TypeSeries.around(type, workOf.values.distinct())
+        val now = authorsOf(type, items)
+        items.forEach { item ->
+            workOf[item]?.let(series::ofWork)?.let {
+                now.getOrPut(item) { HashSet() } += GroupRef(MannerGroup.SERIES, it.key)
             }
         }
-        // Of an author, the works of theirs that have a manner
-        val byAuthor = authors.mapValues { (_, own) -> own.filter { it in works } }.filterValues { it.isNotEmpty() }
-        val bySeries =
-            works.keys
-                .mapNotNull { work -> series.keyOf(work)?.let { it to work } }
-                .groupBy({ it.first }, { it.second })
-        return written(type, MannerGroup.AUTHOR, byAuthor, works, words) +
-            written(type, MannerGroup.SERIES, bySeries, works, words)
+        val touched = items.flatMapTo(HashSet()) { before[it].orEmpty() + now[it].orEmpty() }
+        if (touched.isEmpty()) return Made(0, emptySet())
+        val members = membersOf(type, touched, series)
+        return made(type, words, members)
+    }
+
+    /** Of the [items], the normalized authors each names, as groups. */
+    private fun authorsOf(type: TypeStore, items: Collection<ItemKey>): HashMap<ItemKey, MutableSet<GroupRef>> {
+        val out = HashMap<ItemKey, MutableSet<GroupRef>>()
+        items.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            val s = type.source(source) ?: return@forEach
+            val facet = authorFacetOf(s) ?: return@forEach
+            val named = s.items.facetsOf(ids).mapValues { it.value[facet].orEmpty() }
+            val bound = s.authors.bindingsOf(s.id, named.values.flatten())
+            named.forEach { (id, authors) ->
+                val own = authors.mapNotNull(bound::get)
+                if (own.isNotEmpty())
+                    out.getOrPut(ItemKey(source, id)) { HashSet() } += own.map { GroupRef(MannerGroup.AUTHOR, "$it") }
+            }
+        }
+        return out
     }
 
     /**
-     * The manners of the [groups] of the [kind] — each its works — written where what they are made of changed, those
-     * of groups no more taken away; how many.
+     * The items every one of the [groups] holds now: of an author those naming the authors of the sites bound to them,
+     * of a series those of its works as [series] read them; none of a group that is no more.
      */
-    private fun written(
-        type: TypeStore,
-        kind: MannerGroup,
-        groups: Map<String, List<ItemKey>>,
-        works: Map<ItemKey, List<Item>>,
-        words: Long,
-    ): Int {
-        val stored = type.groupManners.made(kind)
-        val changed = groups.mapNotNull { (key, members) ->
-            val own = members.sortedBy { it.toString() }
+    private fun membersOf(type: TypeStore, groups: Set<GroupRef>, series: TypeSeries): Map<GroupRef, List<ItemKey>> {
+        val out = groups.associateWithTo(HashMap()) { ArrayList<ItemKey>() }
+        val authors = groups.filter { it.kind == MannerGroup.AUTHOR }.mapNotNull { it.key.toLongOrNull() }
+        type.authors.sitesOf(authors).forEach { (author, sites) ->
+            sites.groupBy({ it.source }, { it.author }).forEach { (source, named) ->
+                val s = type.source(source) ?: return@forEach
+                val facet = authorFacetOf(s) ?: return@forEach
+                s.items.itemsWith(facet, named).values.flatten().forEach {
+                    out.getValue(GroupRef(MannerGroup.AUTHOR, "$author")) += ItemKey(source, it)
+                }
+            }
+        }
+        val byKey = series.all.associateBy { it.key }
+        val ofSeries = groups.filter { it.kind == MannerGroup.SERIES }.mapNotNull { g -> byKey[g.key]?.let { g to it } }
+        val itemsOf = type.works.itemsOf(ofSeries.flatMap { it.second.works })
+        ofSeries.forEach { (group, read) -> out.getValue(group) += read.works.flatMap { itemsOf[it].orEmpty() } }
+        return out
+    }
+
+    /**
+     * The manners of the groups of their [members] written where what they are made of changed, taken away of those of
+     * no work with a manner, and the items every one was made of kept.
+     */
+    private fun made(type: TypeStore, words: Long, members: Map<GroupRef, List<ItemKey>>): Made {
+        val clusters = WorkClusters.of(type.links.groupsOf(members.values.flatten().distinct()))
+        val worksOf = members.mapValues { (_, items) -> items.map(clusters::representative).distinct() }
+        val itemsOfWorks = worksOf.values.flatten().distinct().flatMap(clusters::members)
+        val made =
+            itemsOfWorks
+                .groupBy({ it.source }, { it.id })
+                .flatMap { (source, ids) ->
+                    type.source(source)?.manner?.madeOf(ids).orEmpty().mapNotNull { (id, m) ->
+                        if (m.wordsId == words) ItemKey(source, id) to m.textHash else null
+                    }
+                }
+                .toMap()
+        val stored =
+            members.keys
+                .groupBy { it.kind }
+                .flatMap { (kind, groups) ->
+                    type.groupManners.madeOf(kind, groups.map { it.key }).map { (key, hash) ->
+                        GroupRef(kind, key) to hash
+                    }
+                }
+                .toMap()
+        val changed = ArrayList<Changed>()
+        val gone = ArrayList<GroupRef>()
+        worksOf.forEach { (group, works) ->
+            val own = works.filter { work -> clusters.members(work).any { it in made } }.sortedBy { it.toString() }
+            if (own.isEmpty()) {
+                if (group in stored) gone += group
+                return@forEach
+            }
             val madeOf =
                 Vectors.hash(
                     "$words\n" +
                         own.joinToString("\n") { work ->
-                            works
-                                .getValue(work)
-                                .sortedBy { it.key.toString() }
-                                .joinToString(",") { "${it.key}=${it.textHash}" }
+                            clusters
+                                .members(work)
+                                .filter { it in made }
+                                .sortedBy { it.toString() }
+                                .joinToString(",") { "$it=${made.getValue(it)}" }
                         }
                 )
-            if (stored[key] == madeOf) null else Changed(key, own, madeOf)
+            if (stored[group] != madeOf) changed += Changed(group, own, madeOf)
         }
-        inPortions(changed, works).forEach { portion -> made(type, kind, portion, works, words) }
-        val gone = stored.keys - groups.keys
-        type.groupManners.remove(kind, gone)
-        return changed.size + gone.size
+        inPortions(changed, clusters).forEach { written(type, words, it, clusters) }
+        gone.groupBy({ it.kind }, { it.key }).forEach { (kind, keys) -> type.groupManners.remove(kind, keys) }
+        kept(type, members)
+        val dated =
+            (changed.map { it.group } + gone).flatMapTo(HashSet()) { group ->
+                worksOf.getValue(group).flatMap(clusters::members)
+            }
+        return Made(changed.size + gone.size, dated)
+    }
+
+    /** The items the [members] of every group are written as those its manner was made of, where they changed. */
+    private fun kept(type: TypeStore, members: Map<GroupRef, List<ItemKey>>) {
+        val before = type.mannerMembers.itemsOf(members.keys)
+        members.forEach { (group, items) ->
+            if (before[group].orEmpty().toSet() != items.toSet()) type.mannerMembers.replace(group, items)
+        }
     }
 
     /** The [changed] groups in portions of about [PORTION] items of their works: a group whole in one. */
-    private fun inPortions(changed: List<Changed>, works: Map<ItemKey, List<Item>>): List<List<Changed>> {
+    private fun inPortions(changed: List<Changed>, clusters: WorkClusters): List<List<Changed>> {
         val portions = ArrayList<List<Changed>>()
         var portion = ArrayList<Changed>()
         var items = 0
         changed.forEach { group ->
             portion += group
-            items += group.works.sumOf { works.getValue(it).size }
+            items += group.works.sumOf { clusters.members(it).size }
             if (items >= PORTION) {
                 portions += portion
                 portion = ArrayList()
@@ -108,36 +171,26 @@ internal object MannerGroups {
     }
 
     /** The manners of the groups of a [portion] made of their works' items' vectors, read by their keys, and kept. */
-    private fun made(
-        type: TypeStore,
-        kind: MannerGroup,
-        portion: List<Changed>,
-        works: Map<ItemKey, List<Item>>,
-        words: Long,
-    ) {
+    private fun written(type: TypeStore, words: Long, portion: List<Changed>, clusters: WorkClusters) {
         val vectors = HashMap<ItemKey, FloatArray>()
         portion
-            .flatMap { group -> group.works.flatMap { works.getValue(it) } }
-            .map { it.key }
+            .flatMap { group -> group.works.flatMap(clusters::members) }
             .distinct()
             .groupBy({ it.source }, { it.id })
             .forEach { (source, ids) ->
                 type.source(source)?.manner?.ofMany(ids, words)?.forEach { (id, v) -> vectors[ItemKey(source, id)] = v }
             }
-        portion.forEach { group ->
-            val own = group.works.mapNotNull { work -> meanManner(works.getValue(work).mapNotNull { vectors[it.key] }) }
-            meanManner(own)?.let {
-                type.groupManners.save(kind, group.key, words, GroupManner(group.madeOf, own.size, it))
-            }
+        portion.forEach { changed ->
+            val own = changed.works.mapNotNull { work -> meanManner(clusters.members(work).mapNotNull(vectors::get)) }
+            val kind = changed.group.kind
+            val key = changed.group.key
+            meanManner(own)?.let { type.groupManners.save(kind, key, words, GroupManner(changed.madeOf, own.size, it)) }
         }
     }
 
     /** The items of the works whose vectors one portion reads: a bound on the memory, not a meaning. */
     private const val PORTION = 10_000
 }
-
-/** The facet of the authors of the source; none of a source that names none. */
-internal fun authorFacet(s: SourceStore): String? = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
 
 /** The mean of manners — vectors of one length —; none of none. */
 internal fun meanManner(vectors: List<FloatArray>): FloatArray? =

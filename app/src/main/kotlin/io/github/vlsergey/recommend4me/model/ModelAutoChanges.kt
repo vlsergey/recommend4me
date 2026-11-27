@@ -74,6 +74,9 @@ class ModelAutoChanges(private val db: DSLContext) {
         /** The models of the grades and of interest of the type. */
         const val GRADES = "grades"
 
+        /** The words the manners of the type's texts are measured by. */
+        const val MANNER = "manner"
+
         /** The share of the works a model learnt of the changes of no word of the user's come to: fitted again then. */
         private const val SHARE = 0.01
 

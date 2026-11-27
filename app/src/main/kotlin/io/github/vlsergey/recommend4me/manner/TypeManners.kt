@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.manner
 
+import io.github.vlsergey.recommend4me.author.authorFacetOf
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -72,7 +73,7 @@ private constructor(
                 s.manner.ofMany(ids, words).forEach { (id, v) ->
                     items.getOrPut(clusters.representative(ItemKey(source, id))) { ArrayList() } += v
                 }
-                val facet = authorFacet(s) ?: return@forEach
+                val facet = authorFacetOf(s) ?: return@forEach
                 val facets = read[source] ?: s.items.facetsOf(ids)
                 val bound = s.authors.bindingsOf(s.id, facets.values.flatMap { it[facet].orEmpty() })
                 facets.forEach { (id, ofItem) ->
