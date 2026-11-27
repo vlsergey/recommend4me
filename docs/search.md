@@ -28,12 +28,13 @@ meaning (`TextDef.searchByMeaning`) — a window the encoder cut the text into (
 2024; Lucene's and Elasticsearch's BBQ): the vector less the type's centre, turned by the type's random rotation, of
 every number whether it is above nought — a bit a number, 128 bytes a window of bge-m3. Kept in the store of the parts of the source
 (`PartStore.fullText`, the column family `fullText`, RocksDB's own files of tens of megabytes, not apart from the keys),
-of every text one value: its windows' characters and full-text vectors (`FullTextVectorRepository`); the key of the
+of every text one value: the characters of the text and its one full-text vector (`FullTextVectorRepository`); the key of the
 centre they were made by kept with the part (`part.full_text`) and with the text's vector (`text_vector.full_text`).
 
 - **Made by the stages that make the windows**, of the windows of the run: the chapters' by the stage of the chapters
-  (`PartVectors`, `ChapterEncoding`), the texts' by the stage of the texts (`TextVectors`, `TextWindows`); of a text
-  whose windows are made and whose full-text vectors are not, of the vectors kept, no model run.
+  (`PartVectors`, `ChapterEncoding`); a text's — read whole, one window over the whole text, no windows of its own
+  (owner, 2026-11-27) — by the stage of the texts (`TextVectors`, `SearchedTexts`), of its vector; of a text whose vector
+  is made and whose full-text vector is not, of the vector kept, no model run.
 - **The centre and the rotation** (`FullTextCentres`, the model database `full_text_centre`): the mean of the windows
   the encoder makes of 300 chapters and 2 000 texts searched by meaning of every source drawn at random, and a random
   orthogonal matrix (Gram-Schmidt of numbers of a normal law) — learnt once of an encoder of
@@ -122,8 +123,9 @@ the windows' nearest 300 passages read again by their pieces; among the first te
   the text is read with them and cut into pieces again (the tokenizer, milliseconds).
 - **Made by the stages that make the windows**: the chapters' by the stage of the chapters (`PartVectors`,
   `ChapterEncoding`, `encodeSiteItemChapters`), the texts' searched by meaning by the stage of the texts (`TextVectors`,
-  `TextWindows`, `encodeSiteItemTexts`) — a text whose vector is made and whose pieces are not has its pieces made
-  alone, nothing the models or the index read told of as changed.
+  `SearchedTexts`, `encodeSiteItemTexts`), a text read whole in one pass that makes its vector and its pieces together
+  (`PieceEncoder.encodeWhole`) — a text whose vector is made and whose pieces are not has its pieces made alone, nothing
+  the models or the index read told of as changed.
 - **The projection and the cuts** (`PieceProjection`, the model database `piece_projection`) are learnt once of a sample
   of the type's chapters — the leading 128 directions of the head's vectors of 100 000 pieces, then the quartiles of
   every number — when the encoder has none (`fitPieceProjection`): learnt of other works they lose 0.015 of the MRR

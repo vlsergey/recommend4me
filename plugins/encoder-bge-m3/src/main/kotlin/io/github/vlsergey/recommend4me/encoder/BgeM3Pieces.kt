@@ -32,16 +32,31 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
     /** The head's weight, [out, in] row after row, and its bias. */
     private val head: Pair<FloatArray, FloatArray> by lazy { readHead(onnx.path(HEAD)) }
 
-    override fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> {
+    override fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> =
+        encodeCut(texts, projection) { size -> encoder.scenesOf(size) }
+
+    override fun encodeWhole(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> =
+        encodeCut(texts, projection) { size -> listOf(0 until minOf(size, BgeM3Encoder.LONGEST_ROOM)) }
+
+    /**
+     * Of every text, the vector of every window [windowsOf] cuts its pieces into and of every piece, a piece read in
+     * the window where it stands farthest from an edge, with where every window lies in the text.
+     */
+    private fun encodeCut(
+        texts: List<String>,
+        projection: PieceProjection?,
+        windowsOf: (Int) -> List<IntRange>,
+    ): List<EncodedPieces> {
         val written = texts.indices.filter { texts[it].isNotBlank() }
         val cut = encoder.cutOf(written.map { texts[it] })
         val ids = cut.map { it.ids }
+        val chunks = ids.map { windowsOf(it.size) }
         // Every window of every text, the text it is of and where in it it begins
         val windows = ArrayList<LongArray>()
         val owner = ArrayList<Int>()
         val begins = ArrayList<Int>()
         ids.forEachIndexed { k, own ->
-            encoder.scenesOf(own.size).forEach { chunk ->
+            chunks[k].forEach { chunk ->
                 windows +=
                     longArrayOf(encoder.bos) +
                         LongArray(chunk.count()) { own[chunk.first + it] } +
@@ -59,7 +74,8 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
                 out += EncodedPieces(emptyList(), emptyList(), emptyList())
                 return@forEach
             }
-            val n = ids[k].size
+            // The pieces the windows read: of a text read whole, as many as bge-m3 reads of one
+            val n = chunks[k].maxOf { it.last + 1 }
             val best = arrayOfNulls<FloatArray>(n)
             val margin = IntArray(n) { -1 }
             val own = windows.indices.filter { owner[it] == k }
@@ -78,7 +94,7 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
                 EncodedPieces(
                     own.map { unit(firsts[it]) },
                     best.map { unit(it!!) },
-                    encoder.windowSpansOf(cut[k].charTokenSpans),
+                    encoder.spansOf(cut[k].charTokenSpans, chunks[k]),
                 )
         }
         return out
@@ -107,7 +123,7 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
         val firsts = arrayOfNulls<FloatArray>(windows.size)
         val pieces = arrayOfNulls<Array<FloatArray>>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        for (batch in order.chunked(if (onnx.onGpu(graph)) BgeM3Encoder.GPU_BATCH else BgeM3Encoder.BATCH)) {
+        for (batch in RunBatches.of(order, { windows[it].size }, onnx.onGpu(graph))) {
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { BgeM3Encoder.PAD }
             val mask = LongArray(batch.size * len)

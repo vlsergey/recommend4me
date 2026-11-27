@@ -19,7 +19,10 @@ interface TextEncoder {
     /** Whether its files are in place; an encoder that is not ready is skipped. */
     fun ready(): Boolean
 
-    /** Vectors of texts of any length, of unit length; a blank text gets null. */
+    /**
+     * Vectors of texts of any length, of unit length; a blank text gets null. A text is read whole, as far as the
+     * encoder reads one text — in one pass where it can, not as the mean of its windows ([encodeWindows]).
+     */
     fun encode(texts: List<String>, kind: TextKind = TextKind.PASSAGE): List<FloatArray?>
 
     /**
@@ -82,6 +85,14 @@ interface PieceEncoder {
      * (as it is, of none), of unit length; a blank text has none.
      */
     fun encode(texts: List<String>, projection: PieceProjection?): List<EncodedPieces>
+
+    /**
+     * Of every text read whole in one pass, as [TextEncoder.encode] reads it — no windows (owner, 2026-11-27: a
+     * description is one vector) —, its vector, the one of [EncodedPieces.windows], and the vector of every piece it
+     * reads, projected as [encode] makes them; [EncodedPieces.spans] the one span of the text read. A blank text has
+     * none.
+     */
+    fun encodeWhole(texts: List<String>, projection: PieceProjection?): List<EncodedPieces>
 
     /** The vector of every piece of a line searched for, projected and of unit length as [encode] makes them. */
     fun query(line: String, projection: PieceProjection?): List<FloatArray>

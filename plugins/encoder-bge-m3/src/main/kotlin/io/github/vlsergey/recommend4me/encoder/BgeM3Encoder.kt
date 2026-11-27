@@ -19,10 +19,9 @@ import kotlin.math.sqrt
  *
  * No prefixes: bge-m3 reads a query and a passage alike.
  *
- * TEXTS ARE READ IN WINDOWS of [WINDOW] pieces, the positions XLM-RoBERTa was pretrained at: every window is encoded on
- * its own — a passage the search finds, a scene rather than a chapter — and a text's vector is the windows' mean
- * weighted by length, made unit again, of [MAX_WINDOWS] at most: the 8192 pieces bge-m3 was trained to read of one
- * text.
+ * A TEXT IS READ WHOLE, in one pass, as far as the [LONGEST] pieces bge-m3 was trained to read of one text: its vector
+ * the first piece's of that pass (owner, 2026-11-27: a description is one vector, not the mean of its windows). Only a
+ * chapter is read in windows ([encodeWindows]): a scene the search finds, not the chapter's mean.
  */
 class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
 
@@ -60,19 +59,21 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     internal fun cutOf(texts: List<String>): List<Encoding> =
         if (texts.isEmpty()) emptyList() else tokenizer.batchEncode(texts, false, false).toList()
 
-    /** Vectors of texts of any length, unit length; an empty text gets null. A query and a passage are read alike. */
+    /**
+     * Vectors of texts of any length, unit length, every text read whole in one pass ([wholeOf]); an empty text gets
+     * null. A query and a passage are read alike.
+     */
     override fun encode(texts: List<String>, kind: TextKind): List<FloatArray?> {
-        val (windows, owner) = windowsOf(texts, MAX_WINDOWS)
-        val vectors = embedIds(windows)
-        val sums = arrayOfNulls<FloatArray>(texts.size)
-        windows.indices.forEach { w ->
-            val sum = sums[owner[w]] ?: FloatArray(DIM).also { sums[owner[w]] = it }
-            val weight = (windows[w].size - 2).toFloat()
-            val v = vectors[w]
-            for (k in 0 until DIM) sum[k] += weight * v[k]
-        }
-        return sums.map { it?.let(::unit) }
+        val written = texts.indices.filter { texts[it].isNotBlank() }
+        val vectors = embedIds(piecesOf(written.map { texts[it] }).map(::wholeOf))
+        val out = arrayOfNulls<FloatArray>(texts.size)
+        written.forEachIndexed { k, t -> out[t] = vectors[k] }
+        return out.toList()
     }
+
+    /** The one window a text is read in whole: its pieces, as many as bge-m3 reads of one, between <s> and </s>. */
+    internal fun wholeOf(ids: LongArray): LongArray =
+        longArrayOf(bos) + ids.copyOf(minOf(ids.size, LONGEST_ROOM)) + longArrayOf(eos)
 
     override val windowsId: String = "$ENCODER/$SCENE-$SCENE_STEP"
 
@@ -114,34 +115,16 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
 
     /** The windows of [encodeWindows] in the text, by the characters of their first and last pieces. */
     override fun windowSpans(text: String): List<IntRange> =
-        if (text.isBlank()) emptyList() else windowSpansOf(tokenizer.encode(text, false, false).charTokenSpans)
+        if (text.isBlank()) emptyList()
+        else tokenizer.encode(text, false, false).charTokenSpans.let { spansOf(it, scenesOf(it.size)) }
 
-    /** The windows of [encodeWindows] in a text, by the characters of its pieces' [spans]. */
-    internal fun windowSpansOf(spans: Array<CharSpan?>): List<IntRange> =
-        scenesOf(spans.size).mapNotNull { chunk ->
-            // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
-            // have
-            val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
-            val to = chunk.reversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
-            from until to
-        }
-
-    /**
-     * The pages a whole text's vector is the mean of ([encode]): of [WINDOW] pieces end to end, every one of every text
-     * in one list, so those of different texts share batches, with the text each is of; at most [limit] of a text.
-     */
-    private fun windowsOf(texts: List<String>, limit: Int): Pair<List<LongArray>, List<Int>> {
-        val windows = ArrayList<LongArray>()
-        val owner = ArrayList<Int>()
-        val written = texts.indices.filter { texts[it].isNotBlank() }
-        piecesOf(written.map { texts[it] }).forEachIndexed { k, ids ->
-            val t = written[k]
-            ids.asList().chunked(ROOM).take(limit).forEach { chunk ->
-                windows += longArrayOf(bos) + chunk.toLongArray() + longArrayOf(eos)
-                owner += t
-            }
-        }
-        return windows to owner
+    /** The windows of the pieces [chunks] in a text, by the characters of its pieces' [spans]. */
+    internal fun spansOf(spans: Array<CharSpan?>, chunks: List<IntRange>): List<IntRange> = chunks.mapNotNull { chunk ->
+        // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
+        // have
+        val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
+        val to = chunk.reversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
+        from until to
     }
 
     /**
@@ -151,7 +134,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     private fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        for (batch in order.chunked(if (onnx.onGpu(FIRST_PIECE)) GPU_BATCH else BATCH)) {
+        for (batch in RunBatches.of(order, { windows[it].size }, onnx.onGpu(FIRST_PIECE))) {
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { PAD }
             val mask = LongArray(batch.size * len)
@@ -199,11 +182,11 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         const val DIM = 1024
         internal const val PAD = 1L
 
-        /** The pieces of a window, its two special ones among them: the positions XLM-RoBERTa was pretrained at. */
-        private const val WINDOW = 512
+        /** The pieces bge-m3 reads of one text, its two special ones among them: what it was trained to read. */
+        private const val LONGEST = 8192
 
-        /** The pieces of the text a window holds besides its two special ones. */
-        private const val ROOM = WINDOW - 2
+        /** The pieces of a text read whole besides the two special ones. */
+        internal const val LONGEST_ROOM = LONGEST - 2
 
         /** The pieces of a window ([encodeWindows]), its two special ones among them: a scene, not a page. */
         internal const val SCENE = 256
@@ -216,12 +199,5 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
          * encoded twice, kept so till there are good ways of finding a meaning in a text (owner, 2026-11-25).
          */
         internal const val SCENE_STEP = SCENE_ROOM / 2
-
-        /** The pages of one text's vector at most: the 8192 pieces bge-m3 reads of one text. */
-        private const val MAX_WINDOWS = 8192 / WINDOW
-
-        /** Windows per run, on the processor and on the card: memory, not meaning. */
-        internal const val BATCH = 8
-        internal const val GPU_BATCH = 64
     }
 }

@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.textvector
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_VECTOR
-import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_WINDOW
 import io.github.vlsergey.recommend4me.database.streamed
 import io.github.vlsergey.recommend4me.vector.Vectors
 import java.util.concurrent.locks.ReentrantLock
@@ -10,15 +9,17 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /**
- * A text's vector kept: the hash of its text, null of a vector by another encoder; whether its pieces and the full-text
- * vectors of its windows are made.
+ * A text's vector kept: the hash of its text, null of a vector by another encoder; whether its pieces and its full-text
+ * vector are made.
  */
 class KeptText(val hash: String?, val pieces: Boolean, val fullText: Boolean)
 
 /**
- * The vectors of the texts of one source's items, kept with the hash of the text and the encoder that made them: a text
- * is encoded again when it or the encoder changed, and vectors of another encoder are never read. The windows of the
- * long texts are kept by [windows]; the vectors of short texts — reviews, phrases — by [phrases].
+ * The vectors of the texts of one source's items, a text's one vector of the text read whole, kept with the hash of the
+ * text and the encoder that made them: a text is encoded again when it or the encoder changed, and vectors of another
+ * encoder are never read. What is held of a text's vector to know it made — its encoder, its text's hash, whether its
+ * pieces and its full-text vector are made — is read of an index of those alone (`text_vector_kept`), not of the rows
+ * of the vectors, a seek of the disk a work (V45). The vectors of short texts — reviews, phrases — by [phrases].
  */
 class TextVectorRepository(private val db: DSLContext) {
 
@@ -28,9 +29,6 @@ class TextVectorRepository(private val db: DSLContext) {
      * first one's row, which its own check did not see.
      */
     private val writing = ReentrantLock()
-
-    /** The windows of the long texts, written under the same lock. */
-    val windows = TextWindowRepository(db, writing)
 
     /** The vectors of short texts by their keys, written under the same lock. */
     val phrases = PhraseVectorRepository(db, writing)
@@ -94,38 +92,29 @@ class TextVectorRepository(private val db: DSLContext) {
             .sorted()
 
     /**
-     * The text's vector; the windows of the text it had before are of another text, and go
-     * ([TextWindowRepository.saveWindows] makes them anew).
+     * The text's vector; the pieces and the full-text vector made of the text it had before are of another text, and
+     * are told not made ([io.github.vlsergey.recommend4me.textvector.SearchedTexts] makes them anew).
      */
     fun save(itemId: Long, textKey: String, encoder: String, hash: String, vector: FloatArray) {
         val packed = Vectors.half(vector)
         writing.withLock {
-            db.transaction { c ->
-                val tx = c.dsl()
-                tx.insertInto(TEXT_VECTOR)
-                    .set(TEXT_VECTOR.ITEM_ID, itemId)
-                    .set(TEXT_VECTOR.TEXT_KEY, textKey)
-                    .set(TEXT_VECTOR.ENCODER, encoder)
-                    .set(TEXT_VECTOR.TEXT_HASH, hash)
-                    .set(TEXT_VECTOR.VEC, packed)
-                    .onDuplicateKeyUpdate()
-                    .set(TEXT_VECTOR.ENCODER, encoder)
-                    .set(TEXT_VECTOR.TEXT_HASH, hash)
-                    .set(TEXT_VECTOR.VEC, packed)
-                    .setNull(TEXT_VECTOR.WINDOWS)
-                    .setNull(TEXT_VECTOR.WINDOWS_BY)
-                    .setNull(TEXT_VECTOR.PIECES)
-                    .setNull(TEXT_VECTOR.FULL_TEXT)
-                    .execute()
-                tx.deleteFrom(TEXT_WINDOW)
-                    .where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey))
-                    .execute()
-            }
+            db.insertInto(TEXT_VECTOR)
+                .set(TEXT_VECTOR.ITEM_ID, itemId)
+                .set(TEXT_VECTOR.TEXT_KEY, textKey)
+                .set(TEXT_VECTOR.ENCODER, encoder)
+                .set(TEXT_VECTOR.TEXT_HASH, hash)
+                .set(TEXT_VECTOR.VEC, packed)
+                .onDuplicateKeyUpdate()
+                .set(TEXT_VECTOR.ENCODER, encoder)
+                .set(TEXT_VECTOR.TEXT_HASH, hash)
+                .set(TEXT_VECTOR.VEC, packed)
+                .setNull(TEXT_VECTOR.PIECES)
+                .setNull(TEXT_VECTOR.FULL_TEXT)
+                .execute()
         }
     }
 
     fun delete(itemId: Long, textKey: String) {
-        db.deleteFrom(TEXT_WINDOW).where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey)).execute()
         db.deleteFrom(TEXT_VECTOR).where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(textKey)).execute()
     }
 

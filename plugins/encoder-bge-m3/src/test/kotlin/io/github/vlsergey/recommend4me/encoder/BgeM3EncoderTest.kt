@@ -78,6 +78,27 @@ class BgeM3EncoderTest {
     }
 
     @Test
+    fun `a long text is read whole in one pass, its pieces of the same pass, the longest beside the shortest`() {
+        val pieces = encoder.pieces
+        assumeTrue(pieces.ready(), "the ColBERT head of bge-m3 is not in the models folder")
+        // Of some three thousand pieces: twelve windows, read as one
+        val long = (1..400).joinToString(" ") { "Глава $it: герой идёт дальше." }
+        val short = "Дракон спит под холмом."
+        val (vector, shortVector, blank) = encoder.encode(listOf(long, short, " "))
+        assertNull(blank)
+        val (whole, shortWhole) = pieces.encodeWhole(listOf(long, short), null)
+        assertEquals(1, whole.windows.size, "one vector of the whole text")
+        assertTrue(cos(vector!!, whole.windows.single()) > 0.9999, "the vector of the text, of the same pass")
+        assertTrue(cos(shortVector!!, shortWhole.windows.single()) > 0.9999)
+        assertEquals(listOf(0 until long.length), whole.spans, "the one span of the whole text")
+        assertEquals(encoder.cutOf(listOf(long)).single().ids.size, whole.pieces.size, "every piece read")
+        // Not the mean of its windows: a vector of its own
+        val windows = encoder.encodeWindows(listOf(long)).single()
+        assertTrue(windows.size > 2)
+        assertTrue(windows.all { cos(it, vector) < 0.9999 })
+    }
+
+    @Test
     fun `the graph run gives the first piece's hidden state of the model's, within half precision`() {
         assumeTrue(encoder.ready(), "bge-m3 files are not in the models folder")
         val texts = listOf("Шерлок Холмс расследует загадочное убийство в Лондоне.", "A dragon sleeps under the hill.")

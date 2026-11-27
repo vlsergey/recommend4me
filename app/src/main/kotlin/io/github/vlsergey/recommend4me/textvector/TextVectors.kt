@@ -62,7 +62,7 @@ class TextVectors(
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
     private val tasks: Tasks,
-    private val windows: TextWindows,
+    private val searched: SearchedTexts,
     private val lists: ListIndexes,
     private val sweeps: StageSweeps,
     private val documents: ListVectors,
@@ -203,8 +203,9 @@ class TextVectors(
     }
 
     /**
-     * The texts of the items [ids] of the source [store] encoded by [with] where new or changed, and kept with their
-     * windows and their pieces, a batch at a time; those gone dropped. The items whose vectors changed.
+     * The texts of the items [ids] of the source [store] encoded by [with] where new or changed, each read whole, and
+     * kept with their pieces and full-text vectors ([SearchedTexts]), a batch at a time; those gone dropped. The items
+     * whose vectors changed.
      */
     private fun encoded(
         store: SourceStore,
@@ -224,20 +225,19 @@ class TextVectors(
         val (changed, made) = scan.todo.partition { it.vector }
         for (batch in changed.chunked(BATCH)) {
             if (giveWay()) break
-            val vectors = encoder.encode(batch.map { it.text })
+            // The vectors kept first: a vector kept anew forgets the pieces and the full-text vector made before
+            val vectors = searched.encode(encoder, batch, with.texts)
             batch.forEachIndexed { i, t ->
-                vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
+                vectors.vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
             }
-            val encoded = batch.indices.filter { vectors[it] != null }
-            windows.keepWindows(store, encoded.map { batch[it] }, encoded.map { vectors[it]!! }, with.texts)
+            searched.keep(store, batch, vectors, with.texts)
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, batch.map { it.itemId }.distinct()))
         }
         // The texts whose vectors are made and whose pieces or full-text vectors are not, of a projection or a centre
-        // learnt anew:
-        // nothing the models or the index read changed
+        // learnt anew: nothing the models or the index read changed
         for (batch in made.chunked(BATCH)) {
             if (giveWay()) break
-            windows.keepMade(store, batch, with.texts)
+            searched.keepMade(store, batch, with.texts)
         }
         return (changed.map { it.itemId } + gone.map { it.first }).distinct().map { ItemKey(store.id, it) }
     }
@@ -316,6 +316,7 @@ private class Encoding(val encoder: TextEncoder, val texts: TextEncoding) {
     val key: String
         get() =
             encoder.id +
+                "|$READ" +
                 (texts.pieces?.let { "|pieces:${it.projection.key}" } ?: "") +
                 (texts.centre?.let { "|fullText:${it.key}" } ?: "")
 }
@@ -329,6 +330,12 @@ private fun madeBy(index: ListIndex, key: String): Boolean =
 
 /** What the index of the list tells of since when the vectors are to be made by the encoder of now. */
 private const val VECTORS_SINCE = "vectors"
+
+/**
+ * How a text is read: whole, one vector a text, no windows (owner, 2026-11-27). A text read otherwise before is marked
+ * to be encoded again by the migration of its file (V44); a new way of reading looks at every work's texts again.
+ */
+private const val READ = "whole"
 
 /** What the index of the list tells of since when the vectors were made by [key] ([Encoding.key]), when last told. */
 private fun vectorsBy(key: String) = "vectorsBy:$key"

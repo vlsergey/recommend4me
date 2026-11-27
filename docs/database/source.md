@@ -13,8 +13,7 @@
 | `facet_value_parent` | a value the site puts another under (AO3's metatags and subtags): the tag or the universe of the one put under that of the other |
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |
-| `text_vector` | the vector of a text, with the hash of the text and the encoder; how many windows it has, and what they were made by (`windows_by`: the encoder and its way of cutting a text); the key of the projection its pieces' codes were made by (`pieces`) and of the centre the full-text vectors of its windows were made by (`full_text`), the codes and the full-text vectors in the store of the parts under `text:<key>` |
-| `text_window` | the vector of every window of a text longer than one window of the encoder: a scene of it, overlapping the next by half — what the full-text vectors the search finds a piece of a long text by are made of |
+| `text_vector` | the vector of a text read whole, one pass, no windows, with the hash of the text and the encoder; the key of the projection its pieces' codes were made by (`pieces`) and of the centre its full-text vector was made by (`full_text`), the codes and the full-text vector in the store of the parts under `text:<key>`; what is held of it to know it made read of an index of those columns alone (`text_vector_kept`), not of the rows of the vectors |
 | `phrase_vector` | the vector of a short text — a review, a tag's name, a phrase of the search — by the key of the text |
 | `picture` | a work's picture: the cover first, then the screenshots |
 | `item_picture_vector` | the cover's vector and the mean direction of the screenshots |
@@ -193,16 +192,8 @@ erDiagram
         VARCHAR encoder
         VARCHAR text_hash
         VARBINARY vec
-        INTEGER windows "null"
-        VARCHAR windows_by "null"
         VARCHAR pieces "null"
         VARCHAR full_text "null"
-    }
-    text_window {
-        BIGINT item_id PK, FK
-        VARCHAR text_key PK
-        INTEGER window_no PK
-        VARBINARY vec
     }
     wanted_page {
         VARCHAR url PK
@@ -221,5 +212,4 @@ erDiagram
     item ||--o{ series_place : "item_id"
     item ||--o{ set_vector : "item_id"
     item ||--o{ text_vector : "item_id"
-    item ||--o{ text_window : "item_id"
 ```

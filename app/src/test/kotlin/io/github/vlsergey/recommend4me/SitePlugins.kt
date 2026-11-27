@@ -482,6 +482,17 @@ class SitePlugins {
             )
         }
 
+        override fun encodeWhole(texts: List<String>, projection: PieceProjection?): List<EncodedPieces> =
+            texts.map { t ->
+                if (t.isBlank()) EncodedPieces(emptyList(), emptyList(), emptyList())
+                else
+                    EncodedPieces(
+                        listOfNotNull(words.encode(listOf(t)).single()),
+                        word.findAll(t).map { vectorOf(it.value, projection) }.toList(),
+                        listOf(t.indices),
+                    )
+            }
+
         override fun query(line: String, projection: PieceProjection?): List<FloatArray> =
             word.findAll(line).map { vectorOf(it.value, projection) }.toList()
 
