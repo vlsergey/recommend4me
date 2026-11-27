@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.series
 
 import io.github.vlsergey.recommend4me.database.Database
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.manner.GroupCursor
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.nio.file.Path
 import java.time.Instant
@@ -119,6 +120,12 @@ class SeriesFilterTest {
             )
             assertEquals(listOf(SiteSeriesRef("author.today", "b")), series.sitesOf(listOf(b)).getValue(b))
             assertEquals(setOf(a, b, c), series.list.entries(listOf(a, b, c, d)).keys)
+            // In the order of the changes of their lists of works, of one date by their numbers, from where it stood:
+            // the
+            // date kept whole, to its last digit
+            val first = series.worksChangedAfter(null, 2)
+            val next = series.worksChangedAfter(GroupCursor.parse(first.last().toString()), 2)
+            assertEquals(listOf(b, c, a), (first + next).map { it.id })
             val streamed = HashMap<Long, List<Long>>()
             series.forEachSeries { id, of -> streamed[id] = of }
             assertEquals(listOf(w[0], w[1]), streamed[a])
