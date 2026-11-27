@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.manner
 import io.github.vlsergey.recommend4me.database.model.tables.references.GROUP_MANNER
 import io.github.vlsergey.recommend4me.vector.Vectors
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 /** The groups of works a manner is kept of: a normalized author's works, a normalized series' works. */
 enum class MannerGroup {
@@ -50,21 +51,25 @@ class GroupMannerRepository(private val db: DSLContext) {
     /** The manners of the groups [keys] of the [kind] — none of whose works has a text now — taken away. */
     fun remove(kind: MannerGroup, keys: Collection<String>) {
         keys.chunked(BATCH).forEach { chunk ->
+            // Every key asked whole: of the kind and a list, every group of the kind walked ([of])
             db.deleteFrom(GROUP_MANNER)
-                .where(GROUP_MANNER.KIND.eq(kind.name), GROUP_MANNER.GROUP_KEY.`in`(chunk))
+                .where(DSL.row(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY).`in`(chunk.map { DSL.row(kind.name, it) }))
                 .execute()
         }
     }
 
-    /** The manners of the groups [keys] of the [kind] measured by the words [wordsId]: key to vector. */
+    /**
+     * The manners of the groups [keys] of the [kind] measured by the words [wordsId]: key to vector. Every key asked
+     * whole — the pair of the kind and the group —: asked as the kind and a list of groups, H2 walks every group of the
+     * kind for every batch, its key used for the kind alone (2026-11-27: the 335 000 authors' of the books).
+     */
     fun of(kind: MannerGroup, keys: Collection<String>, wordsId: Long): Map<String, FloatArray> {
         val out = HashMap<String, FloatArray>()
         keys.distinct().chunked(BATCH).forEach { chunk ->
             db.select(GROUP_MANNER.GROUP_KEY, GROUP_MANNER.VEC)
                 .from(GROUP_MANNER)
                 .where(
-                    GROUP_MANNER.KIND.eq(kind.name),
-                    GROUP_MANNER.GROUP_KEY.`in`(chunk),
+                    DSL.row(GROUP_MANNER.KIND, GROUP_MANNER.GROUP_KEY).`in`(chunk.map { DSL.row(kind.name, it) }),
                     GROUP_MANNER.WORDS_ID.eq(wordsId),
                 )
                 .fetch { out[it.value1()!!] = Vectors.fromHalf(it.value2()!!) }
