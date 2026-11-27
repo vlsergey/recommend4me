@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.series
 
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.manner.MannerGroup
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
@@ -59,6 +60,8 @@ class SeriesBinding(private val stores: Stores) {
                 }
         val gone = before.keys - taken
         val ids = repository.write(made, gone, now)
+        // A series gone: its manner of no work now
+        if (gone.isNotEmpty()) type.groupManners.remove(MannerGroup.SERIES, gone.map { "$it" })
         // A work of another series now, or of none: its feature of the series changed
         val inSeries = made.flatMapTo(HashSet()) { it.works }
         val moved =

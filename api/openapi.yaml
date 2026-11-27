@@ -5167,6 +5167,7 @@ components:
           - keepOutWorks
           - keyNamedValues
           - letGoUnusedFandoms
+          - makeGroupManners
           - makeSiteItemSetVectors
           - makeWorkManners
           - measurePartWorth

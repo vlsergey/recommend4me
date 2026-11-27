@@ -23,16 +23,27 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
     override fun setFacet(itemId: Long, facet: String, values: List<FacetValue>) {
         write {
             // A work met as a work of a series it was not of: the series' page, read before, did not list it
-            val newSeries =
-                if (facet != seriesFacet) emptyList()
-                else values.map { it.key } - store.items.facets(itemId)[facet].orEmpty().toSet()
+            val before =
+                if (facet == seriesFacet || facet == authorFacet) store.items.facets(itemId)[facet].orEmpty()
+                else emptyList()
+            val newSeries = if (facet != seriesFacet) emptyList() else values.map { it.key } - before.toSet()
             store.items.setFacet(itemId, facet, standardised(itemId, facet, values))
-            store.series.worksSeen(newSeries, Instant.now())
+            val now = Instant.now()
+            store.series.worksSeen(newSeries, now)
+            // An author the work names now or names no more: the list of their works changed
+            if (facet == authorFacet) {
+                val changed =
+                    (before.toSet() + values.map { it.key }) - (before.toSet() intersect values.map { it.key }.toSet())
+                store.authors.works.changed(store.authors.bindingsOf(store.id, changed).values, now)
+            }
         }
     }
 
     /** The source's facet of the series; none of a source without series. */
     private val seriesFacet = store.schema.facets.firstOrNull { it.role == FacetRole.SERIES }?.key
+
+    /** The source's facet of the authors; none of a source without authors. */
+    private val authorFacet = store.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
 
     override fun nameFacetValues(facet: String, names: Map<String, String>) = write {
         val standard = store.schema.facet(facet)?.standard

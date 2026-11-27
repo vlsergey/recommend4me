@@ -1,9 +1,11 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.author.authorFacetOf
 import io.github.vlsergey.recommend4me.series.SeriesBinding
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.Works
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -41,8 +43,14 @@ class ItemRemoval(
         // Of its work, before the item goes: whether it is graded, the items of it left
         val graded = store.ratings.ofItem(key.id).isNotEmpty()
         val remaining = works.ofKeys(type, listOf(key)).members(key).filter { it != key }
-        // The series of its work, before the work may go with it: made anew of the works left
+        // The series of its work, before the work may go with it: made anew of the works left; its authors, whose
+        // lists of works change
         val series = type.works.worksOf(listOf(key)).values.let(type.series::ofWorks).values
+        val authors =
+            authorFacetOf(store)
+                ?.let { store.items.facets(key.id)[it] }
+                .orEmpty()
+                .let { store.authors.bindingsOf(store.id, it).values }
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
@@ -57,6 +65,7 @@ class ItemRemoval(
         type.searchJudgments.forget(key)
         type.searchScores.forget(key)
         seriesBinding.refresh(type, type.series.worksOf(series).values.flatten() + type.works.worksOf(remaining).values)
+        store.authors.works.changed(authors, Instant.now())
         log.info("{}: {} removed from the library, with everything of it", key.source, key.id)
         events.publishEvent(SiteItemRemoveEvent(type.id, key.source, key.id, remaining, graded))
     }

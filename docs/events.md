@@ -105,6 +105,7 @@ flowchart LR
     w_keepOutWorks{{"keepOutWorks"}}
     w_keyNamedValues{{"keyNamedValues"}}
     w_letGoUnusedFandoms{{"letGoUnusedFandoms"}}
+    w_makeGroupManners{{"makeGroupManners"}}
     w_makeSiteItemSetVectors{{"makeSiteItemSetVectors"}}
     w_makeWorkManners{{"makeWorkManners"}}
     w_measurePartWorth{{"measurePartWorth"}}
@@ -211,6 +212,7 @@ flowchart LR
     e_SiteItemPictureDownloadEvent --> w_analyseSiteItemPictures
     e_SiteItemRemoveEvent --> e_WorkChangeEvent
     e_SiteItemRemoveEvent --> w_fitGradeModels
+    e_SiteItemRemoveEvent --> w_makeGroupManners
     e_SiteItemRemoveEvent --> w_removeSiteItemTexts
     e_SiteItemSetVectorChangeEvent --> w_fitGradeModels
     e_SiteItemTextVectorChangeEvent --> w_fitFieldModels
@@ -222,6 +224,7 @@ flowchart LR
     e_SiteItemWriteEvent --> w_eraseDifferentInSeries
     e_SiteItemWriteEvent --> w_keyNamedValues
     e_SiteItemWriteEvent --> w_letGoUnusedFandoms
+    e_SiteItemWriteEvent --> w_makeGroupManners
     e_SiteItemWriteEvent --> w_measureWorkSizes
     e_SiteItemWriteEvent --> w_renameFandoms
     e_SiteTagBindingChangeEvent --> w_relateTagsBySites
@@ -264,6 +267,7 @@ flowchart LR
     e_WorkGradeChangeEvent --> w_nameTags
     e_WorkGradeChangeEvent --> w_writeListIndex
     e_WorkGroupChangeEvent --> w_eraseDifferentInSeries
+    e_WorkGroupChangeEvent --> w_makeGroupManners
     e_WorkGroupChangeEvent --> w_writeListIndex
     e_WorkInterestChangeEvent --> w_fitGradeModels
     e_WorkInterestChangeEvent --> w_writeListIndex
@@ -292,6 +296,7 @@ flowchart LR
     w_fitPieceProjection --> e_PieceProjectionFitEvent
     w_fitSearchWeights --> w_fitFullTextCentre
     w_keepOutWorks --> e_SiteItemRemoveEvent
+    w_makeGroupManners --> e_WorkMannerChangeEvent
     w_makeSiteItemSetVectors --> e_SiteItemSetVectorChangeEvent
     w_makeSiteItemSetVectors --> e_WorkSetVectorFillEvent
     w_makeSiteItemSetVectors --> w_fitSetDirections

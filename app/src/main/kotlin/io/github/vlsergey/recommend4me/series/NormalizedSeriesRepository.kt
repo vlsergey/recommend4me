@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.database.WholeKeys
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_SERIES
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_SERIES_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_SERIES
+import io.github.vlsergey.recommend4me.manner.GroupCursor
 import java.time.Instant
 import org.jooq.DSLContext
 
@@ -89,6 +90,23 @@ class NormalizedSeriesRepository(private val db: DSLContext, private val type: S
             }
         }
         return out
+    }
+
+    /**
+     * The next [limit] series of the type after the [cursor] — of none, from the first — in the order of the changes of
+     * their works' lists: by the date, then by the number; each as the cursor after it.
+     */
+    fun worksChangedAfter(cursor: GroupCursor?, limit: Int): List<GroupCursor> {
+        val n = NORMALIZED_SERIES
+        val after =
+            if (cursor == null) n.WORKS_AT.ge(Instant.EPOCH)
+            else n.WORKS_AT.ge(cursor.at).and(n.WORKS_AT.gt(cursor.at).or(n.ID.gt(cursor.id)))
+        return db.select(n.ID, n.WORKS_AT)
+            .from(n)
+            .where(n.CONTENT_TYPE.eq(type), after)
+            .orderBy(n.WORKS_AT.asc(), n.ID.asc())
+            .limit(limit)
+            .fetch { GroupCursor(it.value2()!!, it.value1()!!) }
     }
 
     /** Every series of the type with its works, a series at a time, in the order of their numbers: streamed. */

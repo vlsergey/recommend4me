@@ -25,7 +25,6 @@ import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.item.SiteTexts
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
-import io.github.vlsergey.recommend4me.manner.MannerMemberRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerWordsRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
@@ -295,8 +294,8 @@ class SourceStore(
 
     /** The normalized authors: the authors of every site bound to them. */
     val authors =
-        AuthorRepository(databases.dictionaries.dsl) { sites ->
-            events.publishEvent(WorkGroupChangeEvent(contentType.id, authors = sites))
+        AuthorRepository(databases.dictionaries.dsl) { gone ->
+            events.publishEvent(WorkGroupChangeEvent(contentType.id, goneAuthors = listOfNotNull(gone)))
         }
 
     /**
@@ -370,8 +369,8 @@ class TypeStore(
     val dictionaryChanges = DictionaryChanges(databases.dictionaries.dsl)
 
     val authors =
-        AuthorRepository(databases.dictionaries.dsl) { sites ->
-            events.publishEvent(WorkGroupChangeEvent(type.id, authors = sites))
+        AuthorRepository(databases.dictionaries.dsl) { gone ->
+            events.publishEvent(WorkGroupChangeEvent(type.id, goneAuthors = listOfNotNull(gone)))
         }
 
     val models = ModelRepository(databases.model(type.id))
@@ -389,9 +388,6 @@ class TypeStore(
 
     /** The manners of the type's normalized authors and series. */
     val groupManners = GroupMannerRepository(databases.model(type.id))
-
-    /** The items every manner of an author or a series was last made of. */
-    val mannerMembers = MannerMemberRepository(databases.model(type.id))
 
     /** The likeness of the names of the sites' fandoms learnt of the user's word on the universes. */
     val fandomLikeness = FandomLikenessRepository(databases.model(type.id))

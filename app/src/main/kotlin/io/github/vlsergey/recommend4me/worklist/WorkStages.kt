@@ -92,7 +92,7 @@ enum class WorkStage(
     ),
     // The manners of the texts: of the work's own items, of its authors' and its series' works
     MANNERS(
-        listOf(WorkDatum.DATA, WorkDatum.CHAPTERS, WorkDatum.MEMBERS, WorkDatum.GROUPS),
+        listOf(WorkDatum.DATA, WorkDatum.CHAPTERS, WorkDatum.MEMBERS),
         emptyList(),
         WorkDatum.MANNERS,
         "manner",
@@ -108,6 +108,7 @@ enum class WorkStage(
             WorkDatum.PICTURES,
             WorkDatum.SETS,
             WorkDatum.MANNERS,
+            WorkDatum.GROUPS,
         ),
         listOf(FIELDS, MANNERS),
         null,

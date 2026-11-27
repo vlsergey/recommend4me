@@ -40,12 +40,11 @@ data class SiteAuthorBound(val ref: SiteAuthorRef, val mergedBy: MergedBy?)
  */
 class AuthorRepository(
     private val db: DSLContext,
-    /**
-     * Told of every merge of two authors and every author of a site taken out of one: the authors of the sites of every
-     * normalized author whose works changed.
-     */
-    private val regrouped: (List<SiteAuthorRef>) -> Unit,
+    /** Told of every merge of two authors — of the author gone — and every author of a site taken out of one. */
+    private val regrouped: (gone: Long?) -> Unit,
 ) {
+    /** When the lists of the normalized authors' works last changed. */
+    val works = AuthorWorkDates(db)
 
     /** The entries of the catalogues the authors are bound to. */
     val entries = AuthorEntryRepository(db)
@@ -144,7 +143,7 @@ class AuthorRepository(
         authors.forEach { author ->
             val id =
                 tx.insertInto(NORMALIZED_AUTHOR)
-                    .defaultValues()
+                    .set(NORMALIZED_AUTHOR.WORKS_AT, now)
                     .returningResult(NORMALIZED_AUTHOR.ID)
                     .fetchOne()!!
                     .value1()!!
@@ -164,8 +163,6 @@ class AuthorRepository(
      * those of [into], bound when they were, and [from] gone.
      */
     fun merge(from: Long, into: Long, now: Instant, by: MergedBy = MergedBy.User) {
-        // Of both, before the authors of the sites of [from] are bound anew: the works of both changed
-        val sites = sitesOf(listOf(from, into)).values.flatten()
         db.transaction { c ->
             val tx = DSL.using(c)
             val place = (by as? MergedBy.Place)?.owner
@@ -217,22 +214,22 @@ class AuthorRepository(
                     .execute()
             }
             tx.deleteFrom(NORMALIZED_AUTHOR).where(NORMALIZED_AUTHOR.ID.eq(from)).execute()
+            // The works of [from] are of [into] now
+            AuthorWorkDates.changed(tx, listOf(into), now)
         }
-        regrouped(sites)
+        regrouped(from)
     }
 
     /**
      * The author of a site taken out of the normalized author [from], to one of their own, and the two told apart: not
      * offered as one again; the new id.
      */
-    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long {
-        // Of [from] before, [site] among them: the works of both changed
-        val sites = sitesOf(listOf(from)).values.flatten() + site
-        return db.transactionResult { c ->
+    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long =
+        db.transactionResult { c ->
                 val tx = DSL.using(c)
                 val id =
                     tx.insertInto(NORMALIZED_AUTHOR)
-                        .defaultValues()
+                        .set(NORMALIZED_AUTHOR.WORKS_AT, now)
                         .returningResult(NORMALIZED_AUTHOR.ID)
                         .fetchOne()!!
                         .value1()!!
@@ -254,10 +251,11 @@ class AuthorRepository(
                     .set(NORMALIZED_AUTHOR_DISTINCT.OTHER_AUTHOR, second)
                     .set(NORMALIZED_AUTHOR_DISTINCT.SAID_AT, now)
                     .execute()
+                // The works of the author of the site are [from]'s no more
+                AuthorWorkDates.changed(tx, listOf(from), now)
                 id
             }
-            .also { regrouped(sites.distinct()) }
-    }
+            .also { regrouped(null) }
 
     /**
      * The account of the [source] a dump gave by its name ([named]), its works given the site's own key ([key]) of the

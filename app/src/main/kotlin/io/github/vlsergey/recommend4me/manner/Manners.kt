@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
 import io.github.vlsergey.recommend4me.model.ModelAutoChanges
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
@@ -42,14 +41,15 @@ data class WorkMannerFillEvent(val type: String, val scope: WorkScope)
 
 /**
  * THE MANNERS OF THE TEXTS — THE STAGE [WorkStage.MANNERS] OF THE TASKS OVER THE WORKS ([StageSweeps]): of the works
- * whose chapters, data, items or groups changed past its mark, the manner of every item made by the words of the
- * content type where its texts changed ([ItemManners]), and those of the authors and the series of their works where
- * what they hold changed ([MannerGroups]) — by their keys, no other work read —; a task of the marked and rated works,
- * and one of the others after every other task, a [PORTION] of them a turn, the highest expected first; every work
- * marked done, those whose manners changed dated so, of every item of their works and of their groups' works: the
- * expectations read them. The words ([MannerWords]) are fitted on every text of the type by a task of their own ([fit])
- * — of none kept, or as the items whose chapters changed come to a hundredth of those they were fitted on
- * ([chaptersWritten]) —, every manner then made again by them: the stage marked at nought.
+ * whose chapters, data or items changed past its mark, the manner of every item made by the words of the content type
+ * where its texts changed ([ItemManners]), and of the works whose manners changed so those of their authors and series
+ * ([MannerGroups]) — by their keys, no other work read; the groups whose lists of works changed made by
+ * [GroupMannerChanges] —; a task of the marked and rated works, and one of the others after every other task, a
+ * [PORTION] of them a turn, the highest expected first; every work marked done, those whose manners changed dated so,
+ * of every item of their works and of their groups' works: the expectations read them. The words ([MannerWords]) are
+ * fitted on every text of the type by a task of their own ([fit]) — of none kept, or as the items whose chapters
+ * changed come to a hundredth of those they were fitted on ([chaptersWritten]) —, every manner then made again by them:
+ * the stage marked at nought.
  */
 @Component
 class Manners(
@@ -76,23 +76,6 @@ class Manners(
     @EventListener
     fun documentsWritten(event: WorkDocumentWriteEvent) {
         if (STAGE in event.stages) WorkScope.entries.forEach { plan(event.type, it, "items", TaskCursor.FIRST) }
-    }
-
-    /**
-     * An item removed: of no group now — every group it was of holds one work fewer, and the works of the rest of them
-     * are dated so ([WorkDatum.GROUPS]): their groups made anew as the stage takes them.
-     */
-    @EventListener
-    fun removed(event: SiteItemRemoveEvent) {
-        val type = stores.type(event.type) ?: return
-        val key = ItemKey(event.source, event.itemId)
-        val groups = type.mannerMembers.groupsOf(listOf(key))[key].orEmpty()
-        type.mannerMembers.forget(key)
-        if (groups.isEmpty()) return
-        val rest = type.mannerMembers.itemsOf(groups)
-        val left = groups.filter { rest[it].isNullOrEmpty() }
-        left.groupBy({ it.kind }, { it.key }).forEach { (kind, keys) -> type.groupManners.remove(kind, keys) }
-        type.works.changed(rest.values.flatten(), WorkDatum.GROUPS, Instant.now())
     }
 
     /**
@@ -142,13 +125,15 @@ class Manners(
     private fun made(type: TypeStore, scope: WorkScope, words: MannerWords, keys: List<ItemKey>) {
         val started = System.currentTimeMillis()
         val items = ItemManners.made(type, words, keys)
-        val groups = MannerGroups.refresh(type, words.id, keys)
         // A work's manner is of all its items: every one of a work whose item's changed
         val works = WorkClusters.of(type.links.groupsOf(items))
-        val dated = groups.dated + items.flatMap(works::members)
-        sweeps.made(STAGE, type.id, scope, dated.distinct())
+        val own = items.flatMap(works::members).distinct()
+        sweeps.made(STAGE, type.id, scope, own)
+        // The authors and the series of the works whose manners changed: theirs made anew, their works dated so
+        val groups = MannerGroups.refresh(type, words.id, MannerGroups.ofItems(type, items))
+        if (groups.dated.isNotEmpty()) type.works.changed(groups.dated, WorkDatum.GROUPS, Instant.now())
         // Of the works the models of the grades learn of alone: the manners of the others train them nothing
-        val learnt = markedAmong(lists.of(type.id), dated)
+        val learnt = markedAmong(lists.of(type.id), own + groups.dated)
         if (learnt.isNotEmpty()) events.publishEvent(WorkMannerChangeEvent(type.id, learnt.size))
         if (items.isNotEmpty() || groups.groups > 0) {
             log.info(

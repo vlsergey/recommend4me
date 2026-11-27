@@ -7,39 +7,42 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
 
+/** A normalized author's or series' group of works a manner is kept of: its kind and key. */
+data class GroupRef(val kind: MannerGroup, val key: String)
+
 /**
- * THE MANNERS OF THE NORMALIZED AUTHORS AND OF THE NORMALIZED SERIES of the works a turn of the stage takes
- * ([Manners]), kept ([GroupMannerRepository]): of every author the mean of the manners of all their works that have a
- * text, of every series the mean of those of its works — a work's own the mean of its items'. The groups of a work
- * taken are those it is of now and those it was of as their manners were last made ([MannerMemberRepository]): each
- * made of what it holds now — an author's items found by the authors of the sites bound to them, a series' by the works
- * kept of it ([io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository]) —, written where what it is made of
- * changed (the words, its works, the texts of their items), taken away of no work with a manner. Everything read by
- * keys: no group, work or item outside those taken and their groups; the vectors of the groups changed alone, a portion
- * at a time.
+ * THE MANNERS OF THE NORMALIZED AUTHORS AND OF THE NORMALIZED SERIES, kept ([GroupMannerRepository]): of every author
+ * the mean of the manners of all their works that have a text, of every series the mean of those of its works — a
+ * work's own the mean of its items'. Made of the groups asked — of the works whose own manners changed ([Manners]), of
+ * the groups whose lists of works changed ([GroupMannerChanges]) — each of what it holds now: an author's items found
+ * by the authors of the sites bound to them, a series' by the works kept of it
+ * ([io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository]); written where what it is made of changed (the
+ * words, its works, the texts of their items), taken away of no work with a manner. Everything read by keys: no group,
+ * work or item outside those asked; the vectors of the groups changed alone, a portion at a time.
  */
 internal object MannerGroups {
 
-    /** Of a turn, how many groups' manners were written or taken away, and every item whose groups' manners did. */
-    class Made(val groups: Int, val dated: Set<ItemKey>)
+    /** Of the groups made, how many manners were written or taken away, and every item whose groups' manners did. */
+    class Made(val groups: Int, val dated: Set<ItemKey>) {
+        companion object {
+            val NONE = Made(0, emptySet())
+        }
+    }
 
     /** A group whose manner is to be made anew: its works, by the item naming each, and what it is made of. */
     private class Changed(val group: GroupRef, val works: List<ItemKey>, val madeOf: String)
 
-    /** The groups of the works of the [taken] items of the [type] made anew by the words [words] where they changed. */
-    fun refresh(type: TypeStore, words: Long, taken: Collection<ItemKey>): Made {
-        val clusters = WorkClusters.of(type.links.groupsOf(taken))
-        val items = taken.flatMapTo(LinkedHashSet()) { clusters.members(it) }
-        val before = type.mannerMembers.groupsOf(items)
-        val now = authorsOf(type, items)
-        ItemSeries.of(type, items).forEach { (item, series) ->
-            now.getOrPut(item) { HashSet() } += GroupRef(MannerGroup.SERIES, "$series")
-        }
-        val touched = items.flatMapTo(HashSet()) { before[it].orEmpty() + now[it].orEmpty() }
-        if (touched.isEmpty()) return Made(0, emptySet())
-        val members = membersOf(type, touched)
-        return made(type, words, members)
+    /** The groups of the works of the [items] of the [type]: the authors every item of them names, their series. */
+    fun ofItems(type: TypeStore, items: Collection<ItemKey>): Set<GroupRef> {
+        val clusters = WorkClusters.of(type.links.groupsOf(items))
+        val all = items.flatMapTo(LinkedHashSet()) { clusters.members(it) }
+        return authorsOf(type, all).values.flatten().toSet() +
+            ItemSeries.of(type, all).values.map { GroupRef(MannerGroup.SERIES, "$it") }
     }
+
+    /** The manners of the [groups] of the [type] made anew by the words [words] where what they hold changed. */
+    fun refresh(type: TypeStore, words: Long, groups: Set<GroupRef>): Made =
+        if (groups.isEmpty()) Made.NONE else made(type, words, membersOf(type, groups))
 
     /** Of the [items], the normalized authors each names, as groups. */
     private fun authorsOf(type: TypeStore, items: Collection<ItemKey>): HashMap<ItemKey, MutableSet<GroupRef>> {
@@ -85,7 +88,7 @@ internal object MannerGroups {
 
     /**
      * The manners of the groups of their [members] written where what they are made of changed, taken away of those of
-     * no work with a manner, and the items every one was made of kept.
+     * no work with a manner.
      */
     private fun made(type: TypeStore, words: Long, members: Map<GroupRef, List<ItemKey>>): Made {
         val clusters = WorkClusters.of(type.links.groupsOf(members.values.flatten().distinct()))
@@ -132,20 +135,11 @@ internal object MannerGroups {
         }
         inPortions(changed, clusters).forEach { written(type, words, it, clusters) }
         gone.groupBy({ it.kind }, { it.key }).forEach { (kind, keys) -> type.groupManners.remove(kind, keys) }
-        kept(type, members)
         val dated =
             (changed.map { it.group } + gone).flatMapTo(HashSet()) { group ->
                 worksOf.getValue(group).flatMap(clusters::members)
             }
         return Made(changed.size + gone.size, dated)
-    }
-
-    /** The items the [members] of every group are written as those its manner was made of, where they changed. */
-    private fun kept(type: TypeStore, members: Map<GroupRef, List<ItemKey>>) {
-        val before = type.mannerMembers.itemsOf(members.keys)
-        members.forEach { (group, items) ->
-            if (before[group].orEmpty().toSet() != items.toSet()) type.mannerMembers.replace(group, items)
-        }
     }
 
     /** The [changed] groups in portions of about [PORTION] items of their works: a group whole in one. */
