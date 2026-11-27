@@ -54,8 +54,8 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
         val started = System.currentTimeMillis()
         val pairs = type.works.differentWorks()
         if (pairs.isEmpty()) return
-        val series = TypeSeries.around(type, pairs.flatMap { listOf(it.first, it.second) })
-        val within = pairs.filter { (x, y) -> series.ofWork(x)?.let { it === series.ofWork(y) } == true }
+        val series = type.series.ofWorks(pairs.flatMap { listOf(it.first, it.second) })
+        val within = pairs.filter { (x, y) -> series[x]?.let { it == series[y] } == true }
         val items = type.works.itemsOf(within.flatMap { listOf(it.first, it.second) })
         val now = Instant.now()
         var taken = 0
@@ -96,11 +96,14 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
         ): Set<Pair<ItemKey, ItemKey>> {
             if (pairs.isEmpty()) return emptySet()
             val works = type.works.worksOf(pairs.flatMap { listOf(it.first, it.second) })
-            val series = TypeSeries.around(type, works.values, bySites)
+            // Of the sites' alone, the join of their series around the works; else the series kept
+            val ofWork: (Long) -> Any? =
+                if (bySites) TypeSeries.around(type, works.values, bySites = true)::ofWork
+                else type.series.ofWorks(works.values)::get
             return pairs.filterTo(HashSet()) { (a, b) ->
                 val x = works[a]
                 val y = works[b]
-                x != null && y != null && x != y && series.ofWork(x)?.let { it === series.ofWork(y) } == true
+                x != null && y != null && x != y && ofWork(x)?.let { it == ofWork(y) } == true
             }
         }
     }

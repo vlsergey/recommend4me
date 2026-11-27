@@ -148,8 +148,8 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
       {data && data.series.length > 0 && (
         <ul className="flex flex-col divide-y rounded-lg border">
           {data.series.map((s) => (
-            <li key={s.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-1.5">
-              <a href={seriesHref(type.id, s.key)} className="min-w-0 truncate font-medium underline-offset-2 hover:underline" title={t("SeriesScreen.openHint")}>
+            <li key={s.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-1.5">
+              <a href={seriesHref(type.id, s.id)} className="min-w-0 truncate font-medium underline-offset-2 hover:underline" title={t("SeriesScreen.openHint")}>
                 {s.title}
               </a>
               {s.sites.map((site) => {

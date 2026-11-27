@@ -56,6 +56,7 @@ flowchart LR
     e_SiteItemSetVectorChangeEvent["SiteItemSetVectorChangeEvent"]
     e_SiteItemTextVectorChangeEvent["SiteItemTextVectorChangeEvent"]
     e_SiteItemWriteEvent["SiteItemWriteEvent"]
+    e_SiteSeriesPageChangeEvent["SiteSeriesPageChangeEvent"]
     e_SiteTagBindingChangeEvent["SiteTagBindingChangeEvent"]
     e_SiteTagParentChangeEvent["SiteTagParentChangeEvent"]
     e_SiteTagSynonymChangeEvent["SiteTagSynonymChangeEvent"]
@@ -127,6 +128,7 @@ flowchart LR
     o_job__ --> e_SiteItemPictureListEvent
     o_job__ --> e_SiteItemRemoveEvent
     o_job__ --> e_SiteItemWriteEvent
+    o_job__ --> e_SiteSeriesPageChangeEvent
     o_job__ --> e_SiteTagParentChangeEvent
     o_job__ --> e_SiteTagSynonymChangeEvent
     o_job__ --> e_WorkGroupChangeEvent
@@ -138,6 +140,7 @@ flowchart LR
     o_pictures --> e_SiteItemPictureListEvent
     o_pictures --> e_SiteItemRemoveEvent
     o_pictures --> e_SiteItemWriteEvent
+    o_pictures --> e_SiteSeriesPageChangeEvent
     o_pictures --> e_SiteTagParentChangeEvent
     o_pictures --> e_SiteTagSynonymChangeEvent
     o_pictures --> e_WorkGroupChangeEvent
@@ -147,6 +150,7 @@ flowchart LR
     o_reparse --> e_SiteItemPictureListEvent
     o_reparse --> e_SiteItemRemoveEvent
     o_reparse --> e_SiteItemWriteEvent
+    o_reparse --> e_SiteSeriesPageChangeEvent
     o_reparse --> e_SiteTagParentChangeEvent
     o_reparse --> e_SiteTagSynonymChangeEvent
     o_reparse --> e_WorkGroupChangeEvent
@@ -156,6 +160,7 @@ flowchart LR
     o_start --> e_SiteItemPictureListEvent
     o_start --> e_SiteItemRemoveEvent
     o_start --> e_SiteItemWriteEvent
+    o_start --> e_SiteSeriesPageChangeEvent
     o_start --> e_SiteTagParentChangeEvent
     o_start --> e_SiteTagSynonymChangeEvent
     o_start --> e_WorkGroupChangeEvent
@@ -313,8 +318,8 @@ flowchart LR
 | `bindSiteTag` | TagChangeEvent, WorkChangeEvent | nameTags |
 | `bindTagEntry` | TagChangeEvent, WorkChangeEvent | — |
 | `bindUniverseEntry` | UniverseChangeEvent | — |
-| `cancelJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
-| `capturePage` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `cancelJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `capturePage` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `chooseFacetCast` | — | searchFieldModelAnew |
 | `chooseFacetMethod` | — | searchFieldModelAnew |
 | `chooseInterestScorer` | — | fitGradeModels |
@@ -333,7 +338,7 @@ flowchart LR
 | `getHeldOut` | — | fitHeldOutModel |
 | `getItem` | SiteItemTextVectorChangeEvent | writeWorkValues |
 | `getPage` | SiteItemTextVectorChangeEvent | writeWorkValues |
-| `getPicture` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `getPicture` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `getSearchQuality` | — | fitFullTextCentre |
 | `giveMatchFeedback` | SiteItemMarkChangeEvent | — |
 | `ignoreTag` | TagChangeEvent | — |
@@ -342,7 +347,7 @@ flowchart LR
 | `linkItem` | SiteItemTextVectorChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkInterestChangeEvent | fitGradeModels, writeWorkValues |
 | `listHierarchyOffers` | — | nameTags |
 | `listItems` | — | fitFullTextCentre |
-| `listJobs` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `listJobs` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `markInterest` | WorkInterestChangeEvent | — |
 | `markPicture` | SiteItemMarkChangeEvent | — |
 | `markReview` | SiteItemMarkChangeEvent | — |
@@ -352,7 +357,7 @@ flowchart LR
 | `nameUniverse` | FandomRelationChangeEvent, UniverseChangeEvent | renameFandoms |
 | `nameUniverseEntry` | UniverseChangeEvent | — |
 | `rateItem` | WorkGradeChangeEvent | — |
-| `refreshItem` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemTextVectorChangeEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | writeWorkValues |
+| `refreshItem` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemTextVectorChangeEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | writeWorkValues |
 | `refreshTagEntries` | TagChangeEvent, WorkChangeEvent | — |
 | `refreshUniverse` | UniverseChangeEvent | — |
 | `relateTags` | TagChangeEvent, WorkChangeEvent | nameTags |
@@ -365,7 +370,7 @@ flowchart LR
 | `searchFacetModel` | — | searchFieldModelAnew |
 | `startFacetComparison` | — | compareFieldMethods |
 | `startFandomWayComparison` | — | compareFandomWays |
-| `startJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
+| `startJob` | SiteFandomParentChangeEvent, SiteFandomSynonymChangeEvent, SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemRemoveEvent, SiteItemWriteEvent, SiteSeriesPageChangeEvent, SiteTagParentChangeEvent, SiteTagSynonymChangeEvent, WorkGroupChangeEvent | — |
 | `startScorerComparison` | — | compareGradeScorers, compareInterestScorers |
 | `takeOutOfSeries` | WorkGroupChangeEvent | — |
 | `takeOutSiteAuthor` | WorkGroupChangeEvent | — |

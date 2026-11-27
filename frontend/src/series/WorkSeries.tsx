@@ -12,7 +12,7 @@ export function WorkSeries({ type, series, current }: { type: ContentTypeInfo; s
   return (
     <section className="flex flex-col gap-1">
       <h4 className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
-        <a href={seriesHref(type.id, series.key)} className="underline-offset-2 hover:underline" title={t("Series.open")}>
+        <a href={seriesHref(type.id, series.id)} className="underline-offset-2 hover:underline" title={t("Series.open")}>
           {series.title}
         </a>
         <span className="font-normal text-muted-foreground tabular-nums">{t("Series.works", { count: series.works.length })}</span>

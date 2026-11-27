@@ -96,8 +96,7 @@ class ModelController(
         // What the strongest features are shown by: their facets' and values' names as they are now
         val top = meta?.topPositive.orEmpty() + meta?.topNegative.orEmpty()
         val labels =
-            if (top.isEmpty()) emptyMap()
-            else FeatureNames.labels(top.map { it.feature }, stores.type(typeId)!!.sources)
+            if (top.isEmpty()) emptyMap() else FeatureNames.labels(top.map { it.feature }, stores.type(typeId)!!)
         fun Contribution.toApi() = LabelledContribution(this, labels.getValue(feature)).toApi()
         return ModelInfo(
             trained = meta != null,

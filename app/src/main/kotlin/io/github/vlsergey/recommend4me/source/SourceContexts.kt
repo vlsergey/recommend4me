@@ -105,7 +105,7 @@ class SourceContexts(
         ItemFacetStore by SourceItemFacets(store, events),
         ItemReviewStore by SourceItemReviews(store),
         ItemPartStore by SourceItemParts(store, events),
-        ItemSeriesStore by SourceItemSeries(store) {
+        ItemSeriesStore by SourceItemSeries(store, events) {
         private fun <T> write(block: () -> T): T = store.writing.withLock(block)
 
         override fun upsert(item: ItemHead, now: Instant): Upserted = write { store.items.upsert(item, now) }

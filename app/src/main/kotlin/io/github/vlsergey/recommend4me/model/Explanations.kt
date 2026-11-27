@@ -124,8 +124,8 @@ class Explanations(
         val features =
             dense.mapIndexed { g, group -> group.feature to moved(g + 1) }.toMap() +
                 categorical.mapIndexed { c, name -> name to moved(1 + dense.size + c) }
-        val labels = FeatureNames.labels(features.keys, type.sources)
-        val partLabels = FeatureNames.partLabels(parts.keys, type.sources)
+        val labels = FeatureNames.labels(features.keys, type)
+        val partLabels = FeatureNames.partLabels(parts.keys, type)
         return partList
             .mapIndexed { p, (part, members) ->
                 ContributionGroup(

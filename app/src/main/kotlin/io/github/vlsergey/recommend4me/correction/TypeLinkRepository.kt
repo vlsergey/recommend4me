@@ -24,8 +24,8 @@ class TypeLinkRepository(
     private val single: Set<String> = emptySet(),
     /** The works the user said to be one series. */
     private val series: SeriesGroups,
-    /** Told of every two works merged and every item taken out of a work. */
-    private val regrouped: () -> Unit,
+    /** Told of every two works merged and every item taken out of a work: the works they are now. */
+    private val regrouped: (Collection<Long>) -> Unit,
 ) : PairWords by WorkPairWords(works, journal, sources, series) {
 
     /** Every work of several items: its items. */
@@ -41,7 +41,7 @@ class TypeLinkRepository(
         val y = works.of(b, now)
         if (x != y) {
             works.membership.merge(maxOf(x, y), minOf(x, y), now, single)
-            regrouped()
+            regrouped(listOf(minOf(x, y)))
         }
         journal.write(a, b, SAME, before, now)
     }
@@ -55,7 +55,7 @@ class TypeLinkRepository(
     private fun takeOut(a: ItemKey, b: ItemKey, now: Instant): Boolean {
         if (works.of(a, now) != works.of(b, now)) return false
         works.membership.takeOut(b, now)
-        regrouped()
+        regrouped(listOf(works.of(a, now), works.of(b, now)))
         return true
     }
 

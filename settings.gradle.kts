@@ -43,4 +43,5 @@ include(
     "plugins:source-ficbook",
     "plugins:source-ffn",
     "plugins:source-molwe",
+    "tools:series",
 )

@@ -27,8 +27,8 @@ export function SitesTable({
 }: {
   type: ContentTypeInfo;
   sites: WorkSite[];
-  /** The key of the work's normalized series, its window opened from every site's series. */
-  series?: string;
+  /** The number of the work's normalized series, its window opened from every site's series. */
+  series?: number;
   shown: ItemRef;
   onShow: (site: ItemRef) => void;
   onTakeOut: (site: ItemRef) => Promise<unknown>;
@@ -48,7 +48,7 @@ export function SitesTable({
       cell: (s) =>
         s.series && (
           <span>
-            {series ? (
+            {series !== undefined ? (
               <a href={seriesHref(type.id, series)} className="underline-offset-2 hover:underline" title={t("WorkSites.seriesOpen")}>
                 {s.series.title}
               </a>

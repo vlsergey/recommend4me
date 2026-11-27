@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.series.TypeSeries
+import io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
@@ -30,9 +30,10 @@ enum class DuplicateAnswer {
 
 /**
  * The user's word on every pair, the smaller key first ([words]), and of them the pairs of one normalized series the
- * user did not say so of ([derived], [TypeSeries]) — by the series of the sites, or a work of the series another said
- * to be one series: weighing as one said, told apart only to be shown so. A word "different" on two works of one series
- * is not heeded: the pair is of the series ([io.github.vlsergey.recommend4me.series.SeriesDifferences]).
+ * user did not say so of ([derived], [NormalizedSeriesRepository]) — by the series of the sites, or a work of the
+ * series another said to be one series: weighing as one said, told apart only to be shown so. A word "different" on two
+ * works of one series is not heeded: the pair is of the series
+ * ([io.github.vlsergey.recommend4me.series.SeriesDifferences]).
  */
 class Said(private val words: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>, val derived: Set<Pair<ItemKey, ItemKey>>) :
     Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> by words
@@ -55,22 +56,7 @@ class PairAnswers(private val works: Works) {
         type.links.relations().forEach { (pair, kind) ->
             runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it }
         }
-        val derived = HashSet<Pair<ItemKey, ItemKey>>()
-        val series = TypeSeries.read(type)
-        val items = type.works.itemsOf(series.all.flatMap { it.works })
-        series.all.forEach { s ->
-            val works = s.works.toList()
-            works.forEachIndexed { k, x ->
-                works.drop(k + 1).forEach { y ->
-                    for (i in items[x].orEmpty()) for (j in items[y].orEmpty()) {
-                        val pair = type.links.ordered(i, j)
-                        // A word "different" on two works of one series not heeded: the series is stronger, and the
-                        // word is taken back as their works change (SeriesDifferences)
-                        if (pair !in out || out[pair] == DuplicateAnswer.DIFFERENT) derived += pair
-                    }
-                }
-            }
-        }
+        val derived = ofSeries(type, out)
         derived.forEach { out[it] = DuplicateAnswer.SERIES }
         works.of(type).linkedWorks().forEach { members ->
             members.forEachIndexed { k, a ->
@@ -80,4 +66,42 @@ class PairAnswers(private val works: Works) {
         }
         return Said(out, derived)
     }
+
+    /**
+     * Of every two works of a normalized series, every pair of their items the user said nothing of — or "different" of
+     * — in [out]: one series by the series.
+     */
+    private fun ofSeries(
+        type: TypeStore,
+        out: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+    ): Set<Pair<ItemKey, ItemKey>> {
+        val derived = HashSet<Pair<ItemKey, ItemKey>>()
+        // The series streamed, the items of their works read a portion of series at a time
+        val portion = ArrayList<List<Long>>()
+        fun pairsOf() {
+            val items = type.works.itemsOf(portion.flatten())
+            portion.forEach { works ->
+                works.forEachIndexed { k, x ->
+                    works.drop(k + 1).forEach { y ->
+                        for (i in items[x].orEmpty()) for (j in items[y].orEmpty()) {
+                            val pair = type.links.ordered(i, j)
+                            // A word "different" on two works of one series not heeded: the series is stronger, and
+                            // the word is taken back as their works change (SeriesDifferences)
+                            if (pair !in out || out[pair] == DuplicateAnswer.DIFFERENT) derived += pair
+                        }
+                    }
+                }
+            }
+            portion.clear()
+        }
+        type.series.forEachSeries { _, works ->
+            portion += works
+            if (portion.sumOf { it.size } >= PORTION) pairsOf()
+        }
+        pairsOf()
+        return derived
+    }
 }
+
+/** The works whose items one reading of the pairs of the series asks for: the length of a query, not a meaning. */
+private const val PORTION = 5_000

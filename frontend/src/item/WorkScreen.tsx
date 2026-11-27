@@ -506,7 +506,7 @@ function LeftPage({
       {view === "sites" && (
         <>
           <Part title={t("WorkScreen.sites")}>
-            <SitesTable type={type} sites={sites} series={d.series?.key} shown={shown} onShow={onShow} onTakeOut={onTakeOut} />
+            <SitesTable type={type} sites={sites} series={d.series?.id} shown={shown} onShow={onShow} onTakeOut={onTakeOut} />
           </Part>
           <Part title={t("ItemDialog.sameWork")}>
             <section className="flex flex-col gap-1">

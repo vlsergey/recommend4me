@@ -28,7 +28,10 @@
 | `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one. How much the item says of the work (`fullness`: the characters of its texts, then the values of its facets), and whether the site gives it a value the work is shown by first (`shown_first`: a finished book), measured as it changes: the work is shown with those so shown first, then the one saying the most |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
 | `series_group` | a group of works the user said to be one series ("one series" of two works) |
-| `series_group_work` | a work of a group of the user's, in one at most: a normalized series is made on reading of the groups and the series of the sites, every one of them sharing a work with another one series with it |
+| `series_group_work` | a work of a group of the user's, in one at most: with the series of the sites, every one of them sharing a work with another one normalized series |
+| `normalized_series` | a normalized series by its number, of its content type: when the list of its works last changed (`works_at`), and what its list is filtered and ordered by — its title, every title it is known by, its works, its sites, whether the user's word holds it, whether a page of it is to be visited —; made anew around the works it changes of |
+| `site_series` | a series of a site bound to the normalized series it is of |
+| `normalized_series_work` | the normalized series of every work of one |
 | `work_pair_journal` | every word the user said on two items being one work or not — one work, different, a translation, a part — and every word taken back (`answer` none), with the word the pair had before (`answer_before`), by the two items as pressed, the newest last: what a word is undone by; `restored`: written of what was kept before the journal was, the word before unknown; `of_series`: a word "different" the application took back, the two works being of one series — by the sites or by the user's words "one series" —, not undoable |
 | `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
 | `work_interest` | the user's word on whether a work is interesting at all |
@@ -107,6 +110,21 @@ erDiagram
         VARCHAR entry PK, FK
         TIMESTAMPTZ bound_at
     }
+    normalized_series {
+        BIGINT id PK
+        VARCHAR content_type
+        TIMESTAMPTZ works_at
+        VARCHAR title
+        VARCHAR titles
+        INTEGER works
+        INTEGER sites
+        BOOLEAN by_hand
+        BOOLEAN to_visit
+    }
+    normalized_series_work {
+        BIGINT work PK, FK
+        BIGINT series FK
+    }
     normalized_tag {
         BIGINT id PK
         VARCHAR name "null"
@@ -173,6 +191,12 @@ erDiagram
         VARCHAR place_source "null"
         VARCHAR place_author "null"
         TIMESTAMPTZ said_at
+    }
+    site_series {
+        VARCHAR source PK
+        VARCHAR series_key PK
+        BIGINT normalized FK
+        TIMESTAMPTZ bound_at
     }
     site_tag {
         VARCHAR source PK
@@ -369,6 +393,8 @@ erDiagram
     normalized_author ||--o{ normalized_author_distinct : "other_author"
     normalized_author ||--o{ normalized_author_entry : "author"
     normalized_author ||--o{ site_author : "normalized"
+    normalized_series ||--o{ normalized_series_work : "series"
+    normalized_series ||--o{ site_series : "normalized"
     normalized_tag ||--o{ normalized_tag_distinct : "first_tag"
     normalized_tag ||--o{ normalized_tag_distinct : "other_tag"
     normalized_tag ||--o{ normalized_tag_entry : "tag"
@@ -377,6 +403,7 @@ erDiagram
     normalized_tag ||--o{ site_tag : "normalized"
     normalized_tag ||--o{ tag_stat : "tag"
     normalized_tag ||--o{ tag_vector : "tag"
+    normalized_work ||--o{ normalized_series_work : "work"
     normalized_work ||--o{ normalized_work_relation : "first_work"
     normalized_work ||--o{ normalized_work_relation : "other_work"
     normalized_work ||--o{ series_group_work : "work"

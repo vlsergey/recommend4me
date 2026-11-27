@@ -24,8 +24,8 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
   const { t } = useTranslation("series");
   const queryClient = useQueryClient();
   const series = useQuery({
-    queryKey: [...seriesWindowsKey(type.id), seriesRef.key],
-    queryFn: async () => unwrap(await api.GET("/api/types/{type}/series/one", { params: { path: { type: type.id }, query: { key: seriesRef.key } } })),
+    queryKey: [...seriesWindowsKey(type.id), seriesRef.id],
+    queryFn: async () => unwrap(await api.GET("/api/types/{type}/series/one", { params: { path: { type: type.id }, query: { id: seriesRef.id } } })),
   });
   const s = series.data;
   // How the works are listed, kept in the browser: the series' order at first
@@ -137,7 +137,7 @@ function SiteOfSeries({ site }: { site: SeriesSite }) {
 }
 
 /**
- * The window of the series the address names, `#series=<type>/<key>`: a link followed opens it over
+ * The window of the series the address names, `#series=<type>/<id>`: a link followed opens it over
  * whatever is open; a work opened from it opens over it. Closed, the address names the work dialog
  * left on top, or none.
  */
@@ -161,5 +161,5 @@ export function HashSeriesDialog() {
   }, []);
   const type = opened ? types.data?.find((x) => x.id === opened.type) : undefined;
   if (!opened || !type) return null;
-  return <SeriesDialog key={`${opened.type}/${opened.key}`} type={type} seriesRef={opened} onClose={close} />;
+  return <SeriesDialog key={`${opened.type}/${opened.id}`} type={type} seriesRef={opened} onClose={close} />;
 }

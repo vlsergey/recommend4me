@@ -885,12 +885,13 @@ paths:
       summary: A normalized series with what every site says of it and its works in order
       parameters:
         - $ref: '#/components/parameters/Type'
-        - name: key
+        - name: id
           in: query
           required: true
-          description: The key of the series ("ficbook/28510", "said-12")
+          description: The number of the normalized series
           schema:
-            type: string
+            type: integer
+            format: int64
       responses:
         '200':
           description: The series
@@ -6289,7 +6290,7 @@ components:
 
     SeriesRow:
       type: object
-      required: [key, title, sites, works, said]
+      required: [id, title, sites, works, said]
       description: A normalized series as its list shows it
       properties:
         said:
@@ -6298,8 +6299,10 @@ components:
             The user's word that works are one series (by "one series" of two works) holds it together:
             without it a work of it is in no series of a site, or its series of the sites are not one.
             Words whose every one the sites' series say too, not
-        key:
-          type: string
+        id:
+          type: integer
+          format: int64
+          description: The number of the normalized series
         title:
           type: string
           description: The title of its first series of a site, or of its first work
@@ -6354,10 +6357,12 @@ components:
 
     SeriesDetails:
       type: object
-      required: [key, title, sites, works]
+      required: [id, title, sites, works]
       properties:
-        key:
-          type: string
+        id:
+          type: integer
+          format: int64
+          description: The number of the normalized series
         title:
           type: string
         sites:

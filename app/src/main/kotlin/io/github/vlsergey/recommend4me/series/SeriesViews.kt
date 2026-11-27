@@ -19,9 +19,9 @@ import java.time.ZoneOffset
 import org.springframework.stereotype.Component
 
 /**
- * THE NORMALIZED SERIES AS THE SCREENS SHOW THEM: the list of a type's series ([page]), a series with what every site
- * says of it and its works in order ([one]) — the window of a series, and the work's own on the screen of a work
- * ([ofWork]).
+ * THE NORMALIZED SERIES AS THE SCREENS SHOW THEM: the list of a type's series ([page]) — a page chosen in the database
+ * ([NormalizedSeriesRepository.page]) —, a series with what every site says of it and its works in order ([one]) — the
+ * window of a series, and the work's own on the screen of a work ([ofWork]) —, read by their numbers.
  */
 @Component
 class SeriesViews(private val stores: Stores, private val lines: WorkLines, private val sizes: WorkSizes) {
@@ -29,40 +29,65 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
     /** A page of the series of the type the [filter] lets, the most works first; null of no such type. */
     fun page(typeId: String, filter: SeriesFilter, offset: Int, limit: Int): SeriesPage? {
         val type = stores.type(typeId) ?: return null
-        val all = TypeSeries.read(type).all.filter(filter::lets)
-        val sites = sitesOf(type, all.flatMap { it.sites.entries }.associate { it.key to it.value.size })
-        val untitled = all.filter { s -> s.sites.keys.none { sites[it]?.title != null } }
-        val firstTitles = titlesOf(type, untitled)
-        val rows =
-            all.map { s ->
-                    val own = s.sites.keys.mapNotNull { sites[it] }
-                    SeriesRow(
-                        key = s.key,
-                        title = own.firstOrNull()?.title ?: firstTitles[s.key] ?: s.key,
-                        sites = own,
-                        works = s.works.size,
-                        said = s.byHand,
-                    )
-                }
-                .filter(filter::lets)
-                .sortedWith(
-                    compareByDescending<SeriesRow> { it.works }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
-                )
-        return SeriesPage(rows.size, rows.drop(offset).take(limit))
+        val (total, entries) = type.series.list.page(filter, offset, limit)
+        val ofSeries = type.series.sitesOf(entries.map { it.id })
+        val sites = sitesOf(type, worksOfSites(type, ofSeries.values.flatten()))
+        val rows = entries.map { e ->
+            SeriesRow(
+                id = e.id,
+                title = e.title,
+                sites = ofSeries[e.id].orEmpty().sortedBy { it.toString() }.mapNotNull { sites[it] },
+                works = e.works,
+                said = e.byHand,
+            )
+        }
+        return SeriesPage(total, rows)
     }
 
-    /** The series of the [key] with its works; null of no such type or series. */
-    fun one(typeId: String, key: String): SeriesDetails? {
+    /** The series [id] with its works; null of no such type or series. */
+    fun one(typeId: String, id: Long): SeriesDetails? {
         val type = stores.type(typeId) ?: return null
-        val read = TypeSeries.read(type)
-        return read.of(key)?.let { details(type, it) }
+        return stored(type, id)?.let { details(type, it) }
     }
 
     /** The series of the work of the items [members]: what its screen shows of it; none of a work of no series. */
     fun ofWork(type: TypeStore, members: List<ItemKey>): SeriesDetails? {
         val work = type.works.worksOf(members).values.firstOrNull() ?: return null
-        return TypeSeries.around(type, listOf(work)).ofWork(work)?.let { details(type, it) }
+        return type.series.ofWorks(listOf(work))[work]?.let { stored(type, it) }?.let { details(type, it) }
     }
+
+    /** The series [id] as kept, with the items of each of its series of the sites; none of no such series. */
+    private fun stored(type: TypeStore, id: Long): StoredSeries? {
+        val entry = type.series.list.entries(listOf(id))[id] ?: return null
+        val refs = type.series.sitesOf(listOf(id))[id].orEmpty()
+        val items = HashMap<SiteSeriesRef, List<ItemKey>>()
+        refs
+            .groupBy { it.source }
+            .forEach { (source, of) ->
+                val s = type.source(source) ?: return@forEach
+                val facet = seriesFacetOf(s) ?: return@forEach
+                s.items.itemsWith(facet, of.map { it.key }).forEach { (key, ids) ->
+                    items[SiteSeriesRef(source, key)] = ids.map { ItemKey(source, it) }
+                }
+            }
+        return StoredSeries(
+            entry,
+            type.series.worksOf(listOf(id))[id].orEmpty(),
+            refs.sortedBy { it.toString() }.associateWith { items[it].orEmpty() },
+        )
+    }
+
+    /** How many works every series of a site of [refs] has, as its works name it. */
+    private fun worksOfSites(type: TypeStore, refs: Collection<SiteSeriesRef>): Map<SiteSeriesRef, Int> =
+        refs
+            .groupBy { it.source }
+            .flatMap { (source, of) ->
+                val s = type.source(source) ?: return@flatMap emptyList()
+                val facet = seriesFacetOf(s) ?: return@flatMap emptyList()
+                val uses = s.items.valueUsesOf(facet, of.map { it.key })
+                of.map { it to (uses[it.key] ?: 0) }
+            }
+            .toMap()
 
     /** The work of the item out of the series the user put it in; false of no such type or item. */
     fun takeOut(typeId: String, key: ItemKey): Boolean =
@@ -74,7 +99,7 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
         } ?: false
 
     /** What the screens show of the [series]: its sites, its works in order, each with its places. */
-    private fun details(type: TypeStore, series: NormalizedSeries): SeriesDetails {
+    private fun details(type: TypeStore, series: StoredSeries): SeriesDetails {
         val items = type.works.itemsOf(series.works)
         val sites = sitesOf(type, series.sites.mapValues { it.value.size })
         val placed = placesOf(type, series)
@@ -116,20 +141,14 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
                 words = (listOfNotNull(shown[work]) + own).firstNotNullOfOrNull { sized[it]?.words },
             )
         }
-        val own = series.sites.keys.mapNotNull { sites[it] }
-        return SeriesDetails(
-            series.key,
-            own.firstOrNull()?.title ?: works.firstOrNull()?.work?.title ?: series.key,
-            own,
-            works,
-        )
+        return SeriesDetails(series.entry.id, series.entry.title, series.sites.keys.mapNotNull { sites[it] }, works)
     }
 
     /**
      * The numbers of the works of the [series] in every series of a site of it that numbers them: of each, item to its
      * number — of the items of it alone, a work moved to another series of the site not.
      */
-    private fun placesOf(type: TypeStore, series: NormalizedSeries): Map<SiteSeriesRef, Map<ItemKey, Int>> {
+    private fun placesOf(type: TypeStore, series: StoredSeries): Map<SiteSeriesRef, Map<ItemKey, Int>> {
         val placed = HashMap<SiteSeriesRef, Map<ItemKey, Int>>()
         series.sites.keys
             .groupBy { it.source }
@@ -148,7 +167,7 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
      * The volume of every series of a site of the [series]: the words of its works, or of a site that states none the
      * characters — what tells, of two sites of as many works, whose order goes first ([SeriesOrder]).
      */
-    private fun volumesOf(series: NormalizedSeries, sized: Map<ItemKey, ItemSize>): Map<SiteSeriesRef, Double> =
+    private fun volumesOf(series: StoredSeries, sized: Map<ItemKey, ItemSize>): Map<SiteSeriesRef, Double> =
         series.sites.mapValues { (_, items) -> items.sumOf { (sized[it]?.words ?: sized[it]?.chars)?.value ?: 0.0 } }
 
     /** The [items] as lines of a list: item to its line. */
@@ -200,16 +219,7 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
             }
         return out
     }
-
-    /** Of the series of no series of a site, the title of a work of each: key to it. */
-    private fun titlesOf(type: TypeStore, series: List<NormalizedSeries>): Map<String, String> {
-        if (series.isEmpty()) return emptyMap()
-        val items = type.works.itemsOf(series.mapNotNull { it.works.minOrNull() })
-        val out = HashMap<String, String>()
-        series.forEach { s ->
-            val first = s.works.minOrNull()?.let { items[it]?.firstOrNull() } ?: return@forEach
-            type.source(first.source)?.items?.find(first.id)?.let { out[s.key] = it.title }
-        }
-        return out
-    }
 }
+
+/** A normalized series as kept ([entry]), its [works] and its series of the sites with their items. */
+private class StoredSeries(val entry: SeriesEntry, val works: Set<Long>, val sites: Map<SiteSeriesRef, List<ItemKey>>)

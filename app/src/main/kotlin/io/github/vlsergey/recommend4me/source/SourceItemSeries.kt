@@ -1,14 +1,17 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.series.SiteSeriesPageChangeEvent
 import java.time.Instant
 import kotlin.concurrent.withLock
+import org.springframework.context.ApplicationEventPublisher
 
 /**
  * The series of a source's items as the source's plugin writes them; the writes one at a time. A work is of one series
  * of a site: the one its facet of the series names — the first the site lists of it —, and a series' page lists of its
  * works those whose facet names it or nothing.
  */
-internal class SourceItemSeries(private val store: SourceStore) : ItemSeriesStore {
+internal class SourceItemSeries(private val store: SourceStore, private val events: ApplicationEventPublisher) :
+    ItemSeriesStore {
 
     /** The source's facet of the series; none of a source without series. */
     private val facet = store.schema.facets.firstOrNull { it.role == FacetRole.SERIES }?.key
@@ -38,6 +41,7 @@ internal class SourceItemSeries(private val store: SourceStore) : ItemSeriesStor
                         store.series.unplace(series.key, id)
                     }
         }
+        events.publishEvent(SiteSeriesPageChangeEvent(store.id, listOf(series.key)))
     }
 
     override fun placeInSeries(itemId: Long, key: String, position: Int) {

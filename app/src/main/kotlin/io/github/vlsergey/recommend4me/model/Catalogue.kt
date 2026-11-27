@@ -11,7 +11,7 @@ import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
-import io.github.vlsergey.recommend4me.series.TypeSeries
+import io.github.vlsergey.recommend4me.series.ItemSeries
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.setvector.SetVectors
 import io.github.vlsergey.recommend4me.source.NumberDef
@@ -138,7 +138,7 @@ class CatalogueReader(
         val clusters = works.of(type)
         val wanted = (ratings.map { it.key } + also).flatMapTo(HashSet()) { clusters.members(it) }
         val of = wanted.groupBy({ it.source }, { it.id })
-        val series = TypeSeries.read(type)
+        val series = ItemSeries.of(type, wanted)
         val index = lists.of(type.id)
         val items =
             type.sources.flatMap { s ->
@@ -226,7 +226,7 @@ class CatalogueReader(
     internal fun readItems(
         s: SourceStore,
         severalSources: Boolean,
-        series: TypeSeries,
+        series: Map<ItemKey, Long>,
         heads: List<ItemKeys>,
         laps: Laps = Laps(),
         /** The site's values of the items, read already by the operation: not read again. */
@@ -283,7 +283,7 @@ class CatalogueReader(
             val corrected = TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
             val categorical = categoricalOf(corrected, facetIds, ignored, ::feature)
             if (severalSources) categorical += source
-            categorical += listOfNotNull(series.keyOf(ItemKey(s.id, k.id))).map(FeatureNames::series)
+            categorical += listOfNotNull(series[ItemKey(s.id, k.id)]).map(FeatureNames::series)
             val numeric = numericOf(s, numberDefs, numbers[k.id].orEmpty(), fields[k.id].orEmpty())
             CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
         }
@@ -309,9 +309,7 @@ class CatalogueReader(
                 TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets)
             val categorical = categoricalOf(corrected, facetIds, ignored, FeatureNames::facet)
             if (type.sources.size > 1) categorical += "source:${s.id}"
-            type.works.worksOf(listOf(key))[key]?.let { work ->
-                TypeSeries.around(type, listOf(work)).ofWork(work)?.let { categorical += FeatureNames.series(it.key) }
-            }
+            ItemSeries.of(type, listOf(key))[key]?.let { categorical += FeatureNames.series(it) }
             val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
             val numeric = numericOf(s, numberDefs, s.items.numbers(key.id), s.corrections.fieldsOf(key.id))
             CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)

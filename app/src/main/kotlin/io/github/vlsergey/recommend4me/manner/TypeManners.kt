@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.manner
 
 import io.github.vlsergey.recommend4me.author.authorFacetOf
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.series.TypeSeries
+import io.github.vlsergey.recommend4me.series.ItemSeries
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkClusters
 
@@ -82,9 +82,8 @@ private constructor(
                         authorsOf.getOrPut(clusters.representative(ItemKey(source, id))) { HashSet() } += own
                 }
             }
-            val works = type.works.worksOf(members)
-            val series = TypeSeries.around(type, works.values)
-            val seriesOf = { key: ItemKey -> works[key]?.let(series::ofWork)?.key }
+            val series = ItemSeries.of(type, members)
+            val seriesOf = { key: ItemKey -> series[key]?.toString() }
             return TypeManners(
                 clusters,
                 items.mapValues { meanManner(it.value)!! },

@@ -7,10 +7,10 @@ import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.picture.PictureRepository
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.source.FacetDef
-import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 
 /**
@@ -37,8 +37,10 @@ object FeatureNames {
     /** The id of the facet of the normalized series — a facet of no source: every site's series of a work one value. */
     const val SERIES = "series"
 
-    /** The feature of the normalized series [key] ([io.github.vlsergey.recommend4me.series.TypeSeries]). */
-    fun series(key: String) = facet(SERIES, key)
+    /**
+     * The feature of the normalized series [id] ([io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository]).
+     */
+    fun series(id: Long) = facet(SERIES, id.toString())
 
     fun number(numberId: String) = "num:$numberId"
 
@@ -58,10 +60,11 @@ object FeatureNames {
      * of the input ("standard:model.cover"). [sources] give the facets, numbers and texts; the names of facet values
      * are read from their sources.
      */
-    fun labels(features: Collection<String>, sources: List<SourceStore>): Map<String, FeatureLabel> {
+    fun labels(features: Collection<String>, type: TypeStore): Map<String, FeatureLabel> {
+        val sources = type.sources
         val schema = SchemaLabels(sources)
         val values = ValueNames(features, sources)
-        SeriesTitles.of(features, sources).forEach { (key, title) -> values.names[SERIES to key] = title }
+        SeriesTitles.of(features, type).forEach { (key, title) -> values.names[SERIES to key] = title }
         return features.associateWith { label(it, schema, values) }
     }
 
@@ -94,14 +97,14 @@ object FeatureNames {
      * The key of the label of a part of an explanation: the facet's label for "facet:<id>", the model's word for the
      * joined parts, the feature's own label for a single block.
      */
-    fun partLabels(parts: Collection<String>, sources: List<SourceStore>): Map<String, String> {
+    fun partLabels(parts: Collection<String>, type: TypeStore): Map<String, String> {
         val facetLabels = hashMapOf("facet:$SERIES" to SERIES_LABEL)
-        sources.forEach { s ->
+        type.sources.forEach { s ->
             s.schema.facets.forEach {
                 facetLabels.putIfAbsent("facet:" + facetId(s.source, it), I18nKeys.facetLabel(s.id, it))
             }
         }
-        val single = labels(parts.filter { !it.startsWith("facet:") && !it.startsWith("part:") }, sources)
+        val single = labels(parts.filter { !it.startsWith("facet:") && !it.startsWith("part:") }, type)
         return parts.associateWith { part ->
             facetLabels[part]
                 ?: when (part) {
@@ -209,23 +212,15 @@ private class ValueNames(features: Collection<String>, sources: List<SourceStore
  */
 data class FeatureLabel(val labelKey: String, val value: String? = null, val valueKey: String? = null)
 
-/** The titles of the normalized series among a model's features, as the sites' works name them. */
+/** The titles of the normalized series among a model's features, as their list shows them. */
 private object SeriesTitles {
-    /**
-     * The titles of the normalized series among the [features] named by a series of a site — "ficbook/28510" — as the
-     * site's works name it: key to title.
-     */
-    fun of(features: Collection<String>, sources: List<SourceStore>): Map<String, String> {
-        val keys =
-            features.mapNotNull(FeatureNames::parseFacet).filter { it.first == FeatureNames.SERIES }.map { it.second }
-        return keys
-            .filter { '/' in it }
-            .groupBy({ it.substringBefore('/') }, { it.substringAfter('/') })
-            .flatMap { (source, of) ->
-                val s = sources.firstOrNull { it.id == source } ?: return@flatMap emptyList()
-                val facet = s.schema.facets.firstOrNull { it.role == FacetRole.SERIES } ?: return@flatMap emptyList()
-                s.names(facet.key, of).map { (key, title) -> "$source/$key" to title }
-            }
-            .toMap()
+    /** The titles of the normalized series among the [features] of the [type]: the feature's key to its title. */
+    fun of(features: Collection<String>, type: TypeStore): Map<String, String> {
+        val ids =
+            features
+                .mapNotNull(FeatureNames::parseFacet)
+                .filter { it.first == FeatureNames.SERIES }
+                .mapNotNull { it.second.toLongOrNull() }
+        return type.series.list.entries(ids).map { (id, entry) -> id.toString() to entry.title }.toMap()
     }
 }

@@ -65,7 +65,7 @@ class InputMeasures(
             if (p.perItem.size < CrossValidation.MIN_WORKS) return@run null
             val full = CrossValidation.choose(CrossValidation.measureAll(p.task, scorer, p.xFor))?.metrics
             val columns = partColumns(p.layout)
-            val labels = FeatureNames.partLabels(columns.keys, type.sources)
+            val labels = FeatureNames.partLabels(columns.keys, type)
             fun without(m: Matrix, cols: List<Int>): Matrix {
                 val out = Matrix(m.rows, m.cols)
                 out.held.copy(m.held, 0, 0, m.rows * m.cols)
@@ -128,7 +128,7 @@ class InputMeasures(
         val started = System.currentTimeMillis()
         val columns = partColumns(p.layout)
         val groups = GroupWeights.groups(columns)
-        val labels = FeatureNames.partLabels(columns.keys, type.sources)
+        val labels = FeatureNames.partLabels(columns.keys, type)
         val folds = GroupWeights.nested(p.task, p.xFor, scorer, groups, cautious)
         val onAll = GroupWeights.tune(p.task, p.xFor, scorer, groups, cautious)
         log.info(

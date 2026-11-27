@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.manner
 
 import io.github.vlsergey.recommend4me.author.authorFacetOf
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.series.TypeSeries
+import io.github.vlsergey.recommend4me.series.ItemSeries
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
@@ -12,10 +12,11 @@ import io.github.vlsergey.recommend4me.work.WorkClusters
  * ([Manners]), kept ([GroupMannerRepository]): of every author the mean of the manners of all their works that have a
  * text, of every series the mean of those of its works — a work's own the mean of its items'. The groups of a work
  * taken are those it is of now and those it was of as their manners were last made ([MannerMemberRepository]): each
- * made of what it holds now — an author's items found by the authors of the sites bound to them, a series' by the
- * series read around its works ([TypeSeries.around]) —, written where what it is made of changed (the words, its works,
- * the texts of their items), taken away of no work with a manner. Everything read by keys: no group, work or item
- * outside those taken and their groups; the vectors of the groups changed alone, a portion at a time.
+ * made of what it holds now — an author's items found by the authors of the sites bound to them, a series' by the works
+ * kept of it ([io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository]) —, written where what it is made of
+ * changed (the words, its works, the texts of their items), taken away of no work with a manner. Everything read by
+ * keys: no group, work or item outside those taken and their groups; the vectors of the groups changed alone, a portion
+ * at a time.
  */
 internal object MannerGroups {
 
@@ -30,20 +31,13 @@ internal object MannerGroups {
         val clusters = WorkClusters.of(type.links.groupsOf(taken))
         val items = taken.flatMapTo(LinkedHashSet()) { clusters.members(it) }
         val before = type.mannerMembers.groupsOf(items)
-        val beforeSeries = before.values.flatten().filter { it.kind == MannerGroup.SERIES }
-        val keptOf = type.mannerMembers.itemsOf(beforeSeries)
-        // The series of the works taken now and of those of the series they were of: one reading around them all
-        val workOf = type.works.worksOf(items + keptOf.values.flatten())
-        val series = TypeSeries.around(type, workOf.values.distinct())
         val now = authorsOf(type, items)
-        items.forEach { item ->
-            workOf[item]?.let(series::ofWork)?.let {
-                now.getOrPut(item) { HashSet() } += GroupRef(MannerGroup.SERIES, it.key)
-            }
+        ItemSeries.of(type, items).forEach { (item, series) ->
+            now.getOrPut(item) { HashSet() } += GroupRef(MannerGroup.SERIES, "$series")
         }
         val touched = items.flatMapTo(HashSet()) { before[it].orEmpty() + now[it].orEmpty() }
         if (touched.isEmpty()) return Made(0, emptySet())
-        val members = membersOf(type, touched, series)
+        val members = membersOf(type, touched)
         return made(type, words, members)
     }
 
@@ -66,9 +60,9 @@ internal object MannerGroups {
 
     /**
      * The items every one of the [groups] holds now: of an author those naming the authors of the sites bound to them,
-     * of a series those of its works as [series] read them; none of a group that is no more.
+     * of a series those of its works kept; none of a group that is no more.
      */
-    private fun membersOf(type: TypeStore, groups: Set<GroupRef>, series: TypeSeries): Map<GroupRef, List<ItemKey>> {
+    private fun membersOf(type: TypeStore, groups: Set<GroupRef>): Map<GroupRef, List<ItemKey>> {
         val out = groups.associateWithTo(HashMap()) { ArrayList<ItemKey>() }
         val authors = groups.filter { it.kind == MannerGroup.AUTHOR }.mapNotNull { it.key.toLongOrNull() }
         type.authors.sitesOf(authors).forEach { (author, sites) ->
@@ -80,10 +74,12 @@ internal object MannerGroups {
                 }
             }
         }
-        val byKey = series.all.associateBy { it.key }
-        val ofSeries = groups.filter { it.kind == MannerGroup.SERIES }.mapNotNull { g -> byKey[g.key]?.let { g to it } }
-        val itemsOf = type.works.itemsOf(ofSeries.flatMap { it.second.works })
-        ofSeries.forEach { (group, read) -> out.getValue(group) += read.works.flatMap { itemsOf[it].orEmpty() } }
+        val ofSeries = groups.filter { it.kind == MannerGroup.SERIES }.associateBy { it.key.toLongOrNull() }
+        val worksOf = type.series.worksOf(ofSeries.keys.filterNotNull())
+        val itemsOf = type.works.itemsOf(worksOf.values.flatten())
+        worksOf.forEach { (series, works) ->
+            ofSeries[series]?.let { group -> out.getValue(group) += works.flatMap { itemsOf[it].orEmpty() } }
+        }
         return out
     }
 

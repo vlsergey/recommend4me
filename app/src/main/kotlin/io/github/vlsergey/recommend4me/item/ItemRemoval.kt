@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.series.SeriesBinding
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.Works
@@ -23,6 +24,7 @@ private val log = LoggerFactory.getLogger(ItemRemoval::class.java)
 class ItemRemoval(
     private val stores: Stores,
     private val works: Works,
+    private val seriesBinding: SeriesBinding,
     private val events: ApplicationEventPublisher,
 ) {
 
@@ -39,6 +41,8 @@ class ItemRemoval(
         // Of its work, before the item goes: whether it is graded, the items of it left
         val graded = store.ratings.ofItem(key.id).isNotEmpty()
         val remaining = works.ofKeys(type, listOf(key)).members(key).filter { it != key }
+        // The series of its work, before the work may go with it: made anew of the works left
+        val series = type.works.worksOf(listOf(key)).values.let(type.series::ofWorks).values
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
@@ -52,6 +56,7 @@ class ItemRemoval(
         type.likeness.forget(key)
         type.searchJudgments.forget(key)
         type.searchScores.forget(key)
+        seriesBinding.refresh(type, type.series.worksOf(series).values.flatten() + type.works.worksOf(remaining).values)
         log.info("{}: {} removed from the library, with everything of it", key.source, key.id)
         events.publishEvent(SiteItemRemoveEvent(type.id, key.source, key.id, remaining, graded))
     }

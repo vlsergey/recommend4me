@@ -101,6 +101,12 @@ the tallies of the pairs of authors). The methods reading a whole table that are
 Every item of every site is bound to a normalized work (`work/WorkRepository.kt`), at first one of its
 own; "one work" merges two. A translation and a part stay two works, related.
 
+A series is a normalized series as well (owner, 2026-11-27: "the series are an entity of the same order as the
+authors, the works, the fandoms, the tags"), named by its number (`normalized_series`): the series of the sites sharing
+a work and the user's groups of works said one series are one, as `SeriesJoin` joins them, kept with its works and its
+series of the sites and made anew around the works it changes of (`SeriesBinding`) — read by keys, never joined anew at
+a reading.
+
 - **Of the normalized work, in the dictionaries:** the grade, the mark of interest, the user's word on
   values and fields. `RatingRepository`, `InterestRepository`, `CorrectionRepository` and
   `UnknownRepository` read and write them by the item, every item of a work seeing them alike: nothing

@@ -46,6 +46,7 @@ import io.github.vlsergey.recommend4me.search.QueryShiftRepository
 import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
 import io.github.vlsergey.recommend4me.search.SearchScoreRepository
 import io.github.vlsergey.recommend4me.search.SearchWeightRepository
+import io.github.vlsergey.recommend4me.series.NormalizedSeriesRepository
 import io.github.vlsergey.recommend4me.series.SeriesGroups
 import io.github.vlsergey.recommend4me.series.SiteSeriesRepository
 import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
@@ -334,11 +335,16 @@ class TypeStore(
     val id: String
         get() = type.id
 
-    /** Told of the user's every word that puts two items one work or two. */
-    private val regrouped = { events.publishEvent(WorkGroupChangeEvent(type.id)) }
+    /** Told of the user's every word that puts two items one work or two: the works of both. */
+    private val regrouped = { works: Collection<Long> ->
+        events.publishEvent(WorkGroupChangeEvent(type.id, works = works.distinct()))
+    }
 
     /** The normalized works of the type's items. */
     val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })
+
+    /** The normalized series of the type's works. */
+    val series = NormalizedSeriesRepository(databases.dictionaries.dsl, type.id)
 
     /** The works the user said to be one series. */
     val seriesGroups =

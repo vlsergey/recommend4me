@@ -25,8 +25,8 @@ class SeriesController(private val views: SeriesViews) : SeriesApi {
             .page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said, toVisit, minSites), offset, limit)
             ?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
-    override fun getSeries(type: String, key: String): ResponseEntity<SeriesDetails> =
-        views.one(type, key)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+    override fun getSeries(type: String, id: Long): ResponseEntity<SeriesDetails> =
+        views.one(type, id)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun takeOutOfSeries(type: String, source: String, item: Long): ResponseEntity<Unit> =
         if (views.takeOut(type, ItemKey(source, item))) ResponseEntity.noContent().build()

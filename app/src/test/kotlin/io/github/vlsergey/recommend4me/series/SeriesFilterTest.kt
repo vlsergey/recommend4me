@@ -1,58 +1,126 @@
 package io.github.vlsergey.recommend4me.series
 
-import io.github.vlsergey.recommend4me.api.model.SeriesRow
-import io.github.vlsergey.recommend4me.api.model.SeriesSite
+import io.github.vlsergey.recommend4me.database.Database
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.work.WorkRepository
+import java.nio.file.Path
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.junit.jupiter.api.io.TempDir
 
-/** Which series the list shows by their sites and the user's word. */
+/**
+ * Which series the list shows by their titles, their sites, the user's word and the pages to be visited — chosen in the
+ * database, the most works first — and the series kept: of every work, of every series its works and sites.
+ */
 class SeriesFilterTest {
+    @TempDir lateinit var folder: Path
 
-    private fun series(key: String, vararg sources: String, said: Boolean = false) =
-        NormalizedSeries(
-            key,
-            sources.associate { SiteSeriesRef(it, key) to emptyList() },
-            if (said) setOf(1L) else emptySet(),
-            setOf(1L),
+    private fun made(
+        title: String,
+        works: Set<Long>,
+        vararg sources: String,
+        said: Boolean = false,
+        toVisit: Boolean = false,
+    ) =
+        MadeSeries(
+            id = null,
+            works = works,
+            sites = sources.map { SiteSeriesRef(it, title) }.toSet(),
+            title = title,
+            titles = "$title\n$title of the site",
             byHand = said,
+            toVisit = toVisit,
+            worksChanged = true,
         )
 
-    private val all =
-        listOf(
-            series("a", "ficbook"),
-            series("b", "ficbook", "author.today"),
-            series("c", "author.today", said = true),
-            series("d", said = true),
-        )
-
-    private fun let(filter: SeriesFilter) = all.filter(filter::lets).map { it.key }
-
-    @Test
-    fun `of every site with it, without it or whatever, and of the user's word`() {
-        assertEquals(listOf("a", "b", "c", "d"), let(SeriesFilter()))
-        assertEquals(listOf("a", "b"), let(SeriesFilter(with = listOf("ficbook"))))
-        assertEquals(listOf("c", "d"), let(SeriesFilter(without = listOf("ficbook"))))
-        assertEquals(listOf("b"), let(SeriesFilter(with = listOf("ficbook", "author.today"))))
-        assertEquals(listOf("c", "d"), let(SeriesFilter(said = true)))
-        assertEquals(listOf("a", "b"), let(SeriesFilter(said = false)))
-        assertEquals(listOf("c"), let(SeriesFilter(with = listOf("author.today"), said = true)))
-        // By how many sites have it: none of the user's word alone, one, two
-        assertEquals(listOf("a", "b", "c"), let(SeriesFilter(minSites = 1)))
-        assertEquals(listOf("b"), let(SeriesFilter(minSites = 2)))
-        assertEquals(emptyList(), let(SeriesFilter(minSites = 3)))
-    }
+    /** Four series of seven works written, of their numbers: "a", "b", "c", "d" — and the works. */
+    private fun <T> written(test: (NormalizedSeriesRepository, List<Long>, List<Long>, Database) -> T): T =
+        Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
+            val works = WorkRepository(dictionaries.dsl)
+            val now = Instant.now()
+            val w = (1..7L).map { works.of(ItemKey("ficbook", it), now) }
+            val series = NormalizedSeriesRepository(dictionaries.dsl, "books")
+            val ids =
+                series.write(
+                    listOf(
+                        made("a", setOf(w[0]), "ficbook"),
+                        made("b", setOf(w[1], w[2], w[3]), "ficbook", "author.today", toVisit = true),
+                        made("c", setOf(w[4], w[5]), "author.today", said = true),
+                        made("d", setOf(w[6]), said = true),
+                    ),
+                    emptyList(),
+                    now,
+                )
+            test(series, ids, w, dictionaries)
+        }
 
     @Test
-    fun `of a page of a site to be visited — never read, or read before a work was met elsewhere — or of none`() {
-        fun site(seen: Boolean, stale: Boolean = false) =
-            SeriesSite(source = "ficbook", key = "k", title = "t", seen = seen, stale = stale, works = 1)
-        fun row(key: String, vararg sites: SeriesSite) =
-            SeriesRow(key = key, title = key, sites = sites.toList(), works = 1, said = false)
-        val rows =
-            listOf(row("read", site(true)), row("never", site(false)), row("met", site(true), site(true, stale = true)))
-        fun let(toVisit: Boolean?) = rows.filter(SeriesFilter(toVisit = toVisit)::lets).map { it.key }
-        assertEquals(listOf("read", "never", "met"), let(null))
-        assertEquals(listOf("never", "met"), let(true))
-        assertEquals(listOf("read"), let(false))
-    }
+    fun `of every site with it, without it or whatever, of the user's word, of a page to be visited, of a title`() =
+        written { series, ids, _, dictionaries ->
+            val a = ids[0]
+            val b = ids[1]
+            val c = ids[2]
+            val d = ids[3]
+            fun let(filter: SeriesFilter) = series.list.page(filter, 0, 10).second.map { it.id }
+
+            // The most works first, of as many by the title
+            assertEquals(listOf(b, c, a, d), let(SeriesFilter()))
+            assertEquals(4, series.list.page(SeriesFilter(), 1, 2).first)
+            assertEquals(listOf(c, a), series.list.page(SeriesFilter(), 1, 2).second.map { it.id })
+            assertEquals(listOf(b, a), let(SeriesFilter(with = listOf("ficbook"))))
+            assertEquals(listOf(c, d), let(SeriesFilter(without = listOf("ficbook"))))
+            assertEquals(listOf(b), let(SeriesFilter(with = listOf("ficbook", "author.today"))))
+            assertEquals(listOf(c, d), let(SeriesFilter(said = true)))
+            assertEquals(listOf(c), let(SeriesFilter(with = listOf("author.today"), said = true)))
+            // By how many sites have it: none of the user's word alone, one, two
+            assertEquals(listOf(b, c, a), let(SeriesFilter(minSites = 1)))
+            assertEquals(listOf(b), let(SeriesFilter(minSites = 2)))
+            assertEquals(listOf(b), let(SeriesFilter(toVisit = true)))
+            assertEquals(listOf(c), let(SeriesFilter(search = "C OF THE")))
+            assertEquals(emptyList(), let(SeriesFilter(minSites = 3)))
+            // Of no other type
+            assertEquals(
+                emptyList(),
+                NormalizedSeriesRepository(dictionaries.dsl, "games").list.page(SeriesFilter(), 0, 10).second,
+            )
+        }
+
+    @Test
+    fun `read by the keys either way, made anew of a work and a site moved, a series gone`() =
+        written { series, ids, w, _ ->
+            val now = Instant.now()
+            val a = ids[0]
+            val b = ids[1]
+            val c = ids[2]
+            val d = ids[3]
+            // Read by the keys either way: the series of a work, the works and the sites of a series
+            assertEquals(mapOf(w[1] to b, w[6] to d), series.ofWorks(listOf(w[1], w[6])))
+            assertEquals(setOf(w[4], w[5]), series.worksOf(listOf(c)).getValue(c))
+            assertEquals(
+                mapOf(SiteSeriesRef("author.today", "b") to b),
+                series.ofSites(listOf(SiteSeriesRef("author.today", "b"))),
+            )
+
+            // Made anew: a work and a site moved to another series, a series gone with what it held
+            series.write(
+                listOf(
+                    made("a", setOf(w[0], w[1]), "ficbook").let {
+                        MadeSeries(a, it.works, it.sites + SiteSeriesRef("ficbook", "b"), "a", "a", false, false, true)
+                    }
+                ),
+                listOf(d),
+                now,
+            )
+            assertEquals(mapOf(w[1] to a), series.ofWorks(listOf(w[1], w[6])))
+            assertEquals(
+                setOf(SiteSeriesRef("ficbook", "a"), SiteSeriesRef("ficbook", "b")),
+                series.sitesOf(listOf(a)).getValue(a).toSet(),
+            )
+            assertEquals(listOf(SiteSeriesRef("author.today", "b")), series.sitesOf(listOf(b)).getValue(b))
+            assertEquals(setOf(a, b, c), series.list.entries(listOf(a, b, c, d)).keys)
+            val streamed = HashMap<Long, List<Long>>()
+            series.forEachSeries { id, of -> streamed[id] = of }
+            assertEquals(listOf(w[0], w[1]), streamed[a])
+        }
 }
