@@ -253,6 +253,13 @@ the card has free now, no more than `most`, refused (`NoCardRoom`) below `least`
 none beyond its size nor beyond what the card has free; everything freed at its end. Windows refuses the card no
 allocation (WDDM): it moves the card's memory to the main one, and the work goes through the bus — the graph of the
 duplicates ran 70 times slower so. A refusal is the caller's to fit itself: a smaller block, another way, the processor.
+**A graph of ONNX Runtime runs on the card in batches its free memory lets, and gives it back** (owner, 2026-11-27,
+after a reranker's search held 14 GB of 16 and the fields multiplied on the processor): every run goes through
+`onnx.inBatches`, the plugin telling what a run of its graph takes (`RunMemory`, measured of the graph — the least
+`gpu_mem_limit` a run of each of several shapes goes through), each batch made as large as the room the card has free
+as it begins (`FreeCardMemory.withRoom`, held while it runs), the runtime's arena given back as the run ends; a row
+with no room runs on the processor. A graph of one's own on the card (`onnx.onCard`) is opened and run within a room
+held so too.
 
 **The scripts — the web interface and the extension — are linted by Biome**, its recommended rules
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.

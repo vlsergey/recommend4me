@@ -78,13 +78,8 @@ private constructor(
                 FunctionDescriptor.of(ValueLayout.JAVA_INT),
             )
     }
-    private val cudaMemGetInfo: MethodHandle by lazy {
-        Linker.nativeLinker()
-            .downcallHandle(
-                runtime.find("cudaMemGetInfo").orElseThrow(),
-                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
-            )
-    }
+    /** The card's memory free for a new piece of work, of the process: of these products and of every other run. */
+    val free = FreeCardMemory(runtime)
 
     private val cudaFreeHost: MethodHandle by lazy {
         Linker.nativeLinker()
@@ -270,9 +265,9 @@ private constructor(
 
     /**
      * A BLOCK OF WORK ON THE CARD, the one way its memory is had (owner, 2026-11-20): [body] handed the card's memory
-     * of its own ([CardMemory]) — as much as the card has free now, less [SPARE], and no more than [most] —, everything
-     * it made there freed at its end. Of less than [least] free, [NoCardRoom]: the caller fits itself — a smaller
-     * block, another way, the processor.
+     * of its own ([CardMemory]) — as much as the card has free now ([FreeCardMemory]), and no more than [most] —,
+     * everything it made there freed at its end. Of less than [least] free, [NoCardRoom]: the caller fits itself — a
+     * smaller block, another way, the processor.
      */
     fun <T> withMemory(least: Long, most: Long, body: (CardMemory) -> T): T = memory(least, most).use(body)
 
@@ -281,17 +276,17 @@ private constructor(
      * lives — a model scoring the works one portion after another — and frees them as it is closed.
      */
     fun memory(least: Long, most: Long): CardMemory {
-        val free = freeOf(cudaMemGetInfo) - SPARE
-        val size = minOf(most, free)
-        if (size < least) throw NoCardRoom("$least bytes asked of the card, $free free")
+        val now = free.bytes()
+        val size = minOf(most, now)
+        if (size < least) throw NoCardRoom("$least bytes asked of the card, $now free")
         return CardMemory(this, maxOf(0L, size))
     }
 
-    /** No [bytes] beyond what the card has free now, less [SPARE]: [NoCardRoom], as the card would refuse them. */
+    /** No [bytes] beyond what the card has free now ([FreeCardMemory]): [NoCardRoom], as the card would refuse them. */
     internal fun refuseBeyondFree(bytes: Long) {
-        if (bytes <= SPARE / 2) return
-        val free = freeOf(cudaMemGetInfo) - SPARE
-        if (bytes > free) throw NoCardRoom("$bytes bytes asked of the card, $free free")
+        if (bytes <= SMALL) return
+        val now = free.bytes()
+        if (bytes > now) throw NoCardRoom("$bytes bytes asked of the card, $now free")
     }
 
     /**
@@ -563,17 +558,8 @@ private constructor(
 }
 
 /** The warning that the card's own kernels were not made, and why: the caller's work stays on the processor. */
-/** The bytes of the card's own memory free now (`cudaMemGetInfo` of [memGetInfo]). */
-private fun freeOf(memGetInfo: MethodHandle): Long =
-    Arena.ofConfined().use { a ->
-        val free = a.allocate(ValueLayout.JAVA_LONG)
-        val total = a.allocate(ValueLayout.JAVA_LONG)
-        check((memGetInfo.invokeExact(free, total) as Int) == 0) { "the card's memory not told" }
-        free.get(ValueLayout.JAVA_LONG, 0)
-    }
-
-/** The card's memory left free: cuBLAS's own, the kernels', the screen's. */
-private const val SPARE = 512L shl 20
+/** An allocation of no more than so many bytes made without asking the card what it has free: within its spare. */
+private const val SMALL = 256L shl 20
 
 private fun kernelsNotMade(e: Exception): CudaKernels? {
     log.warn(

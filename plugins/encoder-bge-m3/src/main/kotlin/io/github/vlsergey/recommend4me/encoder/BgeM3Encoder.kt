@@ -4,8 +4,10 @@ import ai.djl.huggingface.tokenizers.Encoding
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.djl.huggingface.tokenizers.jni.CharSpan
 import ai.onnxruntime.OnnxTensor
+import io.github.vlsergey.recommend4me.onnx.Batching
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.OnnxSplice
+import io.github.vlsergey.recommend4me.onnx.RunMemory
 import io.github.vlsergey.recommend4me.onnx.rows
 import java.nio.LongBuffer
 import java.nio.file.Files
@@ -134,7 +136,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     private fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        for (batch in RunBatches.of(order, { windows[it].size }, onnx.onGpu(FIRST_PIECE))) {
+        onnx.inBatches(FIRST_PIECE, order, { windows[it].size }, BATCHING) { batch, graph ->
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { PAD }
             val mask = LongArray(batch.size * len)
@@ -151,7 +153,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
                     "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
                 )
             // The dense vector of bge-m3: the first piece's hidden state, as it is trained
-            val first = onnx.rows(FIRST_PIECE, inputs)
+            val first = graph.rows(inputs)
             batch.forEachIndexed { r, w -> out[w] = unit(first[r]) }
         }
         return out.map { it!! }
@@ -199,5 +201,18 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
          * encoded twice, kept so till there are good ways of finding a meaning in a text (owner, 2026-11-25).
          */
         internal const val SCENE_STEP = SCENE_ROOM / 2
+
+        /**
+         * What a run of bge-m3 takes of the card beyond its weights, measured of the graph (2026-11-27, ONNX Runtime
+         * 1.20, fp16): 4.1 GB of one text of 8192 pieces, 1.3 GB of 64 windows of 512 — the attention of its 16 heads
+         * in half precision, kept twice, is 64 bytes a pair of pieces, the rest under 6 KB a piece.
+         */
+        internal val MEMORY = RunMemory(fixed = 192L shl 20, perPiece = 6L shl 10, perPair = 64)
+
+        /**
+         * The batches of the windows: of 64 on the card, as the room lets; of 8 on the processor, of no more than so
+         * many windows of 512 pieces — a text read whole among few, one of the longest alone.
+         */
+        internal val BATCHING = Batching(cardRows = 64, cpuRows = 8, page = 512, memory = MEMORY)
     }
 }

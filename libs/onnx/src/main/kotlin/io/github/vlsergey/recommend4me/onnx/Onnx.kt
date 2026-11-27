@@ -1,14 +1,17 @@
 package io.github.vlsergey.recommend4me.onnx
 
-import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OnnxTensorLike
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.providers.OrtCUDAProviderOptions
+import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.FreeCardMemory
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.channels.FileChannel.MapMode
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -57,34 +60,86 @@ class Onnx(
         made[name] = of to make
     }
 
-    /** Whether the graph runs on the card. Opens its session. */
-    @Synchronized
-    fun onGpu(name: String): Boolean {
-        session(name)
-        return name in onGpu
+    /**
+     * THE ROWS OF [order] RUN THROUGH THE GRAPH [name] IN BATCHES ([Batching]) — sorted by length, each of [lengthOf]
+     * pieces —, every batch handed to [run] with the run of the graph it goes through. On the card a batch is made as
+     * large as the memory the card has free as it begins lets ([FreeCardMemory.withRoom]) — a run of another graph, the
+     * products, another process on the card leave it fewer rows —, and that memory is the runtime's for the run alone,
+     * given back to the card as it ends; a row with no room on the card runs on the processor (owner, 2026-11-27: every
+     * plugin takes the memory it needs by what there is and gives it back, its batches smaller when there is too
+     * little). [threads] caps the threads of a run on the processor (0 — every core).
+     */
+    fun inBatches(
+        name: String,
+        order: List<Int>,
+        lengthOf: (Int) -> Int,
+        batching: Batching,
+        threads: Int = 0,
+        run: (List<Int>, GraphRun) -> Unit,
+    ) {
+        val session = session(name, threads)
+        val free = if (synchronized(this) { name in onGpu }) freeOnCard() else null
+        if (free == null) {
+            onProcessor(order, 0, lengthOf, batching, GraphRun(session, null), run, all = true)
+            return
+        }
+        var processor: OrtSession? = null
+        try {
+            var from = 0
+            while (from < order.size) {
+                val longest = lengthOf(order[minOf(from + batching.cardRows, order.size) - 1])
+                val most = batching.memory.of(minOf(batching.cardRows, order.size - from), longest)
+                from +=
+                    try {
+                        free.withRoom(batching.memory.of(1, lengthOf(order[from])), most) { room ->
+                            val n = batching.next(order, from, lengthOf, batching.cardRows, room)
+                            run(order.subList(from, from + n), GraphRun(session, shrinking))
+                            n
+                        }
+                    } catch (e: NoCardRoom) {
+                        val twin = processor ?: open(name, threads, cuda = false).also { processor = it }
+                        log.warn("{}: no room on the card ({}), a batch runs on the processor", name, e.message)
+                        onProcessor(order, from, lengthOf, batching, GraphRun(twin, null), run, all = false)
+                    }
+            }
+        } finally {
+            processor?.close()
+        }
     }
 
     /**
-     * The session of a graph, opened on the first call. [threads] caps the threads of one run on the CPU (0 — the
-     * runtime's default, every core); it counts only when the session is opened.
+     * The rows of [order] from [from] on run on the processor by [graph] in [batching]'s batches: every one of them
+     * when [all], else the next batch alone; how many were run.
+     */
+    private fun onProcessor(
+        order: List<Int>,
+        from: Int,
+        lengthOf: (Int) -> Int,
+        batching: Batching,
+        graph: GraphRun,
+        run: (List<Int>, GraphRun) -> Unit,
+        all: Boolean,
+    ): Int {
+        var at = from
+        do {
+            if (at == order.size) break
+            val n = batching.next(order, at, lengthOf, batching.cpuRows, batching.cpuRoom)
+            run(order.subList(at, at + n), graph)
+            at += n
+        } while (all)
+        return at - from
+    }
+
+    /**
+     * The session of a graph, opened on the first call and kept: on the card when it can be. [threads] caps the threads
+     * of one run on the CPU (0 — the runtime's default, every core); it counts only when the session is opened.
      */
     @Synchronized
-    fun session(name: String, threads: Int = 0): OrtSession {
+    private fun session(name: String, threads: Int): OrtSession {
         sessions[name]?.let {
             return it
         }
-        val p = path(made[name]?.first ?: name)
-        check(Files.isRegularFile(p)) { "No such model file: ${p.toAbsolutePath()}" }
-        val graph =
-            made[name]?.let { (_, make) ->
-                FileChannel.open(p, StandardOpenOption.READ).use {
-                    make(it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()))
-                }
-            }
-        val session =
-            (if (gpu && libraries.ready()) openOnGpu(name, p, graph) else null)
-                ?: graph?.let { env.createSession(it, sessionOptions(threads, cuda = false)) }
-                ?: env.createSession(p.toString(), sessionOptions(threads, cuda = false))
+        val session = (if (gpu && libraries.ready()) openOnGpu(name) else null) ?: open(name, threads, cuda = false)
         sessions[name] = session
         log.info(
             "{} is up on {}: inputs {}, outputs {}",
@@ -96,11 +151,33 @@ class Onnx(
         return session
     }
 
+    /** A session of the graph [name] — of its file, or of the bytes made of it ([madeOf]) — on the card or not. */
+    private fun open(name: String, threads: Int, cuda: Boolean): OrtSession {
+        val (file, make) = synchronized(this) { made[name] }?.let { it.first to it.second } ?: (name to null)
+        val p = path(file)
+        check(Files.isRegularFile(p)) { "No such model file: ${p.toAbsolutePath()}" }
+        val options = sessionOptions(threads, cuda)
+        if (make == null) return env.createSession(p.toString(), options)
+        val graph = FileChannel.open(p, StandardOpenOption.READ).use { make(it.map(MapMode.READ_ONLY, 0, it.size())) }
+        return env.createSession(graph, options)
+    }
+
+    /** The session of the graph [name] on the card; null, and CUDA not tried again, when it fails. */
+    private fun openOnGpu(name: String): OrtSession? =
+        try {
+            open(name, 0, cuda = true).also { onGpu += name }
+        } catch (e: OrtException) {
+            log.warn("{} cannot run on CUDA, it runs on the CPU: {}", name, e.message)
+            libraries.failed()
+            null
+        }
+
     /**
      * A session of a graph made in memory for one piece of work — its data among the graph's constants — on the card,
      * in single precision without TF32; null without a card. Not kept: the caller closes it when the work is done, and
-     * the card's memory is given back. [supplied]: the tensors the graph does not carry ([OnnxGraph.supplied]), by
-     * name, over the memory they lie in — kept open by the caller as long as the session.
+     * the card's memory is given back — opened and run within a room its caller holds ([freeOnCard]). [supplied]: the
+     * tensors the graph does not carry ([OnnxGraph.supplied]), by name, over the memory they lie in — kept open by the
+     * caller as long as the session.
      */
     fun onCard(graph: ByteArray, supplied: Map<String, OnnxTensorLike> = emptyMap()): OrtSession? {
         if (!gpu || !synchronized(this) { libraries.ready() }) return null
@@ -118,20 +195,11 @@ class Onnx(
     }
 
     /**
-     * The session of the graph [name] on the card — of the file [p], or of the bytes [graph] made of it; null, and CUDA
-     * not tried again, when it fails.
+     * The card's memory free for a new piece of work, of the process ([FreeCardMemory]): what a batch on the card and a
+     * graph of one's own ([onCard]) hold their room in. Null on the CPU, and when cuBLAS cannot be opened — the card
+     * then works as it did before its memory was counted.
      */
-    private fun openOnGpu(name: String, p: Path, graph: ByteBuffer?): OrtSession? =
-        try {
-            val options = sessionOptions(0, cuda = true)
-            (graph?.let { env.createSession(it, options) } ?: env.createSession(p.toString(), options)).also {
-                onGpu += name
-            }
-        } catch (e: OrtException) {
-            log.warn("{} cannot run on CUDA, it runs on the CPU: {}", name, e.message)
-            libraries.failed()
-            null
-        }
+    fun freeOnCard(): FreeCardMemory? = cudaLibraries()?.let(Cublas::open)?.free
 
     /**
      * The folder of the CUDA libraries, loaded ([CudaLibraries.ready]), when the launch asks for the card and they are
@@ -140,40 +208,9 @@ class Onnx(
      */
     @Synchronized fun cudaLibraries(): Path? = cuda.takeIf { gpu && libraries.ready() }
 
-    /** The input names the graph asks for. */
-    fun inputNames(name: String): Set<String> = session(name).inputNames
-
-    /**
-     * Runs a graph with named inputs and returns the first output as a [batch, tokens, width] array — the hidden states
-     * of a text encoder. The tensors are closed here.
-     */
-    fun runSequence(name: String, inputs: Map<String, OnnxTensor>): Array<Array<FloatArray>> {
-        val session = session(name)
-        try {
-            session.run(inputs).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                return result[0].value as Array<Array<FloatArray>>
-            }
-        } finally {
-            inputs.values.forEach { it.close() }
-        }
-    }
-
-    /** Runs a graph with named inputs and returns the first output as rows of floats. The tensors are closed here. */
-    fun run(name: String, inputs: Map<String, OnnxTensor>): Array<FloatArray> {
-        val session = session(name)
-        try {
-            session.run(inputs).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                return when (val v = result[0].value) {
-                    is Array<*> -> v as Array<FloatArray>
-                    is FloatArray -> arrayOf(v)
-                    else -> error("Unexpected output ${v.javaClass}")
-                }
-            }
-        } finally {
-            inputs.values.forEach { it.close() }
-        }
+    /** The options of a run on the card: the arena's memory the run took given back to the card as it ends. */
+    private val shrinking: OrtSession.RunOptions by lazy {
+        OrtSession.RunOptions().apply { addRunConfigEntry("memory.enable_memory_arena_shrinkage", "gpu:0") }
     }
 
     companion object {
@@ -195,7 +232,13 @@ private fun sessionOptions(threads: Int, cuda: Boolean, tf32: Boolean = true): O
     // The time of every node of every run written out, when asked for: where a graph's time goes
     System.getenv(Onnx.PROFILE)?.let { options.enableProfiling(it) }
     if (cuda) {
-        if (tf32) options.addCUDA(0) else options.addCUDA(OrtCUDAProviderOptions(0).apply { add("use_tf32", "0") })
+        options.addCUDA(
+            OrtCUDAProviderOptions(0).apply {
+                if (!tf32) add("use_tf32", "0")
+                // The arena grows by what a run asks, no more: what it took is given back as the run ends (shrinking)
+                add("arena_extend_strategy", "kSameAsRequested")
+            }
+        )
         // Not the warning of every session that the shape operations stay on the CPU: the runtime puts them there
         // itself
         options.setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR)

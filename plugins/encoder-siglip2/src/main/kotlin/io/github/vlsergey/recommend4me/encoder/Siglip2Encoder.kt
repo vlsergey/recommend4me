@@ -1,7 +1,10 @@
 package io.github.vlsergey.recommend4me.encoder
 
 import ai.onnxruntime.OnnxTensor
+import io.github.vlsergey.recommend4me.onnx.Batching
 import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.RunMemory
+import io.github.vlsergey.recommend4me.onnx.floats
 import java.awt.image.BufferedImage
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -90,17 +93,15 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         }
     }
 
-    /** Unit vectors of prepared pictures, [BATCH] at a time on half the cores, [GPU_BATCH] on the card. */
+    /** Unit vectors of prepared pictures, in batches ([BATCHING]): on half the cores, or on the card. */
     override fun encode(pictures: List<PreparedPicture>): List<FloatArray> = embed(pictures.map { it as Prepared })
 
     fun embed(pictures: List<Prepared>): List<FloatArray> {
         val out = ArrayList<FloatArray>(pictures.size)
-        onnx.session(MODEL, THREADS)
-        val size = if (onnx.onGpu(MODEL)) GPU_BATCH else BATCH
         // A batch is padded to its longest picture: similar sizes go together
         val order = pictures.indices.sortedBy { pictures[it].count }
         val vectors = arrayOfNulls<FloatArray>(pictures.size)
-        for (batch in order.chunked(size)) {
+        onnx.inBatches(MODEL, order, { pictures[it].count }, BATCHING, THREADS) { batch, graph ->
             val n = batch.maxOf { pictures[it].count }
             val b = batch.size
             val patches = FloatArray(b * n * PATCH_VALUES)
@@ -120,8 +121,7 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
                 }
             }
             val result =
-                onnx.run(
-                    MODEL,
+                graph.floats(
                     mapOf(
                         "patches" to
                             OnnxTensor.createTensor(
@@ -141,7 +141,7 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
                                 LongBuffer.wrap(mask),
                                 longArrayOf(b.toLong(), n.toLong()),
                             ),
-                    ),
+                    )
                 )
             batch.forEachIndexed { r, i -> vectors[i] = unit(result[r]) }
         }
@@ -182,10 +182,20 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
         private const val LEAST_NORM = 1e-9
         private const val PATCH_VALUES = PATCH * PATCH * CHANNELS
-        private const val BATCH = 8
 
-        /** A card is fed many pictures at once: one run costs it little more than one picture. */
-        private const val GPU_BATCH = 32
+        /**
+         * The batches of the pictures: of 32 on the card — one run costs it little more than one picture —, as its free
+         * memory lets, of 8 on the processor. A run takes of the card beyond the weights, measured of the graph
+         * (2026-11-27, ONNX Runtime 1.20), 1 GB of 32 pictures of 256 patches: 204 bytes a pair of patches of a
+         * picture, 64 KB a patch.
+         */
+        private val BATCHING =
+            Batching(
+                cardRows = 32,
+                cpuRows = 8,
+                page = MAX_PATCHES,
+                memory = RunMemory(96L shl 20, perPiece = 64L shl 10, perPair = 204),
+            )
 
         /** Half the cores: the machine stays usable while the catalogue is analysed for days. */
         val THREADS = max(1, Runtime.getRuntime().availableProcessors() / 2)

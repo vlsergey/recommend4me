@@ -2,7 +2,10 @@ package io.github.vlsergey.recommend4me.encoder
 
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
+import io.github.vlsergey.recommend4me.onnx.Batching
 import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.RunMemory
+import io.github.vlsergey.recommend4me.onnx.sequence
 import java.nio.LongBuffer
 import java.nio.file.Files
 import kotlin.math.sqrt
@@ -118,8 +121,7 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
     fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        val wantsTypes = TOKEN_TYPES in onnx.inputNames(MODEL)
-        for (batch in order.chunked(if (onnx.onGpu(MODEL)) GPU_BATCH else BATCH)) {
+        onnx.inBatches(MODEL, order, { windows[it].size }, BATCHING) { batch, graph ->
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { PAD }
             val mask = LongArray(batch.size * len)
@@ -135,9 +137,9 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
                     "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
                     "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
                 )
-            if (wantsTypes)
+            if (TOKEN_TYPES in graph.inputNames)
                 inputs[TOKEN_TYPES] = OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size)), shape)
-            val hidden = onnx.runSequence(MODEL, inputs)
+            val hidden = graph.sequence(inputs)
             // Mean pooling over the real tokens, as e5 is trained
             batch.forEachIndexed { r, w ->
                 val v = FloatArray(DIM)
@@ -172,8 +174,19 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
         private const val TOKEN_TYPES = "token_type_ids"
         private const val PAD = 1L
         private const val WINDOW = 256
-        private const val BATCH = 32
-        private const val GPU_BATCH = 128
+
+        /**
+         * The batches of the windows: of 128 on the card, as its free memory lets, of 32 on the processor. A run takes
+         * of the card beyond the weights, measured of the graph (2026-11-27, ONNX Runtime 1.20), 1 GB of 128 windows of
+         * 260 pieces: 74 bytes a pair of pieces of a row, 12 KB a piece.
+         */
+        private val BATCHING =
+            Batching(
+                cardRows = 128,
+                cpuRows = 32,
+                page = WINDOW,
+                memory = RunMemory(16L shl 20, perPiece = 12L shl 10, perPair = 74),
+            )
 
         /** At most this many windows per text: 16 × ~250 tokens cover any overview. */
         private const val MAX_WINDOWS = 16

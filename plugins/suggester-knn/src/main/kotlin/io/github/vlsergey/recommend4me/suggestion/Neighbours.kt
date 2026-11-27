@@ -5,6 +5,7 @@ import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.OnnxGraph
 import java.nio.ByteBuffer
@@ -130,6 +131,35 @@ internal class Neighbours(val rows: Array<IntArray>, val likeness: Array<FloatAr
                     .output("likeness", f, "rows", wanted)
                     .output("rows_found", OnnxGraph.INT64, "rows", wanted)
                     .bytes(OPSET)
+            // The card's memory of the work: the works known, and of every work asked its likeness to each of them
+            // (S), counted twice for what TopK makes of it, its row and what it finds
+            val all = size.toLong() * DIMENSIONS * Float.SIZE_BYTES
+            val row = (2L * size + DIMENSIONS) * Float.SIZE_BYTES + wanted * (Float.SIZE_BYTES + Long.SIZE_BYTES)
+            val free = onnx.freeOnCard() ?: return onCardWithin(onnx, graph, known, size, asked, count, CHUNK)
+            return try {
+                free.withRoom(all + row, all + CHUNK * row) { room ->
+                    val chunk = minOf(CHUNK.toLong(), (room - all) / row).toInt()
+                    onCardWithin(onnx, graph, known, size, asked, count, chunk)
+                }
+            } catch (e: NoCardRoom) {
+                log.info("no room on the card for the nearest works ({}): the processor finds them", e.message)
+                null
+            }
+        }
+
+        /**
+         * The nearest of every work asked by the [graph] on the card, [chunk] works asked for at once, the works known
+         * the [size] rows of [known] made its constant; null when the card cannot run it.
+         */
+        private fun onCardWithin(
+            onnx: Onnx,
+            graph: ByteArray,
+            known: Floats,
+            size: Int,
+            asked: Floats,
+            count: Int,
+            chunk: Int,
+        ): Pair<Array<IntArray>, Array<FloatArray>>? {
             val all =
                 OnnxTensor.createTensor(
                     onnx.env,
@@ -138,7 +168,7 @@ internal class Neighbours(val rows: Array<IntArray>, val likeness: Array<FloatAr
                 )
             val session = onnx.onCard(graph, mapOf("Y" to all)) ?: return null.also { all.close() }
             return try {
-                byChunksOnCard(onnx, session, asked, count)
+                byChunksOnCard(onnx, session, asked, count, chunk)
             } catch (e: OrtException) {
                 log.warn("the nearest works could not be found on the card, the processor finds them: {}", e.message)
                 null
@@ -149,7 +179,7 @@ internal class Neighbours(val rows: Array<IntArray>, val likeness: Array<FloatAr
         }
 
         /**
-         * Every asked work's nearest by the graph of [session] on the card, [CHUNK] works asked for at once: their rows
+         * Every asked work's nearest by the graph of [session] on the card, [chunk] works asked for at once: their rows
          * and likenesses, the nearest first.
          */
         private fun byChunksOnCard(
@@ -157,19 +187,20 @@ internal class Neighbours(val rows: Array<IntArray>, val likeness: Array<FloatAr
             session: OrtSession,
             asked: Floats,
             count: Int,
+            chunk: Int,
         ): Pair<Array<IntArray>, Array<FloatArray>> {
             val rows = Array(count) { IntArray(0) }
             val likeness = Array(count) { FloatArray(0) }
-            val chunk = FloatArray(CHUNK * DIMENSIONS)
+            val read = FloatArray(chunk * DIMENSIONS)
             var from = 0
             while (from < count) {
-                val n = minOf(CHUNK, count - from)
-                asked.take(chunk, 0, from * DIMENSIONS, n * DIMENSIONS)
+                val n = minOf(chunk, count - from)
+                asked.take(read, 0, from * DIMENSIONS, n * DIMENSIONS)
                 val buffer =
                     ByteBuffer.allocateDirect(n * DIMENSIONS * Float.SIZE_BYTES)
                         .order(ByteOrder.nativeOrder())
                         .asFloatBuffer()
-                buffer.put(chunk, 0, n * DIMENSIONS).flip()
+                buffer.put(read, 0, n * DIMENSIONS).flip()
                 OnnxTensor.createTensor(onnx.env, buffer, longArrayOf(n.toLong(), DIMENSIONS.toLong())).use { q ->
                     session.run(mapOf("Q" to q)).use { result ->
                         @Suppress("UNCHECKED_CAST") val values = result.get(0).value as Array<FloatArray>

@@ -2,7 +2,10 @@ package io.github.vlsergey.recommend4me.encoder
 
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
+import io.github.vlsergey.recommend4me.onnx.Batching
 import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.RunMemory
+import io.github.vlsergey.recommend4me.onnx.floats
 import java.nio.LongBuffer
 import java.nio.file.Files
 import java.util.stream.IntStream
@@ -16,7 +19,7 @@ import java.util.stream.IntStream
  * first lines, and attention costs the square of the length. A line searched for against texts ([rank]) is short: the
  * text takes what it leaves of the [REACH]. The texts are cut once ([prepare]), on every core, however many pairs each
  * is in: cut on the card's turn, they kept it waiting. Pairs are SORTED BY LENGTH before batching, as the text
- * encoder's windows are: a batch is padded to its longest pair. On the card the batches are larger ([GPU_BATCH]).
+ * encoder's windows are: a batch is padded to its longest pair, as large as the card's free memory lets ([BATCHING]).
  */
 class BgeReranker(private val onnx: Onnx) : TextReranker {
 
@@ -85,8 +88,7 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
         fun length(k: Int) = pairs[k].first.size + pairs[k].second.size + SPECIAL
         val out = FloatArray(pairs.size)
         val order = pairs.indices.sortedBy(::length)
-        val wantsTypes = TOKEN_TYPES in onnx.inputNames(MODEL)
-        for (batch in order.chunked(if (onnx.onGpu(MODEL)) GPU_BATCH else BATCH)) {
+        onnx.inBatches(MODEL, order, ::length, BATCHING) { batch, graph ->
             val len = batch.maxOf(::length)
             val ids = LongArray(batch.size * len) { PAD }
             val mask = LongArray(batch.size * len)
@@ -111,9 +113,9 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
                     "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
                     "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
                 )
-            if (wantsTypes)
+            if (TOKEN_TYPES in graph.inputNames)
                 inputs[TOKEN_TYPES] = OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size)), shape)
-            val logits = onnx.run(MODEL, inputs)
+            val logits = graph.floats(inputs)
             batch.forEachIndexed { r, k -> out[k] = logits[r][0] }
         }
         return out
@@ -138,7 +140,18 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
 
         /** The tokens of each text of a pair of two texts: two of them and four special ones make at most [REACH]. */
         private const val SIDE = TEXT / 2
-        private const val BATCH = 8
-        private const val GPU_BATCH = 64
+
+        /**
+         * The batches of the pairs: of 64 on the card, as its free memory lets, of 8 on the processor. A run takes of
+         * the card beyond the weights, measured of the graph (2026-11-27, ONNX Runtime 1.20, fp16), 2 GB of 64 pairs of
+         * 512 pieces: 68 bytes a pair of pieces of a row, 29 KB a piece.
+         */
+        private val BATCHING =
+            Batching(
+                cardRows = 64,
+                cpuRows = 8,
+                page = REACH,
+                memory = RunMemory(fixed = 0, perPiece = 29L shl 10, perPair = 68),
+            )
     }
 }

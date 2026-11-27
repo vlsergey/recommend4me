@@ -4,6 +4,7 @@ import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.onnxruntime.OnnxTensor
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
+import io.github.vlsergey.recommend4me.onnx.sequence
 import java.nio.LongBuffer
 import kotlin.math.sqrt
 import kotlin.test.Test
@@ -21,6 +22,15 @@ class BgeM3EncoderTest {
     private val encoder = BgeM3Encoder(onnx)
 
     private fun cos(a: FloatArray, b: FloatArray) = a.indices.sumOf { (a[it] * b[it]).toDouble() }
+
+    /** The hidden state of every piece of the one text of [inputs], by the model's own graph. */
+    private fun hiddenOf(inputs: Map<String, OnnxTensor>): Array<FloatArray> {
+        var hidden: Array<FloatArray>? = null
+        onnx.inBatches(BgeM3Encoder.MODEL, listOf(0), { 1 }, BgeM3Encoder.BATCHING) { _, graph ->
+            hidden = graph.sequence(inputs)[0]
+        }
+        return hidden!!
+    }
 
     @Test
     fun `a Russian query finds the English text about the same`() {
@@ -117,7 +127,7 @@ class BgeM3EncoderTest {
                     "attention_mask" to
                         OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size) { 1 }), shape),
                 )
-            val first = onnx.runSequence(BgeM3Encoder.MODEL, inputs)[0][0]
+            val first = hiddenOf(inputs)[0]
             val norm = sqrt(first.sumOf { (it * it).toDouble() }).toFloat()
             val whole = FloatArray(first.size) { first[it] / norm }
             assertTrue(cos(whole, windows[t]) > 0.9999, "${cos(whole, windows[t])}")
@@ -155,7 +165,7 @@ class BgeM3EncoderTest {
                 "attention_mask" to
                     OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size) { 1 }), shape),
             )
-        val hidden = onnx.runSequence(BgeM3Encoder.MODEL, inputs)[0]
+        val hidden = hiddenOf(inputs)
         val (weight, bias) = head()
         fun headOf(h: FloatArray) =
             unit(

@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.encoder
 
 import ai.onnxruntime.OnnxTensor
+import io.github.vlsergey.recommend4me.onnx.Batching
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.OnnxSplice
 import io.github.vlsergey.recommend4me.onnx.PiecesOutput
@@ -123,7 +124,10 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
         val firsts = arrayOfNulls<FloatArray>(windows.size)
         val pieces = arrayOfNulls<Array<FloatArray>>(windows.size)
         val order = windows.indices.sortedBy { windows[it].size }
-        for (batch in RunBatches.of(order, { windows[it].size }, onnx.onGpu(graph))) {
+        // The pieces' output besides the model's: a float of every number of every piece
+        val out = (projection?.rows?.size ?: width).toLong() * Float.SIZE_BYTES
+        val batching = with(BgeM3Encoder.BATCHING) { Batching(cardRows, cpuRows, page, memory.withOutput(out)) }
+        onnx.inBatches(graph, order, { windows[it].size }, batching) { batch, run ->
             val len = batch.maxOf { windows[it].size }
             val ids = LongArray(batch.size * len) { BgeM3Encoder.PAD }
             val mask = LongArray(batch.size * len)
@@ -139,7 +143,7 @@ internal class BgeM3Pieces(private val onnx: Onnx, private val encoder: BgeM3Enc
                     "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
                     "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
                 )
-            val (first, each) = onnx.rowsAndPieces(graph, inputs, BgeM3Encoder.FIRST_PIECE_OUTPUT, PIECES_OUTPUT)
+            val (first, each) = run.rowsAndPieces(inputs, BgeM3Encoder.FIRST_PIECE_OUTPUT, PIECES_OUTPUT)
             batch.forEachIndexed { r, w ->
                 firsts[w] = first[r]
                 pieces[w] = each[r]
