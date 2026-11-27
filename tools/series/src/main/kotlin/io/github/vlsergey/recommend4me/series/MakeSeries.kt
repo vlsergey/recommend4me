@@ -18,7 +18,8 @@ import kotlin.io.path.name
  * works said one series, joined as the application joins them (series.SeriesJoin: every series of a site and every
  * group sharing a work one series), each written as a normalized series with its works, its series of the sites and the
  * columns its list is filtered and ordered by (series.SeriesColumns). Run once, the application stopped, after the
- * version that makes the tables (dictionaries V44) has started once; it refuses a dictionary with a series already.
+ * version that makes the tables (dictionaries V44) has started once; whatever series that version made the while are
+ * made anew with the rest.
  *
  * `make-series <data folder> [--dry-run]`: of `--dry-run`, what would be made counted, nothing written.
  */
@@ -28,12 +29,8 @@ fun main(args: Array<String>) {
     val read = Read()
     sourcesOf(data).forEach { dir -> connect(dir.resolve("source")).use { read.source(dir.name, it) } }
     connect(data.resolve("dictionaries")).use { dictionaries ->
-        dictionaries.createStatement().use { s ->
-            s.executeQuery("SELECT COUNT(*) FROM normalized_series").use {
-                it.next()
-                check(it.getInt(1) == 0) { "the dictionaries hold normalized series already: the tool has run" }
-            }
-        }
+        // What the version that made the tables made of them while it ran, made anew with the rest
+        if (!dryRun) dictionaries.createStatement().use { s -> s.execute("DELETE FROM normalized_series") }
         read.works(dictionaries)
         val series = Joined(read).series()
         val works = series.sumOf { it.works.size }
