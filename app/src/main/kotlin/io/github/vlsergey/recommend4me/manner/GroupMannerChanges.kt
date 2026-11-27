@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.worklist.WorkDatum
 import io.github.vlsergey.recommend4me.worklist.markedAmong
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -39,6 +40,20 @@ class GroupMannerChanges(
     init {
         tasks.resumption.resumes(KIND) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
+
+    /**
+     * The start: of a type with authors or series whose lists of works changed after where the reading stands — what
+     * the data say, a series made anew by a migration among them —, their manners planned.
+     */
+    @EventListener(ApplicationReadyEvent::class)
+    fun started() =
+        stores.types.forEach { type ->
+            val index = lists.of(type.id)
+            val left =
+                type.authors.works.changedAfter(GroupCursor.parse(index.stages.text(AUTHORS)), 1).isNotEmpty() ||
+                    type.series.worksChangedAfter(GroupCursor.parse(index.stages.text(SERIES)), 1).isNotEmpty()
+            if (left && type.mannerWords.id() != null) plan(type.id, "start")
+        }
 
     /**
      * Works merged, taken apart, put in a series or out of one, authors merged or taken apart: the manners of the

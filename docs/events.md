@@ -174,6 +174,7 @@ flowchart LR
     o_start --> w_fitPieceProjection
     o_start --> w_fitTagTextModel
     o_start --> w_indexWorkTexts
+    o_start --> w_makeGroupManners
     o_start --> w_makeSiteItemSetVectors
     o_start --> w_searchAuthorDuplicates
     o_start --> w_searchDuplicates
