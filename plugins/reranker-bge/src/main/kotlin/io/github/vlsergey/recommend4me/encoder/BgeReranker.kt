@@ -130,7 +130,7 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
         private const val PAD = 1L
 
         /** The pieces read at once: the reach of XLM-RoBERTa's positions as the model was trained. */
-        private const val REACH = 512
+        internal const val REACH = 512
 
         /** The special pieces of a pair: <s> first </s></s> second </s>. */
         private const val SPECIAL = 4
@@ -143,15 +143,15 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
 
         /**
          * The batches of the pairs: of 64 on the card, as its free memory lets, of 8 on the processor. A run takes of
-         * the card beyond the weights, measured of the graph (2026-11-27, ONNX Runtime 1.20, fp16), 2 GB of 64 pairs of
-         * 512 pieces: 68 bytes a pair of pieces of a row, 29 KB a piece.
+         * the card beyond the weights, measured of the graph (`BgeRerankerRunMemoryTest`), 2 GB of 64 pairs of 512
+         * pieces: 68 bytes a pair of pieces of a row, 30 KB a piece.
          */
-        private val BATCHING =
+        internal val BATCHING =
             Batching(
                 cardRows = 64,
                 cpuRows = 8,
                 page = REACH,
-                memory = RunMemory(fixed = 0, perPiece = 29L shl 10, perPair = 68),
+                memory = RunMemory(fixed = 32L shl 20, perPiece = 30L shl 10, perPair = 68),
             )
     }
 }

@@ -1,6 +1,8 @@
 plugins {
     id("recommend4me.kotlin")
     `java-library`
+    // What the plugins' tests of their graphs share: the memory of a run measured and checked (RunMemoryRecord)
+    `java-test-fixtures`
 }
 
 dependencies {
@@ -13,6 +15,8 @@ dependencies {
     compileOnly(platform(libs.spring.boot.bom))
     compileOnly(libs.spring.boot.autoconfigure)
     compileOnly(libs.slf4j.api)
+    testFixturesImplementation(platform(libs.spring.boot.bom))
+    testFixturesImplementation(libs.kotlin.test)
 }
 
 base.archivesName = "recommend4me-onnx"

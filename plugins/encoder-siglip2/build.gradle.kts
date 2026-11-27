@@ -5,6 +5,8 @@ plugins {
 dependencies {
     implementation(project(":libs:onnx"))
     testImplementation(project(":libs:onnx"))
+    // The memory of a run of the graph measured and checked: RunMemoryRecord
+    testImplementation(testFixtures(project(":libs:onnx")))
     testImplementation(platform(libs.spring.boot.bom))
     testImplementation(libs.jackson.kotlin)
 }

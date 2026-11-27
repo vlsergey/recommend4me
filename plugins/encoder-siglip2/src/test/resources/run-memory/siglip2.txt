@@ -1,0 +1,9 @@
+# What a run of the graph takes of the card, measured by RunMemoryMeasure: do not edit by hand
+runtime 1.20.0
+model siglip2_naflex.onnx 2124303 bb5fc5aba5f48cbd
+weights 1635 MB
+32x64 203 MB
+32x128 443 MB
+8x256 255 MB
+1x256 30 MB
+32x256 1005 MB

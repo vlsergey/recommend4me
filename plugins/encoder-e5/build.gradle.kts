@@ -8,4 +8,6 @@ dependencies {
     // library, the one the model was trained with
     implementation(libs.djl.tokenizers)
     testImplementation(project(":libs:onnx"))
+    // The memory of a run of the graph measured and checked: RunMemoryRecord
+    testImplementation(testFixtures(project(":libs:onnx")))
 }

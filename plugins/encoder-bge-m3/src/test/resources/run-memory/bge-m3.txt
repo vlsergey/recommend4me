@@ -1,0 +1,11 @@
+# What a run of the graph takes of the card, measured by RunMemoryMeasure: do not edit by hand
+runtime 1.20.0
+model bge-m3-fp16.onnx 1133992936 c8b5bcf91a2b7831
+weights 1088 MB
+64x32 53 MB
+64x256 413 MB
+16x512 330 MB
+4x2048 1103 MB
+1x4096 1065 MB
+1x8192 4170 MB
+64x512 1343 MB

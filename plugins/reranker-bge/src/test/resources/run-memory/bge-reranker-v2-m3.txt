@@ -1,0 +1,8 @@
+# What a run of the graph takes of the card, measured by RunMemoryMeasure: do not edit by hand
+runtime 1.20.0
+model bge-reranker-v2-m3-fp16.onnx 1136209678 a0e5a260c5568f7f
+weights 1088 MB
+64x64 135 MB
+64x256 743 MB
+16x512 503 MB
+64x512 2018 MB

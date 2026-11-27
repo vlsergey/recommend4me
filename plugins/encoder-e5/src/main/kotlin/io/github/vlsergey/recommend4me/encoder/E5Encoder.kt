@@ -173,19 +173,19 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
         const val DIM = 384
         private const val TOKEN_TYPES = "token_type_ids"
         private const val PAD = 1L
-        private const val WINDOW = 256
+        internal const val WINDOW = 256
 
         /**
          * The batches of the windows: of 128 on the card, as its free memory lets, of 32 on the processor. A run takes
-         * of the card beyond the weights, measured of the graph (2026-11-27, ONNX Runtime 1.20), 1 GB of 128 windows of
-         * 260 pieces: 74 bytes a pair of pieces of a row, 12 KB a piece.
+         * of the card beyond the weights, measured of the graph (`E5RunMemoryTest`), 1 GB of 128 windows of 256 pieces:
+         * 66 bytes a pair of pieces of a row, 13 KB a piece.
          */
-        private val BATCHING =
+        internal val BATCHING =
             Batching(
                 cardRows = 128,
                 cpuRows = 32,
                 page = WINDOW,
-                memory = RunMemory(16L shl 20, perPiece = 12L shl 10, perPair = 74),
+                memory = RunMemory(48L shl 20, perPiece = 13L shl 10, perPair = 66),
             )
 
         /** At most this many windows per text: 16 × ~250 tokens cover any overview. */

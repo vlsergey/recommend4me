@@ -185,7 +185,7 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         internal const val PAD = 1L
 
         /** The pieces bge-m3 reads of one text, its two special ones among them: what it was trained to read. */
-        private const val LONGEST = 8192
+        internal const val LONGEST = 8192
 
         /** The pieces of a text read whole besides the two special ones. */
         internal const val LONGEST_ROOM = LONGEST - 2
@@ -203,11 +203,11 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         internal const val SCENE_STEP = SCENE_ROOM / 2
 
         /**
-         * What a run of bge-m3 takes of the card beyond its weights, measured of the graph (2026-11-27, ONNX Runtime
-         * 1.20, fp16): 4.1 GB of one text of 8192 pieces, 1.3 GB of 64 windows of 512 — the attention of its 16 heads
-         * in half precision, kept twice, is 64 bytes a pair of pieces, the rest under 6 KB a piece.
+         * What a run of bge-m3 takes of the card beyond its weights, measured of the graph (`BgeM3RunMemoryTest`): 4.1
+         * GB of one text of 8192 pieces, 1.3 GB of 64 windows of 512 — the attention of its 16 heads in half precision,
+         * kept twice, is 64 bytes a pair of pieces, the rest 9 KB a piece.
          */
-        internal val MEMORY = RunMemory(fixed = 192L shl 20, perPiece = 6L shl 10, perPair = 64)
+        internal val MEMORY = RunMemory(fixed = 64L shl 20, perPiece = 9L shl 10, perPair = 64)
 
         /**
          * The batches of the windows: of 64 on the card, as the room lets; of 8 on the processor, of no more than so

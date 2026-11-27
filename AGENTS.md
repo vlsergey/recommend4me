@@ -259,7 +259,11 @@ after a reranker's search held 14 GB of 16 and the fields multiplied on the proc
 `gpu_mem_limit` a run of each of several shapes goes through), each batch made as large as the room the card has free
 as it begins (`FreeCardMemory.withRoom`, held while it runs), the runtime's arena given back as the run ends; a row
 with no room runs on the processor. A graph of one's own on the card (`onnx.onCard`) is opened and run within a room
-held so too.
+held so too. **The measure is kept beside the plugin's tests and checked in every build** (owner, 2026-11-27): the
+plugin's `*RunMemoryTest` measures its graph on a card (`RunMemoryMeasure`, tagged `ci`, run by its name with
+`-PallTests`) and writes `src/test/resources/run-memory/<graph>.txt`, commit it; the check of every build
+(`RunMemoryRecord.checkTold`) fails when the measure has grown stale — another ONNX Runtime, another model file, a
+shape the plugin runs (its largest batch among them) not measured, a memory told below the measure or far above it.
 
 **The scripts — the web interface and the extension — are linted by Biome**, its recommended rules
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.

@@ -5,7 +5,9 @@ package io.github.vlsergey.recommend4me.onnx
  * batch of rows padded to one length: [fixed] bytes once, [perPiece] for every piece of every row, [perPair] for every
  * pair of pieces of a row (the attention of a transformer, its length squared). Told by the plugin of the graph, as
  * measured of it: the least memory a run of each of several shapes goes through, the runtime given no more
- * (`gpu_mem_limit`, the arena growing by what is asked); the bytes told are no fewer than any measured.
+ * (`gpu_mem_limit`, the arena growing by what is asked); the bytes told are no fewer than any measured — fitted 32 MB
+ * above them, a measure moving by so much from one to the next — and kept checked against them
+ * (`RunMemoryRecord.checkTold` of the plugin's tests).
  */
 class RunMemory(private val fixed: Long, private val perPiece: Long, private val perPair: Long) {
     /** The bytes a run of [rows] rows of [length] pieces each takes. */

@@ -1,0 +1,9 @@
+# What a run of the graph takes of the card, measured by RunMemoryMeasure: do not edit by hand
+runtime 1.20.0
+model e5-small.onnx 470268510 a7564003d248a84e
+weights 450 MB
+128x32 75 MB
+128x128 293 MB
+32x256 240 MB
+1x256 8 MB
+128x256 960 MB

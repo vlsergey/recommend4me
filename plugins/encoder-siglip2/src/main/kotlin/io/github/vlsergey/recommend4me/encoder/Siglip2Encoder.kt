@@ -186,15 +186,15 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         /**
          * The batches of the pictures: of 32 on the card — one run costs it little more than one picture —, as its free
          * memory lets, of 8 on the processor. A run takes of the card beyond the weights, measured of the graph
-         * (2026-11-27, ONNX Runtime 1.20), 1 GB of 32 pictures of 256 patches: 204 bytes a pair of patches of a
-         * picture, 64 KB a patch.
+         * (`Siglip2RunMemoryTest`), 1 GB of 32 pictures of 256 patches: 134 bytes a pair of patches of a picture, 94 KB
+         * a patch.
          */
-        private val BATCHING =
+        internal val BATCHING =
             Batching(
                 cardRows = 32,
                 cpuRows = 8,
                 page = MAX_PATCHES,
-                memory = RunMemory(96L shl 20, perPiece = 64L shl 10, perPair = 204),
+                memory = RunMemory(32L shl 20, perPiece = 94L shl 10, perPair = 134),
             )
 
         /** Half the cores: the machine stays usable while the catalogue is analysed for days. */
