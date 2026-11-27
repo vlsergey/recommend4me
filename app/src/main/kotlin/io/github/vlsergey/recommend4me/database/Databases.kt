@@ -11,7 +11,7 @@ import io.github.vlsergey.recommend4me.series.SourceFile
 import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
 import io.github.vlsergey.recommend4me.series.V45__normalized_series_made
 import io.github.vlsergey.recommend4me.task.Tasks
-import java.time.Duration
+import io.github.vlsergey.recommend4me.task.TasksStop
 import org.jooq.DSLContext
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.stereotype.Component
@@ -152,8 +152,9 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
             preferences
 
     override fun destroy() {
-        // No work begun any more, the one running waited for: never a file closed under a transaction of it
-        tasks.close(CLOSE_WAIT)
+        // No work begun any more, the one running waited for — closed in the stop of the lifecycle before already
+        // ([io.github.vlsergey.recommend4me.task.TasksStop]): never a file closed under a transaction of it
+        tasks.close(TasksStop.WAIT)
         sources.values.forEach {
             listOf(it.source, it.corrections, it.ratings).forEach(Database::close)
             it.parts.close()
@@ -168,9 +169,6 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
     }
 
     private companion object {
-        /** How long the stop waits for the work running before the files close. */
-        val CLOSE_WAIT: Duration = Duration.ofSeconds(30)
-
         /**
          * The pages of a source's file H2 keeps read, in megabytes ([Database.cacheMegabytes]): of fanfics.me the
          * vectors of its texts alone are 416 MB; used only as pages are read.
