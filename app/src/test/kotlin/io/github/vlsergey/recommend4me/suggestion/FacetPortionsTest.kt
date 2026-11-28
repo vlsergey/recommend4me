@@ -49,7 +49,7 @@ class FacetPortionsTest : SiteTestBase() {
         val encoder = plugins.textEncoder()!!
         inBackground {
             tasks.run(
-                Task(TaskKind.ENCODE_SITE_ITEM_CHAPTERS, source = store.id),
+                Task(TaskKind.FIT_FIELD_MODELS, source = store.id),
                 mapOf("asked" to 1),
                 joinAlike = false,
             ) {
