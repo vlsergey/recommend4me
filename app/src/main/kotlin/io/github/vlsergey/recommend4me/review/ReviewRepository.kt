@@ -118,10 +118,21 @@ class ReviewRepository(private val db: DSLContext) {
     fun countKeyed(): Int = db.fetchCount(REVIEW, REVIEW.TEXT_KEY.ge(Long.MIN_VALUE))
 
     /** How many reviews of every item are stored. */
-    fun counts(): Map<Long, Int> =
-        db.select(REVIEW.ITEM_ID, DSL.count()).from(REVIEW).groupBy(REVIEW.ITEM_ID).fetch().associate {
-            it.value1()!! to it.value2()!!
-        }
+    /** How many reviews the items [ids] have: item to it, of those of any. */
+    fun countsOf(ids: Collection<Long>): Map<Long, Int> =
+        ids.distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(REVIEW.ITEM_ID, DSL.count())
+                    .from(REVIEW)
+                    .where(REVIEW.ITEM_ID.`in`(chunk))
+                    .groupBy(REVIEW.ITEM_ID)
+                    .fetch()
+            }
+            .associate { it.value1()!! to it.value2()!! }
+
+    /** How many reviews the source's items have in all: counted by the database, no row read. */
+    fun total(): Long = db.fetchCount(REVIEW).toLong()
 
     fun countOf(itemId: Long): Int = db.fetchCount(REVIEW, REVIEW.ITEM_ID.eq(itemId))
 

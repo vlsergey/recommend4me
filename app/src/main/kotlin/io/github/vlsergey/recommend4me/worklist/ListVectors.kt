@@ -25,7 +25,8 @@ class ListVectors(private val works: Works, private val indexes: ListIndexes, pr
     fun bring(type: TypeStore, keys: Collection<ItemKey>): Int {
         val encoder = plugins.textEncoder()?.id ?: return 0
         val index = indexes.of(type.id)
-        val clusters = lazy { works.of(type) }
+        // Which items are one work, of these items' works alone
+        val clusters = lazy { works.ofKeys(type, keys) }
         return keys.groupBy({ it.source }, { it.id }).entries.sumOf { (sourceId, ids) ->
             type.source(sourceId)?.let { bring(it, ids, encoder, index, clusters) } ?: 0
         }

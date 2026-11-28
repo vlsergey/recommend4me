@@ -130,7 +130,7 @@ class WorkPredictions(
         val count = state?.let { counted(type, it) }
         val interest = kept.loadInterest(type)
         val likeness = likenesses.asMade(type, ratingsOf(type).map { it.key })
-        val clusters = works.of(type)
+        val clusters = works.ofKeys(type, items.map { it.key })
         val done = items.mapTo(HashSet()) { it.key }
         var scored = 0
         var changed = 0

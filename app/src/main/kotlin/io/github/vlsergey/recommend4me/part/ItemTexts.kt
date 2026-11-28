@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.part
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -21,6 +22,7 @@ class ItemTexts(private val db: DSLContext, private val store: PartStore) {
      * 04:14, planned again and again, the works' stages waiting behind it).
      */
     fun forEach(portion: Int = PORTION, action: (itemId: Long, texts: List<String>) -> Unit) {
+        WholeReadRefused.check("every text of every item")
         var item: Long? = null
         val parts = ArrayList<Pair<Int, String>>()
         fun flush() {

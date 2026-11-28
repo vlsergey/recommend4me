@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.database.SourceItems
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_CORRECTION
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -145,7 +146,8 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
         }
 
     /** Every facet correction: they are few, the user makes them by hand. */
-    fun allFacets(): List<FacetCorrection> = seenFacets(SITE_WORK.SOURCE.eq(source))
+    fun allFacets(): List<FacetCorrection> =
+        WholeReadRefused.checked("every answer of the source $source") { seenFacets(SITE_WORK.SOURCE.eq(source)) }
 
     /**
      * The answers of every item of the source on the values [keys] of the [facet]: what holds those values; [named]

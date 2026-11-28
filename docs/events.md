@@ -215,6 +215,7 @@ flowchart LR
     e_SiteItemRemoveEvent --> w_fitGradeModels
     e_SiteItemRemoveEvent --> w_makeGroupManners
     e_SiteItemRemoveEvent --> w_removeSiteItemTexts
+    e_SiteItemRemoveEvent --> w_writeListIndex
     e_SiteItemSetVectorChangeEvent --> w_fitGradeModels
     e_SiteItemTextVectorChangeEvent --> w_fitFieldModels
     e_SiteItemWriteEvent --> e_SiteFandomBindingChangeEvent

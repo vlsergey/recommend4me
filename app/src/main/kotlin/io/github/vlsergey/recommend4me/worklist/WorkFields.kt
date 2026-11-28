@@ -134,7 +134,7 @@ class WorkFields(
     /** The fields of the [items] of the [scope] of the [type] computed, written where they changed, told. */
     private fun filled(type: TypeStore, index: ListIndex, scope: WorkScope, items: List<TakenWork>) {
         val started = System.currentTimeMillis()
-        val clusters = works.of(type)
+        val clusters = works.ofKeys(type, items.map { it.key })
         val changed =
             items.groupBy({ it.key.source }, { it.key.id }).entries.sumOf { (source, ids) ->
                 val s = type.source(source) ?: return@sumOf 0

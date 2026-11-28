@@ -199,6 +199,7 @@ internal class ItemFacetRepository(
     }
 
     override fun forEachFacet(facet: String, action: (itemId: Long, keys: List<String>) -> Unit) {
+        WholeReadRefused.check("every value of every item of the facet $facet")
         // One pass of the facet's index, no order asked of the database: grouped by item here (user, 2026-11-18)
         val keys = HashMap<Long, MutableList<String>>()
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.VALUE_KEY)
@@ -213,6 +214,7 @@ internal class ItemFacetRepository(
     }
 
     override fun forEachFacetValue(action: (itemId: Long, facet: String, key: String) -> Unit) {
+        WholeReadRefused.check("every value of every item")
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
             .from(ITEM_FACET)
             .fetchSize(STREAMED_ROWS)

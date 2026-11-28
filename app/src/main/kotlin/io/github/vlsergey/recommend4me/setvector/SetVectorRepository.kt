@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.source.tables.references.SET_VECTOR
 import io.github.vlsergey.recommend4me.database.streamed
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -66,10 +67,12 @@ class SetVectorRepository(private val db: DSLContext) {
 
     /** Every stored vector by the directions in use, streamed: (item, block key, vector). */
     fun forEach(current: Map<SetKind, Long>, action: (itemId: Long, key: String, vector: FloatArray) -> Unit) =
-        db.streamed("SELECT item_id, kind, embedding_id, vec FROM set_vector", emptyList()) { r ->
-            val kind = SetKind.valueOf(r.getString(KIND_COLUMN))
-            if (current[kind] == (r.getObject(EMBEDDING_COLUMN) as Number?)?.toLong())
-                action(r.getLong(ITEM_COLUMN), kind.key, Vectors.unpack(r.getBytes(VECTOR_COLUMN)))
+        WholeReadRefused.checked("every set vector") {
+            db.streamed("SELECT item_id, kind, embedding_id, vec FROM set_vector", emptyList()) { r ->
+                val kind = SetKind.valueOf(r.getString(KIND_COLUMN))
+                if (current[kind] == (r.getObject(EMBEDDING_COLUMN) as Number?)?.toLong())
+                    action(r.getLong(ITEM_COLUMN), kind.key, Vectors.unpack(r.getBytes(VECTOR_COLUMN)))
+            }
         }
 
     private companion object {

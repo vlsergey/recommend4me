@@ -78,21 +78,6 @@ class ListIndex(private val store: DuckDatabase) : AutoCloseable {
         ListDocuments.append(writer, rows)
     }
 
-    /** The rows of the [source] whose items are not among [present] removed: how many. */
-    fun keepOnly(source: String, present: Set<Long>): Int = lock.withLock {
-        val gone =
-            writing
-                .select(ITEM.ITEM_KEY)
-                .from(ITEM)
-                .where(ITEM.SOURCE.eq(source))
-                .fetch { it.value1()!! }
-                .filter {
-                    ItemKey.parse(it).id !in present
-                }
-        remove(gone)
-        gone.size
-    }
-
     /** The rows of every source not among [sources] removed: of a source the application no longer has. */
     fun keepSources(sources: Set<String>) = lock.withLock {
         // Of no such source, nothing: not every table gone through to remove nothing, a writing's every portion

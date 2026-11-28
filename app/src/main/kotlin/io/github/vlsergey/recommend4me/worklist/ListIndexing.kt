@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.database.worklist.tables.references.ITEM
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -15,6 +16,7 @@ import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(ListIndexing::class.java)
@@ -37,10 +39,11 @@ data class WorkDocumentWriteEvent(val type: String, val stages: Set<WorkStage>)
  * is drafted of it — a dictionary its values are drafted by — dated so ([WorkDatum.DATA]). Where the writing stands
  * moves with every portion, kept with the commit ([ListCursors]); of an index current as of nought, every item is taken
  * from the first. A dictionary changed names no item: what is drafted of it anew tells the works it changed. The
- * documents of the items gone from their source removed as every change is written; the passes over the works told what
- * changed ([WorkDocumentWriteEvent]).
+ * documents of the items removed from the library taken out by their keys, kept in the queue as they went ([removed]);
+ * the passes over the works told what changed ([WorkDocumentWriteEvent]).
  *
- * Nothing is named in the queue: what changed is read of the databases when the work runs, and a stop loses nothing.
+ * Nothing else is named in the queue: what changed is read of the databases when the work runs, and a stop loses
+ * nothing.
  */
 @Component
 class ListIndexing(
@@ -144,8 +147,10 @@ class ListIndexing(
                 ids.chunked(PORTION).forEach { written += writeNamed(s, it.toSet(), index, clusters, changed) }
             }
         }
-        // The documents of the items gone, as every change is written
-        val gone = if (more) 0 else type.sources.sumOf { removeGone(it, index) }
+        // The documents of the items removed, kept in the queue by their keys as they went
+        val removed = tasks.keys.wanted(work(typeId))
+        val gone = removed.map { ItemKey.parse(it) }
+        if (gone.isNotEmpty()) index.replace(emptyList(), gone)
         val replaced = System.currentTimeMillis()
         portion.items.forEach { (source, at) -> cursors.set(source, at) }
         portion.written.forEach { (source, at) -> cursors.written(source, at) }
@@ -154,6 +159,7 @@ class ListIndexing(
         val after = type.sources.associate { it.id to cursors.held(it.id) }
         val due = sweeps.written(typeId, before, after, changed)
         index.commit()
+        tasks.keys.done(work(typeId), removed)
         val committed = System.currentTimeMillis()
         if (due.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, due))
         log.info(
@@ -171,16 +177,11 @@ class ListIndexing(
         return more
     }
 
-    /**
-     * Of the source [s], the rows of its items gone removed — when the index holds more of them than the source has
-     * items: an item taken out of the library, nothing of it left to be dated —; how many.
-     */
-    private fun removeGone(s: SourceStore, index: ListIndex): Int {
-        val rows = index.written { db ->
-            db.selectCount().from(ITEM).where(ITEM.SOURCE.eq(s.id)).fetchOne(0, Int::class.java) ?: 0
-        }
-        if (rows <= s.items.count()) return 0
-        return index.keepOnly(s.id, s.items.keys().mapTo(HashSet()) { it.id })
+    /** A site's item removed from the library: its document taken out of the list, by its key kept in the queue. */
+    @EventListener
+    fun removed(event: SiteItemRemoveEvent) {
+        tasks.keys.want(work(event.type), listOf(ItemKey(event.source, event.itemId).toString()))
+        plan(event.type, "removal")
     }
 
     /**

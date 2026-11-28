@@ -23,12 +23,20 @@ class SetMembers(private val plugins: Plugins, private val phrases: PhraseVector
             SetKind.PARTS -> plugins.textEncoder()?.windowsId
         }
 
-    /** How many members every item's set of [kind] has now. */
-    fun sizes(s: SourceStore, kind: SetKind, encoder: String): Map<Long, Int> =
+    /** How many members the sets of [kind] of the items [ids] have now: item to it, of those of any. */
+    fun sizesOf(s: SourceStore, kind: SetKind, encoder: String, ids: Collection<Long>): Map<Long, Int> =
         when (kind) {
-            SetKind.SCREENS -> s.pictures.analysed.screenshotCounts(encoder)
-            SetKind.REVIEWS -> s.reviews.counts()
-            SetKind.PARTS -> s.parts.windows.windowCounts(encoder)
+            SetKind.SCREENS -> s.pictures.analysed.screenshotCountsOf(ids, encoder)
+            SetKind.REVIEWS -> s.reviews.countsOf(ids)
+            SetKind.PARTS -> s.parts.windows.windowCountsOf(ids, encoder)
+        }
+
+    /** How many members the sets of [kind] of every item of the source have in all: counted, no row read. */
+    fun total(s: SourceStore, kind: SetKind, encoder: String): Long =
+        when (kind) {
+            SetKind.SCREENS -> s.pictures.analysed.screenshotTotal(encoder)
+            SetKind.REVIEWS -> s.reviews.total()
+            SetKind.PARTS -> s.parts.windows.windowTotal(encoder)
         }
 
     /** The members of the sets of [kind] of the items [ids], as vectors by [encoder]. */

@@ -42,14 +42,22 @@ class AnalysedPictures(private val db: DSLContext) {
         return out
     }
 
-    /** How many screenshots (not the cover) of every item are analysed. */
-    fun screenshotCounts(encoder: String): Map<Long, Int> =
-        db.select(PICTURE.ITEM_ID, DSL.count())
-            .from(PICTURE)
-            .where(PICTURE.POSITION.gt(0), analyzedBy(encoder))
-            .groupBy(PICTURE.ITEM_ID)
-            .fetch()
+    /** How many screenshots (not the cover) of the items [ids] are analysed: item to it, of those of any. */
+    fun screenshotCountsOf(ids: Collection<Long>, encoder: String): Map<Long, Int> =
+        ids.distinct()
+            .chunked(PICTURES_BATCH)
+            .flatMap { chunk ->
+                db.select(PICTURE.ITEM_ID, DSL.count())
+                    .from(PICTURE)
+                    .where(PICTURE.ITEM_ID.`in`(chunk), PICTURE.POSITION.gt(0), analyzedBy(encoder))
+                    .groupBy(PICTURE.ITEM_ID)
+                    .fetch()
+            }
             .associate { it.value1()!! to it.value2()!! }
+
+    /** How many screenshots (not the cover) of the source's items are analysed in all: counted, no row read. */
+    fun screenshotTotal(encoder: String): Long =
+        db.fetchCount(PICTURE, PICTURE.POSITION.gt(0), analyzedBy(encoder)).toLong()
 
     /** Every analysed screenshot (not the cover) of the items, one vector each. */
     fun screenshots(itemIds: List<Long>, encoder: String): Map<Long, List<FloatArray>> {

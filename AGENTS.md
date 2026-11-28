@@ -174,6 +174,16 @@ a task the user asked for waits (`Tasks.outranked`), and gives way: planned agai
 2026-11-20). What is not a computation — reading the sites' pages
 and pictures — stays out of the queue.
 
+**A work of the queue takes what it is to do by dates or by keys, and tells which** (owner, 2026-11-27: "every task
+that has inputs remembers the date of the inputs it was run for, and the works — the next portion — are chosen by that
+date"; "fix it at the level of the framework of the tasks"). Every `TaskKind` names its input in `TaskInputs` — a stage
+over the works by its marks, a consumer of the changes by the date and the key from where it stands, the keys kept with
+it, a model fitted on everything it learns of, what the user asked of everything —, a kind told nowhere failing the
+tests; a kind taking its work by dates or keys runs with every reading of a whole table refused to it
+(`WholeReadRefused`, checked by every such reading): it fails at once, in the tests as on the user's machine. A kind
+that still reads everything to find what changed is told so (`TaskInput.WHOLE`) and is being converted, one after
+another.
+
 **The queue is kept in the application's database, and a start plans nothing "just in case"**
 (user, 2026-11-18): every work planned is a row of `queued_task` till it ends, so a stop or a crash
 leaves it to the next start, where its owner takes it (`Tasks.resume`) and plans it again; the

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.scanned
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
@@ -114,7 +115,8 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
      */
     private fun scan(sql: String, row: (ResultSet) -> Unit) = db.scanned(sql, row)
 
-    override fun facetNames(facet: String): Map<String, String> = namesInOnePass(facet, null)
+    override fun facetNames(facet: String): Map<String, String> =
+        WholeReadRefused.checked("every name of the facet $facet") { namesInOnePass(facet, null) }
 
     override fun facetNames(wanted: Map<String, Collection<String>>): Map<String, Map<String, String>> {
         if (wanted.values.sumOf { it.size } <= LOOKED_UP) return wanted.mapValues { (f, keys) -> facetNames(f, keys) }
@@ -142,6 +144,7 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             .filterValues { it.isNotEmpty() }
 
     override fun allFacetNames(): Map<String, Map<String, String>> {
+        WholeReadRefused.check("every name of every facet")
         val out = HashMap<String, HashMap<String, String>>()
         scan("SELECT facet, value_key, name FROM facet_value") { r ->
             out.getOrPut(r.getString("facet")) { HashMap() }[r.getString("value_key")] = r.getString("name")

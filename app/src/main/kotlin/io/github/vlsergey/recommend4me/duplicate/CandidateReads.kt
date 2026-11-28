@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.duplicates.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.Condition
@@ -19,7 +20,8 @@ class CandidateReads internal constructor(private val db: DSLContext) {
      * 2026-11-20: no repository gives every row of a table as objects — two and a half million pairs read whole for a
      * request took 4 GB, and six such requests the whole memory).
      */
-    fun forEach(action: (DuplicateCandidate) -> Unit) = stream(DSL.noCondition(), action)
+    fun forEach(action: (DuplicateCandidate) -> Unit) =
+        WholeReadRefused.checked("every pair of the duplicates") { stream(DSL.noCondition(), action) }
 
     /**
      * Of every pair not answered, its two works and its chance of one work as kept with it ([PairScore]), streamed:

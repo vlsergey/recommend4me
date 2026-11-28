@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import java.time.Instant
 import org.jooq.DSLContext
@@ -31,7 +32,8 @@ interface ItemKeyList {
 /** The [ItemKeyList] of the source database [db]. */
 internal class ItemKeyRepository(private val db: DSLContext) : ItemKeyList {
 
-    override fun keys(): List<ItemKeys> = select().fetchSize(STREAMED_ROWS).fetch(::keysOf)
+    override fun keys(): List<ItemKeys> =
+        WholeReadRefused.checked("every item") { select().fetchSize(STREAMED_ROWS).fetch(::keysOf) }
 
     override fun keysAfter(after: Long?, count: Int): List<ItemKeys> =
         select()

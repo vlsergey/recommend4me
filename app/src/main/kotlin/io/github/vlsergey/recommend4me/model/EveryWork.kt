@@ -69,8 +69,9 @@ class EveryWork(
         tasks.progress(0.0, TaskStep.AVERAGE)
         val started = System.currentTimeMillis()
         val count = AverageCount(plugins.textEncoder(), plugins.imageEncoder(), type.embeddings.ids())
-        val clusters = works.of(type)
-        val graded = ratingsOf(type).map { clusters.representative(it.key) }.distinct()
+        val rated = ratingsOf(type)
+        val clusters = works.ofKeys(type, rated.map { it.key })
+        val graded = rated.map { clusters.representative(it.key) }.distinct()
         ofKeys(type, likenesses.stored(type), graded, count) { read ->
             count.addAll(read)
             // Their vectors read as a scoring reads them: told to the count as they are
@@ -119,7 +120,6 @@ class EveryWork(
         private val severalSources = type.sources.size > 1
         private val ratings = ratingsOf(type)
         private val interest = interestOf(type)
-        private val clusters = works.of(type)
         private val none = Averages(emptyMap(), emptyMap())
 
         /**
@@ -127,6 +127,8 @@ class EveryWork(
          * one of a work of several named by an item of another site.
          */
         fun portion(s: SourceStore, keys: List<ItemKeys>): WorkPortion? {
+            // Which items are one work, of the portion's works alone: never every work of several of the type
+            val clusters = works.ofKeys(type, keys.map { ItemKey(s.id, it.id) })
             val named = keys.map { ItemKey(s.id, it.id) }.filter { clusters.representative(it) == it }
             if (named.isEmpty()) return null
             val laps = Laps()

@@ -122,11 +122,10 @@ class SetVectorMaking(
         val asked = items.groupBy({ it.key.source }, { it.key.id })
         SetKind.entries.forEach { kind ->
             val encoder = sets.encoderOf(kind) ?: return@forEach
-            // The sizes of the sets read once, for the directions and for the works made alike
-            val sizes = type.sources.associateWith { sets.sizes(it, kind, encoder) }
-            val embedding = directions.inUse(type, kind, encoder, sizes) ?: return@forEach
+            // The members of every source counted for the directions; the sizes of the works taken read by their keys
+            val embedding = directions.inUse(type, kind, encoder) ?: return@forEach
             type.sources.forEach { s ->
-                asked[s.id]?.let { ids -> made += made(s, kind, embedding, sizes[s].orEmpty(), ids) }
+                asked[s.id]?.let { ids -> made += made(s, kind, embedding, sets.sizesOf(s, kind, encoder, ids), ids) }
             }
         }
         sweeps.done(STAGE, type.id, scope, items.map { it.key })

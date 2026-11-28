@@ -152,8 +152,8 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
         body: () -> T,
     ): T {
         Requests.refuseWaiting(work)
-        // A work asking for another inside it goes on: the turn is its own
-        if (turns.heldHere()) return body()
+        // A work asking for another inside it goes on: the turn is its own, the other's input its own too
+        if (turns.heldHere()) return TaskInputs.run(work.what, body)
         val plan = if (reasons == null) plans.take(work) else null
         val ranked = InheritedPriority.of(priority ?: plan?.priority)
         val (entry, own) = turns.enter(work, reasons ?: plan?.reasons.orEmpty(), joinAlike, ranked, plan?.cursor)
@@ -179,7 +179,8 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
             var failed = true
             var givenUp = false
             try {
-                return body().also {
+                // By how its kind finds what it is to do: a whole table refused to one taking it by dates or keys
+                return TaskInputs.run(entry.work.what, body).also {
                     failed = false
                     entry.result.complete(it)
                     running.again?.let(goesOn)

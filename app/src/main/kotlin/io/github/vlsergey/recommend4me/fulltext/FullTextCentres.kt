@@ -104,7 +104,7 @@ class FullTextCentres(
         // What the type has now: its windows kept — of a type whose windows are not made yet, those learnt of
         val kept =
             type.sources.sumOf { s ->
-                s.parts.windows.windowCounts(encoder.windowsId).values.sumOf { it.toLong() } +
+                s.parts.windows.windowTotal(encoder.windowsId) +
                     s.schema.texts.filter { it.searchByMeaning }.sumOf { s.textVectors.itemsWith(it.key).size.toLong() }
             }
         val now = Instant.now()

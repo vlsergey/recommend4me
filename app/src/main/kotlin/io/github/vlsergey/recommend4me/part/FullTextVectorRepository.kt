@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.part
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_VECTOR
 import org.jooq.DSLContext
@@ -39,5 +40,7 @@ class FullTextVectorRepository(private val db: DSLContext, private val store: Pa
      * full-text vectors.
      */
     fun forEach(action: (itemId: Long, text: String, vectors: ByteArray) -> Unit) =
-        store.fullText.forEach { item, text, vectors -> action(item.toLong(), text, vectors) }
+        WholeReadRefused.checked("every full-text vector") {
+            store.fullText.forEach { item, text, vectors -> action(item.toLong(), text, vectors) }
+        }
 }
